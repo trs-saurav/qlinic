@@ -5,9 +5,10 @@ import { inngest } from '@/config/inngest';
 
 export async function POST(req) {
   const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+  
   if (!WEBHOOK_SECRET) {
     console.error('❌ WEBHOOK_SECRET missing');
-    return new Response('WEBHOOK_SECRET not configured', { status: 500 });
+    return new Response('Config error', { status: 500 });
   }
 
   const headerPayload = headers();
@@ -16,68 +17,67 @@ export async function POST(req) {
   const svix_signature = headerPayload.get('svix-signature');
 
   if (!svix_id || !svix_timestamp || !svix_signature) {
-    console.error('❌ Missing svix headers');
-    return new Response('Missing svix headers', { status: 400 });
+    return new Response('Missing headers', { status: 400 });
   }
 
   let payload;
   try {
     payload = await req.json();
-    console.log('📦 Raw payload:', JSON.stringify(payload, null, 2));
   } catch (e) {
-    console.error('❌ Failed to parse JSON:', e);
     return new Response('Invalid JSON', { status: 400 });
   }
 
   const body = JSON.stringify(payload);
   const wh = new Webhook(WEBHOOK_SECRET);
+  
   let evt;
-
   try {
     evt = wh.verify(body, {
       'svix-id': svix_id,
       'svix-timestamp': svix_timestamp,
       'svix-signature': svix_signature,
     });
-    console.log('✅ Webhook signature verified');
   } catch (err) {
     console.error('❌ Verification failed:', err.message);
     return new Response('Verification failed', { status: 400 });
   }
 
+  // ========================================
+  // KEY FIX: Extract ONLY the user data
+  // ========================================
   const eventType = evt.type;
-  console.log('📌 Event type:', eventType);
+  const userData = evt.data;  // ← This is the user object
+
+  console.log('📌 Event:', eventType);
+  console.log('👤 User ID:', userData.id);
 
   try {
-    // Send ONLY the Clerk data, not the entire event wrapper
     if (eventType === 'user.created') {
-      console.log('👤 Sending user.created to Inngest');
+      // Send ONLY the user data, not the entire event
       await inngest.send({ 
         name: 'clerk/user.created', 
-        data: evt.data  // ← Just evt.data, not the whole evt
+        data: userData  // ← Just the user object
       });
-      console.log('✅ Sent to Inngest');
+      console.log('✅ Sent user.created to Inngest');
     } 
     else if (eventType === 'user.updated') {
-      console.log('🔄 Sending user.updated to Inngest');
       await inngest.send({ 
         name: 'clerk/user.updated', 
-        data: evt.data 
+        data: userData 
       });
-      console.log('✅ Sent to Inngest');
+      console.log('✅ Sent user.updated to Inngest');
     } 
     else if (eventType === 'user.deleted') {
-      console.log('🗑️ Sending user.deleted to Inngest');
       await inngest.send({ 
         name: 'clerk/user.deleted', 
-        data: evt.data 
+        data: userData 
       });
-      console.log('✅ Sent to Inngest');
+      console.log('✅ Sent user.deleted to Inngest');
     }
 
     return new Response('OK', { status: 200 });
   } catch (error) {
-    console.error('❌ Error sending to Inngest:', error);
-    return new Response('Error', { status: 500 });
+    console.error('❌ Inngest error:', error);
+    return new Response('Server error', { status: 500 });
   }
 }
