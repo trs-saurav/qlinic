@@ -1,7 +1,6 @@
 // src/app/api/admin/invite/route.js
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs';
-import { clerkClient } from '@clerk/nextjs';
+import { auth, clerkClient } from '@clerk/nextjs/server';
 
 export async function POST(request) {
   try {
@@ -63,11 +62,10 @@ export async function POST(request) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('Error creating invitation:', error);
+    console.error('Error creating user invitation:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
-
