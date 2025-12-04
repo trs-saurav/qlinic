@@ -9,16 +9,17 @@ export const inngest = new Inngest({
   eventKey: process.env.INNGEST_EVENT_KEY,
 });
 
-// Listen to Clerk events directly
 export const syncUserCreation = inngest.createFunction(
   { id: 'qlinic-sync-user-created' },
-  { event: 'user.created' },  // ← Clerk's event name
+  { event: 'user.created' },
   async ({ event, step }) => {
-    // event.data contains the full Clerk user object
-    const data = event.data;
+    // Extract the actual user data from nested structure
+    const clerkEvent = event.data;  // This is the full Clerk webhook
+    const data = clerkEvent.data;    // This is the user object
     const clerkId = data.id;
 
     console.log('🚀 syncUserCreation triggered for:', clerkId);
+    console.log('📦 Full payload:', JSON.stringify(event, null, 2));
 
     await step.run('update-clerk-metadata', async () => {
       const role = data.unsafe_metadata?.role || 'patient';
@@ -39,6 +40,14 @@ export const syncUserCreation = inngest.createFunction(
       const firstName = data.first_name || '';
       const lastName = data.last_name || '';
       const imageUrl = data.image_url || '';
+
+      console.log('💾 Saving user to MongoDB:', {
+        clerkId,
+        email,
+        firstName,
+        lastName,
+        role
+      });
 
       const user = await User.findOneAndUpdate(
         { clerkId },
@@ -67,7 +76,8 @@ export const syncUserUpdate = inngest.createFunction(
   { id: 'qlinic-sync-user-updated' },
   { event: 'user.updated' },
   async ({ event, step }) => {
-    const data = event.data;
+    const clerkEvent = event.data;
+    const data = clerkEvent.data;
     const clerkId = data.id;
 
     await step.run('update-mongo-user', async () => {
@@ -107,7 +117,8 @@ export const syncUserDeletion = inngest.createFunction(
   { id: 'qlinic-sync-user-deleted' },
   { event: 'user.deleted' },
   async ({ event, step }) => {
-    const clerkId = event.data.id;
+    const clerkEvent = event.data;
+    const clerkId = clerkEvent.data.id;
 
     await step.run('soft-delete-mongo-user', async () => {
       await connectDB();
