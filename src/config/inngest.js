@@ -11,17 +11,12 @@ export const inngest = new Inngest({
 
 export const syncUserCreation = inngest.createFunction(
   { id: 'qlinic-sync-user-created' },
-  { event: 'webhook/request.received' },  // ← Changed to match Inngest's event name
+  { 
+    event: 'webhook/request.received',
+    if: 'event.data.type == "user.created"'  // ← Only trigger for user.created
+  },
   async ({ event, step }) => {
-    // Filter for user.created events only
     const clerkEvent = event.data;
-    
-    // Skip if not a user.created event
-    if (clerkEvent.type !== 'user.created') {
-      console.log('⏭️ Skipping non-user.created event:', clerkEvent.type);
-      return { skipped: true };
-    }
-
     const data = clerkEvent.data;
     const clerkId = data.id;
 
@@ -30,12 +25,18 @@ export const syncUserCreation = inngest.createFunction(
     await step.run('update-clerk-metadata', async () => {
       const role = data.unsafe_metadata?.role || 'patient';
       
-      await clerkClient.users.updateUserMetadata(clerkId, {
-        publicMetadata: { role }
-      });
-      
-      console.log(`✅ Clerk publicMetadata.role set to "${role}"`);
-      return { role };
+      try {
+        const clerk = await clerkClient();
+        await clerk.users.updateUserMetadata(clerkId, {
+          publicMetadata: { role }
+        });
+        
+        console.log(`✅ Clerk publicMetadata.role set to "${role}"`);
+        return { role };
+      } catch (error) {
+        console.error('❌ Clerk metadata update failed:', error);
+        throw error;
+      }
     });
 
     await step.run('upsert-mongo-user', async () => {
@@ -72,16 +73,16 @@ export const syncUserCreation = inngest.createFunction(
 
 export const syncUserUpdate = inngest.createFunction(
   { id: 'qlinic-sync-user-updated' },
-  { event: 'webhook/request.received' },
+  { 
+    event: 'webhook/request.received',
+    if: 'event.data.type == "user.updated"'  // ← Only trigger for user.updated
+  },
   async ({ event, step }) => {
     const clerkEvent = event.data;
-    
-    if (clerkEvent.type !== 'user.updated') {
-      return { skipped: true };
-    }
-
     const data = clerkEvent.data;
     const clerkId = data.id;
+
+    console.log('🔄 syncUserUpdate triggered for:', clerkId);
 
     await step.run('update-mongo-user', async () => {
       await connectDB();
@@ -118,15 +119,15 @@ export const syncUserUpdate = inngest.createFunction(
 
 export const syncUserDeletion = inngest.createFunction(
   { id: 'qlinic-sync-user-deleted' },
-  { event: 'webhook/request.received' },
+  { 
+    event: 'webhook/request.received',
+    if: 'event.data.type == "user.deleted"'  // ← Only trigger for user.deleted
+  },
   async ({ event, step }) => {
     const clerkEvent = event.data;
-    
-    if (clerkEvent.type !== 'user.deleted') {
-      return { skipped: true };
-    }
-
     const clerkId = clerkEvent.data.id;
+
+    console.log('🗑️ syncUserDeletion triggered for:', clerkId);
 
     await step.run('soft-delete-mongo-user', async () => {
       await connectDB();
