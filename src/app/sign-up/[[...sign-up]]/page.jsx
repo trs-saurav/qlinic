@@ -1,7 +1,8 @@
 // app/sign-up/[[...sign-up]]/page.jsx
 'use client'
-import { SignUp } from '@clerk/nextjs'
-import { useState } from 'react'
+import { SignUp, useUser } from '@clerk/nextjs'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { 
   Users, 
   Stethoscope, 
@@ -14,6 +15,39 @@ import Link from 'next/link'
 
 export default function SignUpPage() {
   const [selectedRole, setSelectedRole] = useState('patient')
+  const { isSignedIn, user } = useUser()
+  const router = useRouter()
+
+  // Save user to MongoDB after sign-up
+  useEffect(() => {
+    async function saveUser() {
+      if (isSignedIn && user && selectedRole) {
+        try {
+          console.log('💾 Saving user to MongoDB...');
+          
+          const response = await fetch('/api/user/create', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ role: selectedRole }),
+          });
+
+          const data = await response.json();
+          
+          if (data.success) {
+            console.log('✅ User saved successfully');
+            // Redirect to role-specific page
+            router.push(`/${selectedRole}`);
+          }
+        } catch (error) {
+          console.error('❌ Error saving user:', error);
+        }
+      }
+    }
+
+    saveUser();
+  }, [isSignedIn, user, selectedRole, router]);
 
   const roles = [
     {
@@ -68,7 +102,7 @@ export default function SignUpPage() {
           </p>
         </div>
 
-        {/* Role Selection - Single Row */}
+        {/* Role Selection */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           {roles.map((role) => {
             const IconComponent = role.icon
@@ -113,8 +147,6 @@ export default function SignUpPage() {
                 socialButtonsBlockButton: "border-2 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700",
               }
             }}
-            forceRedirectUrl={`/${selectedRole}`}
-            fallbackRedirectUrl={`/${selectedRole}`}
             signInUrl="/sign-in"
             unsafeMetadata={{
               role: selectedRole

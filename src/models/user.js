@@ -1,4 +1,4 @@
-// src/models/User.js
+// src/models/user.js (lowercase 'user')
 import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
@@ -17,11 +17,13 @@ const userSchema = new mongoose.Schema({
   },
   firstName: {
     type: String,
-    trim: true
+    trim: true,
+    default: ''
   },
   lastName: {
     type: String,
-    trim: true
+    trim: true,
+    default: ''
   },
   role: {
     type: String,
@@ -34,20 +36,31 @@ const userSchema = new mongoose.Schema({
     trim: true
   },
   profileImage: {
-    type: String
+    type: String,
+    default: ''
   },
   isActive: {
     type: Boolean,
     default: true
   },
   lastLogin: {
+    type: Date,
+    default: Date.now
+  },
+  deletedAt: {
     type: Date
   },
   // Role-specific fields
   patientProfile: {
     dateOfBirth: Date,
-    gender: String,
-    bloodGroup: String,
+    gender: {
+      type: String,
+      enum: ['male', 'female', 'other']
+    },
+    bloodGroup: {
+      type: String,
+      enum: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']
+    },
     address: String,
     emergencyContact: String,
     medicalHistory: [String]
@@ -75,10 +88,20 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Create indexes
+// Create indexes for better query performance
 userSchema.index({ email: 1 });
 userSchema.index({ clerkId: 1 });
 userSchema.index({ role: 1 });
+userSchema.index({ isActive: 1 });
+
+// Virtual for full name
+userSchema.virtual('fullName').get(function() {
+  return `${this.firstName} ${this.lastName}`.trim();
+});
+
+// Ensure virtuals are included in JSON
+userSchema.set('toJSON', { virtuals: true });
+userSchema.set('toObject', { virtuals: true });
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
