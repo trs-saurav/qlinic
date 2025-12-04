@@ -1,63 +1,90 @@
-// src/app/api/user/create/route.js
 import { NextResponse } from 'next/server';
-import { auth, currentUser, clerkClient } from '@clerk/nextjs/server';
-import connectDB from '@/config/db';
-import User from '@/models/user';
+import { auth } from '@clerk/nextjs';
+import { clerkClient } from '@clerk/nextjs';
 
-export async function POST(req) {
+export async function POST(request) {
   try {
+    // Check authentication
     const { userId } = auth();
-    
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const user = await currentUser();
-    const { role } = await req.json();
-
-    // Update Clerk metadata
-    await clerkClient.users.updateUserMetadata(userId, {
-      publicMetadata: {
-        role: role || 'patient'
-      }
-    });
-
-    // Save to MongoDB
-    await connectDB();
-
-    const existingUser = await User.findOne({ clerkId: userId });
-    if (existingUser) {
+    // Get current user from Clerk to check admin status
+    const currentUser = await clerkClient.users.getUser(userId);
+    const isAdmin = currentUser.publicMetadata?.role === 'admin';
+    
+    if (!isAdmin) {
       return NextResponse.json({ 
-        success: true, 
-        message: 'User already exists',
-        user: existingUser 
-      });
+        error: 'Unauthorized. Admin access required.' 
+      }, { status: 403 });
     }
 
-    const newUser = await User.create({
-      clerkId: userId,
-      email: user.emailAddresses[0]?.emailAddress,
-      firstName: user.firstName || '',
-      lastName: user.lastName || '',
-      role: role || 'patient',
-      profileImage: user.imageUrl || '',
-      isActive: true,
-      lastLogin: new Date()
-    });
+    const { firstName, lastName, email, phone, role } = await request.json();
 
-    console.log('✅ User saved to MongoDB:', newUser._id);
+    // Validation
+    if (!firstName || !lastName || !email || !role) {
+      return NextResponse.json(
+        { error: 'First name, last name, email, and role are required' },
+        { status: 400 }
+      );
+    }
 
-    return NextResponse.json({ 
-      success: true, 
-      message: 'User created successfully',
-      user: newUser 
-    });
+    if (!['admin', 'clerk'].includes(role)) {
+      return NextResponse.json(
+        { error: 'Invalid role. Must be admin or clerk' },
+        { status: 400 }
+      );
+    }
+
+    try {
+      // Create user invitation in Clerk
+      const invitation = await clerkClient.invitations.createInvitation({
+        emailAddress: email,
+        publicMetadata: {
+          role: role,
+          createdBy: userId,
+          createdAt: new Date().toISOString()
+        },
+        privateMetadata: {
+          firstName,
+          lastName,
+          phone: phone || ''
+        },
+        redirectUrl: `${process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL || '/admin/dashboard'}`
+      });
+
+      return NextResponse.json({
+        message: 'User invitation sent successfully',
+        invitation: {
+          id: invitation.id,
+          emailAddress: invitation.emailAddress,
+          status: invitation.status
+        }
+      }, { status: 201 });
+
+    } catch (clerkError) {
+      console.error('Clerk error:', clerkError);
+      
+      // Handle specific Clerk errors
+      if (clerkError.errors?.[0]?.code === 'form_identifier_exists') {
+        return NextResponse.json(
+          { error: 'A user with this email address already exists' },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json(
+        { error: 'Failed to send invitation' },
+        { status: 500 }
+      );
+    }
 
   } catch (error) {
-    console.error('❌ Error creating user:', error);
-    return NextResponse.json({ 
-      error: 'Failed to create user',
-      details: error.message 
-    }, { status: 500 });
+    console.error('Error creating user invitation:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

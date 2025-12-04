@@ -1,4 +1,4 @@
-// src/models/user.js (lowercase 'user')
+// src/models/user.js
 import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
@@ -59,7 +59,7 @@ const userSchema = new mongoose.Schema({
     },
     bloodGroup: {
       type: String,
-      enum: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']
+      enum: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-', null]
     },
     address: String,
     emergencyContact: String,
@@ -88,18 +88,17 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Create indexes for better query performance
+// Indexes
 userSchema.index({ email: 1 });
 userSchema.index({ clerkId: 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ isActive: 1 });
 
-// Virtual for full name
-userSchema.virtual('fullName').get(function() {
+// Virtual fullName
+userSchema.virtual('fullName').get(function () {
   return `${this.firstName} ${this.lastName}`.trim();
 });
 
-// Ensure virtuals are included in JSON
 userSchema.set('toJSON', { virtuals: true });
 userSchema.set('toObject', { virtuals: true });
 
