@@ -11,15 +11,21 @@ export const inngest = new Inngest({
 
 export const syncUserCreation = inngest.createFunction(
   { id: 'qlinic-sync-user-created' },
-  { event: 'user.created' },
+  { event: 'webhook/request.received' },  // ← Changed to match Inngest's event name
   async ({ event, step }) => {
-    // Extract the actual user data from nested structure
-    const clerkEvent = event.data;  // This is the full Clerk webhook
-    const data = clerkEvent.data;    // This is the user object
+    // Filter for user.created events only
+    const clerkEvent = event.data;
+    
+    // Skip if not a user.created event
+    if (clerkEvent.type !== 'user.created') {
+      console.log('⏭️ Skipping non-user.created event:', clerkEvent.type);
+      return { skipped: true };
+    }
+
+    const data = clerkEvent.data;
     const clerkId = data.id;
 
     console.log('🚀 syncUserCreation triggered for:', clerkId);
-    console.log('📦 Full payload:', JSON.stringify(event, null, 2));
 
     await step.run('update-clerk-metadata', async () => {
       const role = data.unsafe_metadata?.role || 'patient';
@@ -40,14 +46,6 @@ export const syncUserCreation = inngest.createFunction(
       const firstName = data.first_name || '';
       const lastName = data.last_name || '';
       const imageUrl = data.image_url || '';
-
-      console.log('💾 Saving user to MongoDB:', {
-        clerkId,
-        email,
-        firstName,
-        lastName,
-        role
-      });
 
       const user = await User.findOneAndUpdate(
         { clerkId },
@@ -74,9 +72,14 @@ export const syncUserCreation = inngest.createFunction(
 
 export const syncUserUpdate = inngest.createFunction(
   { id: 'qlinic-sync-user-updated' },
-  { event: 'user.updated' },
+  { event: 'webhook/request.received' },
   async ({ event, step }) => {
     const clerkEvent = event.data;
+    
+    if (clerkEvent.type !== 'user.updated') {
+      return { skipped: true };
+    }
+
     const data = clerkEvent.data;
     const clerkId = data.id;
 
@@ -115,9 +118,14 @@ export const syncUserUpdate = inngest.createFunction(
 
 export const syncUserDeletion = inngest.createFunction(
   { id: 'qlinic-sync-user-deleted' },
-  { event: 'user.deleted' },
+  { event: 'webhook/request.received' },
   async ({ event, step }) => {
     const clerkEvent = event.data;
+    
+    if (clerkEvent.type !== 'user.deleted') {
+      return { skipped: true };
+    }
+
     const clerkId = clerkEvent.data.id;
 
     await step.run('soft-delete-mongo-user', async () => {
