@@ -6,12 +6,12 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    index: true
+    // ❌ Remove: index: true (already defined below)
   },
   email: {
     type: String,
     required: true,
-    unique: true,
+    unique: true,  // ← This automatically creates an index
     lowercase: true,
     trim: true
   },
@@ -88,9 +88,8 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes
-userSchema.index({ email: 1 });
-userSchema.index({ clerkId: 1 });
+// Indexes - Only define here, not in field definitions
+// Note: email and clerkId already have indexes from "unique: true"
 userSchema.index({ role: 1 });
 userSchema.index({ isActive: 1 });
 
