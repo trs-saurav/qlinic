@@ -6,27 +6,31 @@ import User from '@/models/user';
 
 export const inngest = new Inngest({ id: 'qlinic' });
 
-/**
- * clerk/user.created → set role in Clerk + create user in Mongo
- */
 export const syncUserCreation = inngest.createFunction(
   { id: 'qlinic-sync-user-created' },
   { event: 'clerk/user.created' },
   async ({ event, step }) => {
     const data = event.data;
-    const clerkId = data.id;
+    const clerkId = data.id; // "user_36NLbW2xOiwZQ09G1T6bHYyL4zf"
 
-    // 1) Update Clerk publicMetadata.role
+    console.log('🚀 syncUserCreation triggered for:', clerkId);
+    console.log('📦 Full data:', JSON.stringify(data, null, 2));
+
+    // Step 1: Update Clerk publicMetadata.role
     await step.run('update-clerk-metadata', async () => {
       const role = data.unsafe_metadata?.role || 'patient';
+      
+      console.log(`🎭 Role from unsafe_metadata: ${role}`);
+      
       await clerkClient.users.updateUserMetadata(clerkId, {
         publicMetadata: { role }
       });
-      console.log(`✅ Clerk publicMetadata.role set to "${role}" for ${clerkId}`);
+      
+      console.log(`✅ Clerk publicMetadata.role set to "${role}"`);
       return { role };
     });
 
-    // 2) Upsert user in MongoDB
+    // Step 2: Save to MongoDB
     await step.run('upsert-mongo-user', async () => {
       await connectDB();
 
@@ -36,24 +40,30 @@ export const syncUserCreation = inngest.createFunction(
       const lastName = data.last_name || '';
       const imageUrl = data.image_url || '';
 
-      const update = {
+      console.log('💾 Saving user to MongoDB:', {
         clerkId,
         email,
         firstName,
         lastName,
-        role,
-        profileImage: imageUrl,
-        isActive: true,
-        lastLogin: new Date()
-      };
+        role
+      });
 
       const user = await User.findOneAndUpdate(
         { clerkId },
-        update,
+        {
+          clerkId,
+          email,
+          firstName,
+          lastName,
+          role,
+          profileImage: imageUrl,
+          isActive: true,
+          lastLogin: new Date()
+        },
         { new: true, upsert: true, setDefaultsOnInsert: true }
       );
 
-      console.log('✅ User synced to MongoDB:', user._id.toString());
+      console.log('✅ User saved to MongoDB:', user._id.toString());
       return { mongoId: user._id.toString() };
     });
 
@@ -61,9 +71,6 @@ export const syncUserCreation = inngest.createFunction(
   }
 );
 
-/**
- * clerk/user.updated → keep Mongo in sync
- */
 export const syncUserUpdate = inngest.createFunction(
   { id: 'qlinic-sync-user-updated' },
   { event: 'clerk/user.updated' },
@@ -92,11 +99,11 @@ export const syncUserUpdate = inngest.createFunction(
       );
 
       if (!user) {
-        console.log(`⚠️ User with clerkId=${clerkId} not found when updating`);
+        console.log(`⚠️ User ${clerkId} not found when updating`);
         return { found: false };
       }
 
-      console.log('✅ User updated in MongoDB:', user._id.toString());
+      console.log('✅ User updated:', user._id.toString());
       return { found: true, mongoId: user._id.toString() };
     });
 
@@ -104,9 +111,6 @@ export const syncUserUpdate = inngest.createFunction(
   }
 );
 
-/**
- * clerk/user.deleted → soft delete in Mongo
- */
 export const syncUserDeletion = inngest.createFunction(
   { id: 'qlinic-sync-user-deleted' },
   { event: 'clerk/user.deleted' },
@@ -123,11 +127,11 @@ export const syncUserDeletion = inngest.createFunction(
       );
 
       if (!user) {
-        console.log(`⚠️ User with clerkId=${clerkId} not found when deleting`);
+        console.log(`⚠️ User ${clerkId} not found when deleting`);
         return { found: false };
       }
 
-      console.log('✅ User soft-deleted in MongoDB:', user._id.toString());
+      console.log('✅ User soft-deleted:', user._id.toString());
       return { found: true, mongoId: user._id.toString() };
     });
 
