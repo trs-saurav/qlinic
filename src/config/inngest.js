@@ -4,20 +4,17 @@ import { clerkClient } from '@clerk/nextjs/server';
 import connectDB from './db';
 import User from '@/models/user';
 
-// Use environment-based config
 export const inngest = new Inngest({ 
   id: 'qlinic',
-  // For production, you need event keys
-  ...(process.env.INNGEST_EVENT_KEY && {
-    eventKey: process.env.INNGEST_EVENT_KEY,
-  }),
+  eventKey: process.env.INNGEST_EVENT_KEY,
 });
 
-// Rest of your functions stay the same...
+// Listen to Clerk events directly
 export const syncUserCreation = inngest.createFunction(
   { id: 'qlinic-sync-user-created' },
-  { event: 'clerk/user.created' },
+  { event: 'user.created' },  // ← Clerk's event name
   async ({ event, step }) => {
+    // event.data contains the full Clerk user object
     const data = event.data;
     const clerkId = data.id;
 
@@ -68,7 +65,7 @@ export const syncUserCreation = inngest.createFunction(
 
 export const syncUserUpdate = inngest.createFunction(
   { id: 'qlinic-sync-user-updated' },
-  { event: 'clerk/user.updated' },
+  { event: 'user.updated' },
   async ({ event, step }) => {
     const data = event.data;
     const clerkId = data.id;
@@ -108,7 +105,7 @@ export const syncUserUpdate = inngest.createFunction(
 
 export const syncUserDeletion = inngest.createFunction(
   { id: 'qlinic-sync-user-deleted' },
-  { event: 'clerk/user.deleted' },
+  { event: 'user.deleted' },
   async ({ event, step }) => {
     const clerkId = event.data.id;
 
