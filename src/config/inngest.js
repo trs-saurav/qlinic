@@ -4,23 +4,27 @@ import { clerkClient } from '@clerk/nextjs/server';
 import connectDB from './db';
 import User from '@/models/user';
 
-export const inngest = new Inngest({ id: 'qlinic' });
+// Use environment-based config
+export const inngest = new Inngest({ 
+  id: 'qlinic',
+  // For production, you need event keys
+  ...(process.env.INNGEST_EVENT_KEY && {
+    eventKey: process.env.INNGEST_EVENT_KEY,
+  }),
+});
 
+// Rest of your functions stay the same...
 export const syncUserCreation = inngest.createFunction(
   { id: 'qlinic-sync-user-created' },
   { event: 'clerk/user.created' },
   async ({ event, step }) => {
     const data = event.data;
-    const clerkId = data.id; // "user_36NLbW2xOiwZQ09G1T6bHYyL4zf"
+    const clerkId = data.id;
 
     console.log('🚀 syncUserCreation triggered for:', clerkId);
-    console.log('📦 Full data:', JSON.stringify(data, null, 2));
 
-    // Step 1: Update Clerk publicMetadata.role
     await step.run('update-clerk-metadata', async () => {
       const role = data.unsafe_metadata?.role || 'patient';
-      
-      console.log(`🎭 Role from unsafe_metadata: ${role}`);
       
       await clerkClient.users.updateUserMetadata(clerkId, {
         publicMetadata: { role }
@@ -30,7 +34,6 @@ export const syncUserCreation = inngest.createFunction(
       return { role };
     });
 
-    // Step 2: Save to MongoDB
     await step.run('upsert-mongo-user', async () => {
       await connectDB();
 
@@ -39,14 +42,6 @@ export const syncUserCreation = inngest.createFunction(
       const firstName = data.first_name || '';
       const lastName = data.last_name || '';
       const imageUrl = data.image_url || '';
-
-      console.log('💾 Saving user to MongoDB:', {
-        clerkId,
-        email,
-        firstName,
-        lastName,
-        role
-      });
 
       const user = await User.findOneAndUpdate(
         { clerkId },
