@@ -4,16 +4,17 @@ import { clerkClient } from '@clerk/nextjs/server';
 import connectDB from './db';
 import User from '@/models/user';
 
-export const inngest = new Inngest({ 
+export const inngest = new Inngest({
   id: 'qlinic',
   eventKey: process.env.INNGEST_EVENT_KEY,
 });
 
+// USER CREATED
 export const syncUserCreation = inngest.createFunction(
   { id: 'qlinic-sync-user-created' },
-  { 
+  {
     event: 'webhook/request.received',
-    if: 'event.data.type == "user.created"'  // ← Only trigger for user.created
+    if: 'event.data.type == "user.created"',
   },
   async ({ event, step }) => {
     const clerkEvent = event.data;
@@ -24,13 +25,13 @@ export const syncUserCreation = inngest.createFunction(
 
     await step.run('update-clerk-metadata', async () => {
       const role = data.unsafe_metadata?.role || 'patient';
-      
+
       try {
         const clerk = await clerkClient();
         await clerk.users.updateUserMetadata(clerkId, {
-          publicMetadata: { role }
+          publicMetadata: { role },
         });
-        
+
         console.log(`✅ Clerk publicMetadata.role set to "${role}"`);
         return { role };
       } catch (error) {
@@ -58,9 +59,9 @@ export const syncUserCreation = inngest.createFunction(
           role,
           profileImage: imageUrl,
           isActive: true,
-          lastLogin: new Date()
+          lastLogin: new Date(),
         },
-        { new: true, upsert: true, setDefaultsOnInsert: true }
+        { new: true, upsert: true, setDefaultsOnInsert: true },
       );
 
       console.log('✅ User saved to MongoDB:', user._id.toString());
@@ -68,14 +69,15 @@ export const syncUserCreation = inngest.createFunction(
     });
 
     return { success: true };
-  }
+  },
 );
 
+// USER UPDATED
 export const syncUserUpdate = inngest.createFunction(
   { id: 'qlinic-sync-user-updated' },
-  { 
+  {
     event: 'webhook/request.received',
-    if: 'event.data.type == "user.updated"'  // ← Only trigger for user.updated
+    if: 'event.data.type == "user.updated"',
   },
   async ({ event, step }) => {
     const clerkEvent = event.data;
@@ -99,9 +101,9 @@ export const syncUserUpdate = inngest.createFunction(
           firstName,
           lastName,
           profileImage: imageUrl,
-          lastLogin: new Date()
+          lastLogin: new Date(),
         },
-        { new: true }
+        { new: true },
       );
 
       if (!user) {
@@ -114,28 +116,34 @@ export const syncUserUpdate = inngest.createFunction(
     });
 
     return { success: true };
-  }
+  },
 );
 
+// USER DELETED
 export const syncUserDeletion = inngest.createFunction(
   { id: 'qlinic-sync-user-deleted' },
-  { 
+  {
     event: 'webhook/request.received',
-    if: 'event.data.type == "user.deleted"'  // ← Only trigger for user.deleted
+    if: 'event.data.type == "user.deleted"',
   },
   async ({ event, step }) => {
     const clerkEvent = event.data;
-    const clerkId = clerkEvent.data.id;
+    const data = clerkEvent.data;
+    const clerkId = data.id;
 
     console.log('🗑️ syncUserDeletion triggered for:', clerkId);
+    console.log('🧪 Deletion raw event:', JSON.stringify(event, null, 2));
 
     await step.run('soft-delete-mongo-user', async () => {
       await connectDB();
 
+      const before = await User.findOne({ clerkId });
+      console.log('🔎 Existing user before delete:', before?._id?.toString(), before);
+
       const user = await User.findOneAndUpdate(
         { clerkId },
         { isActive: false, deletedAt: new Date() },
-        { new: true }
+        { new: true },
       );
 
       if (!user) {
@@ -148,5 +156,5 @@ export const syncUserDeletion = inngest.createFunction(
     });
 
     return { success: true };
-  }
+  },
 );
