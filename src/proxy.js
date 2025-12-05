@@ -12,8 +12,10 @@ const isPublicRoute = createRouteMatcher([
   "/aboutus",
   "/solution",
   "/contact-us",
-  "/api/webhooks(.*)"
+  "/api/webhooks(.*)",
+  "/api/inngest(.*)",   // ← allow Inngest endpoint without auth
 ]);
+
 
 export default clerkMiddleware((auth, request) => {
   // Public routes are accessible to everyone
