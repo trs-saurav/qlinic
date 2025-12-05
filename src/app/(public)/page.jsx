@@ -138,14 +138,6 @@ const HomePage = () => {
         >
           <div className="text-center space-y-8">
             
-            {/* Badge */}
-            <motion.div 
-              variants={itemVariants}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 dark:bg-blue-900/30 rounded-full text-sm font-medium text-blue-600 dark:text-blue-400"
-            >
-              <Heart className="w-4 h-4" />
-              Your Health, Our Priority
-            </motion.div>
 
             {/* Main Heading */}
             <motion.h1 
@@ -237,52 +229,6 @@ const HomePage = () => {
         </motion.div>
       </section>
 
-      {/* Stats Section */}
-      <section className="relative py-20 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm">
-        <motion.div 
-          initial={{ opacity: 0, y: 50 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          viewport={{ once: true }}
-          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
-        >
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {stats.map((stat, index) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, scale: 0.5 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                transition={{ 
-                  duration: 0.5, 
-                  delay: index * 0.1 
-                }}
-                viewport={{ once: true }}
-                whileHover={{ scale: 1.05 }}
-                className="text-center p-6 rounded-2xl bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-lg hover:shadow-xl transition-all duration-300"
-              >
-                <motion.div 
-                  initial={{ scale: 0 }}
-                  whileInView={{ scale: 1 }}
-                  transition={{ 
-                    duration: 0.5, 
-                    delay: index * 0.1 + 0.2,
-                    type: "spring",
-                    stiffness: 200
-                  }}
-                  viewport={{ once: true }}
-                  className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent mb-2"
-                >
-                  {stat.number}
-                </motion.div>
-                <div className="text-sm md:text-base text-gray-600 dark:text-gray-400 font-medium">
-                  {stat.label}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-      </section>
-
       {/* Features Section */}
       <section className="relative py-20">
         <motion.div 
@@ -355,68 +301,92 @@ const HomePage = () => {
         </motion.div>
       </section>
 
-      {/* CTA Section */}
-      <section className="relative py-20 overflow-hidden">
+            <section className="relative w-full pt-18 overflow-hidden">
         <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.6 }}
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          transition={{ duration: 0.8 }}
           viewport={{ once: true }}
-          className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8"
+          className="relative w-full bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 overflow-hidden"
         >
-          <motion.div 
-            whileHover={{ scale: 1.02 }}
-            className="relative rounded-3xl bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 p-12 md:p-16 text-center shadow-2xl overflow-hidden"
-          >
-            {/* Animated background pattern */}
-            <motion.div
-              animate={{
-                backgroundPosition: ['0% 0%', '100% 100%'],
-              }}
-              transition={{
-                duration: 20,
-                repeat: Infinity,
-                repeatType: 'reverse',
-              }}
-              className="absolute inset-0 opacity-30"
-              style={{
-                backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
-                backgroundSize: '50px 50px',
-              }}
-            />
+          {/* Animated background pattern */}
+          <motion.div
+            animate={{
+              backgroundPosition: ['0% 0%', '100% 100%'],
+            }}
+            transition={{
+              duration: 20,
+              repeat: Infinity,
+              repeatType: 'reverse',
+            }}
+            className="absolute inset-0 opacity-20"
+            style={{
+              backgroundImage: 'radial-gradient(circle, white 2px, transparent 2px)',
+              backgroundSize: '60px 60px',
+            }}
+          />
 
-            <div className="relative z-10">
-              <motion.h2 
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                viewport={{ once: true }}
-                className="text-3xl md:text-5xl font-bold text-white mb-4"
-              >
-                Ready to Transform Your Healthcare?
-              </motion.h2>
-              
-              <motion.p 
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.1 }}
-                viewport={{ once: true }}
-                className="text-xl text-white/90 mb-8"
-              >
-                Join thousands of patients experiencing better healthcare today
-              </motion.p>
-              
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => router.push('/patient')}
-                className="inline-flex items-center gap-2 px-8 py-4 bg-white text-blue-600 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-300"
-              >
-                Start Your Journey
-                <ArrowRight className="w-5 h-5" />
-              </motion.button>
-            </div>
-          </motion.div>
+          {/* Floating shapes */}
+          <motion.div
+            animate={{ 
+              y: [0, -30, 0],
+              rotate: [0, 180, 360]
+            }}
+            transition={{ 
+              duration: 20, 
+              repeat: Infinity,
+              ease: "linear"
+            }}
+            className="absolute top-10 left-20 w-32 h-32 bg-white/10 rounded-full blur-2xl"
+          />
+          <motion.div
+            animate={{ 
+              y: [0, 30, 0],
+              rotate: [360, 180, 0]
+            }}
+            transition={{ 
+              duration: 15, 
+              repeat: Infinity,
+              ease: "linear"
+            }}
+            className="absolute bottom-10 right-20 w-40 h-40 bg-white/10 rounded-full blur-2xl"
+          />
+
+          <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
+            <motion.h2 
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+              viewport={{ once: true }}
+              className="text-3xl md:text-6xl lg:text-5xl font-black text-white mb-6"
+            >
+              Ready to Transform Your Healthcare?
+            </motion.h2>
+            
+            <motion.p 
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+              viewport={{ once: true }}
+              className="text-xl md:text-2xl text-white/95 mb-12 max-w-3xl mx-auto leading-relaxed"
+            >
+              Join thousands of patients experiencing better healthcare today. Start your journey to wellness now.
+            </motion.p>
+            
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8 }}
+              whileInView={{ opacity: 1, scale: 0.9 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              viewport={{ once: true }}
+              whileHover={{ scale: 0.9, boxShadow: "0 25px 50px rgba(0, 0, 0, 0.3)" }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => router.push('/get-started')}
+              className="inline-flex items-center gap-3 px-10 py-6 bg-white text-blue-600 rounded-2xl font-black text-xl   transition-all duration-300"
+            >
+              Start Your Journey
+              <ArrowRight className="w-6 h-6" />
+            </motion.button>
+          </div>
         </motion.div>
       </section>
     </div>
