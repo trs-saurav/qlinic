@@ -9,7 +9,7 @@ export const inngest = new Inngest({
   eventKey: process.env.INNGEST_EVENT_KEY,
 });
 
-// USER CREATED
+// USER CREATED - Keep this
 export const syncUserCreation = inngest.createFunction(
   { id: 'qlinic-sync-user-created' },
   {
@@ -23,67 +23,32 @@ export const syncUserCreation = inngest.createFunction(
 
     console.log('🚀 syncUserCreation triggered for:', clerkId);
 
-    // Check if role already exists in publicMetadata (set by API)
-    const existingRole = data.public_metadata?.role;
+    // Get role from publicMetadata (set by API) or unsafeMetadata (set by sign-up)
+    const role = data.public_metadata?.role || data.unsafe_metadata?.role || 'patient';
     
-    if (existingRole) {
-      console.log('✅ Role already in publicMetadata (set by API):', existingRole);
-      
-      // Just save to MongoDB
-      await step.run('save-to-mongo', async () => {
+    console.log('📝 Detected role:', role);
+
+    // If role is NOT in publicMetadata yet, move it there
+    if (!data.public_metadata?.role && data.unsafe_metadata?.role) {
+      await step.run('update-clerk-metadata', async () => {
         try {
-          await connectDB();
+          const clerk = await clerkClient();
+          await clerk.users.updateUserMetadata(clerkId, {
+            publicMetadata: { role },
+          });
 
-          const email = data.email_addresses?.[0]?.email_address || '';
-          const firstName = data.first_name || '';
-          const lastName = data.last_name || '';
-          const imageUrl = data.image_url || '';
-
-          const user = await User.findOneAndUpdate(
-            { clerkId },
-            {
-              clerkId,
-              email,
-              firstName,
-              lastName,
-              role: existingRole,
-              profileImage: imageUrl,
-              isActive: true,
-              lastLogin: new Date(),
-            },
-            { new: true, upsert: true, setDefaultsOnInsert: true }
-          );
-
-          console.log('✅ User saved to MongoDB:', user._id.toString());
-          return { mongoId: user._id.toString(), success: true };
+          console.log(`✅ Moved role to publicMetadata: "${role}"`);
+          return { role, success: true };
         } catch (error) {
-          console.error('❌ MongoDB save failed:', error.message);
-          return { success: false, error: error.message };
+          console.error('❌ Clerk metadata update failed:', error.message);
+          return { role, success: false, error: error.message };
         }
       });
-
-      return { success: true, source: 'api' };
+    } else {
+      console.log('✅ Role already in publicMetadata:', role);
     }
 
-    // If no publicMetadata role, check unsafeMetadata (sign-up flow)
-    const role = data.unsafe_metadata?.role || 'patient';
-    console.log('📝 No publicMetadata role, using unsafe/default:', role);
-
-    await step.run('update-clerk-metadata', async () => {
-      try {
-        const clerk = await clerkClient();
-        await clerk.users.updateUserMetadata(clerkId, {
-          publicMetadata: { role },
-        });
-
-        console.log(`✅ Moved role to publicMetadata: "${role}"`);
-        return { role, success: true };
-      } catch (error) {
-        console.error('❌ Clerk metadata update failed:', error.message);
-        return { role, success: false, error: error.message };
-      }
-    });
-
+    // Save to MongoDB
     await step.run('save-to-mongo', async () => {
       try {
         await connectDB();
@@ -116,11 +81,11 @@ export const syncUserCreation = inngest.createFunction(
       }
     });
 
-    return { success: true, source: 'signup' };
+    return { success: true };
   }
 );
 
-// USER UPDATED (keep as is)
+// USER UPDATED - Only for profile changes (not for new users)
 export const syncUserUpdate = inngest.createFunction(
   { id: 'qlinic-sync-user-updated' },
   {
@@ -134,32 +99,44 @@ export const syncUserUpdate = inngest.createFunction(
 
     console.log('🔄 syncUserUpdate triggered for:', clerkId);
 
-    await step.run('update-or-create-mongo-user', async () => {
+    await step.run('update-mongo-user-only', async () => {
       try {
         await connectDB();
+
+        // Check if user exists first
+        const existingUser = await User.findOne({ clerkId });
+
+        if (!existingUser) {
+          console.log('⚠️ User not found in MongoDB, skipping update (will be created by user.created)');
+          return { found: false, skipped: true };
+        }
 
         const email = data.email_addresses?.[0]?.email_address || '';
         const firstName = data.first_name || '';
         const lastName = data.last_name || '';
         const imageUrl = data.image_url || '';
-        const role = data.public_metadata?.role || data.unsafe_metadata?.role || 'patient';
+        const role = data.public_metadata?.role;
+
+        const updateData = {
+          email,
+          firstName,
+          lastName,
+          profileImage: imageUrl,
+          lastLogin: new Date(),
+        };
+
+        // Only update role if it exists in metadata
+        if (role) {
+          updateData.role = role;
+        }
 
         const user = await User.findOneAndUpdate(
           { clerkId },
-          {
-            clerkId,
-            email,
-            firstName,
-            lastName,
-            profileImage: imageUrl,
-            role,
-            isActive: true,
-            lastLogin: new Date(),
-          },
-          { new: true, upsert: true }
+          updateData,
+          { new: true }
         );
 
-        console.log('✅ User updated/created:', user._id.toString());
+        console.log('✅ User updated in MongoDB:', user._id.toString());
         return { found: true, mongoId: user._id.toString() };
       } catch (error) {
         console.error('❌ MongoDB update failed:', error.message);
@@ -171,7 +148,7 @@ export const syncUserUpdate = inngest.createFunction(
   }
 );
 
-// USER DELETED (keep as is)
+// USER DELETED - Keep this
 export const syncUserDeletion = inngest.createFunction(
   { id: 'qlinic-sync-user-deleted' },
   {
