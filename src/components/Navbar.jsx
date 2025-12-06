@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAppContext } from "@/context/AppContext";
@@ -14,19 +14,24 @@ import {
   Info,
   Phone,
   Sparkles,
-  Package,
-  ShoppingBag,
-  Settings,
   PlusSquare,
   LogIn,
-  ArrowRight
+  ArrowRight,
+  User as UserIcon,
+  Stethoscope,
+  Building2,
+  ChevronDown,
+  LayoutDashboard
 } from "lucide-react";
 
 const Navbar = () => {
-  const { router, user } = useAppContext();
+  const { router, user, userRole } = useAppContext();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isLoginMenuOpen, setIsLoginMenuOpen] = useState(false);
+  const [isMobileLoginOpen, setIsMobileLoginOpen] = useState(false);
+  const loginMenuRef = useRef(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -36,12 +41,30 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Close login dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (loginMenuRef.current && !loginMenuRef.current.contains(event.target)) {
+        setIsLoginMenuOpen(false);
+      }
+    };
+
+    if (isLoginMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isLoginMenuOpen]);
+
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
   const closeMobileMenu = () => {
     setIsMobileMenuOpen(false);
+    setIsMobileLoginOpen(false);
   };
 
   const navItems = [
@@ -51,11 +74,63 @@ const Navbar = () => {
     { href: "/contact-us", label: "Contact", icon: Phone },
   ];
 
+  const loginOptions = [
+    {
+      label: "Patient",
+      icon: UserIcon,
+      href: "/sign-in?role=patient",
+      description: "Book appointments & manage health records",
+      gradient: "from-blue-500 to-cyan-500"
+    },
+    {
+      label: "Doctor",
+      icon: Stethoscope,
+      href: "/sign-in?role=doctor",
+      description: "Manage patients & appointments",
+      gradient: "from-green-500 to-emerald-500"
+    },
+    {
+      label: "Hospital Admin",
+      icon: Building2,
+      href: "/sign-in?role=hospital_admin",
+      description: "Hospital management dashboard",
+      gradient: "from-purple-500 to-pink-500"
+    },
+  ];
+
   const isActive = (href) => {
     if (href === "/") {
       return pathname === "/";
     }
     return pathname.startsWith(href);
+  };
+
+  const handleLoginOptionClick = (href) => {
+    setIsLoginMenuOpen(false);
+    router.push(href);
+  };
+
+  const handleMobileLoginOptionClick = (href) => {
+    closeMobileMenu();
+    router.push(href);
+  };
+
+  // Get role-specific dashboard URL
+  const getDashboardUrl = () => {
+    const role = user?.publicMetadata?.role || user?.unsafeMetadata?.role || userRole;
+    
+    switch(role) {
+      case 'patient':
+        return '/patient';
+      case 'doctor':
+        return '/doctor';
+      case 'hospital_admin':
+        return '/hospital-admin';
+      case 'admin':
+        return '/admin';
+      default:
+        return '/';
+    }
   };
 
   return (
@@ -70,7 +145,7 @@ const Navbar = () => {
           <div className={`
             max-w-7xl mx-auto rounded-full transition-all duration-300
             ${isScrolled 
-              ? 'bg-background/95 backdrop-blur-xl border-2 border-blue-200/70 dark:border-blue-800/70' 
+              ? 'bg-background/95 backdrop-blur-xl border-2 border-blue-200/70 dark:border-blue-800/70 shadow-lg' 
               : 'bg-background/80 backdrop-blur-md border-2 border-blue-100/50 dark:border-blue-900/50'
             }
           `}>
@@ -149,7 +224,7 @@ const Navbar = () => {
                 {/* Right Section */}
                 <div className="flex items-center gap-2 lg:gap-3">
                   
-                  {/* Theme Toggle */}
+                  {/* Theme Toggle - Desktop */}
                   <motion.div 
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -179,29 +254,64 @@ const Navbar = () => {
                         <UserButton.MenuItems>
                           <UserButton.Action 
                             label="Dashboard" 
-                            labelIcon={<Package className="w-4 h-4" />} 
-                            onClick={() => router.push('/dashboard')} 
-                          />
-                          <UserButton.Action 
-                            label="Appointments" 
-                            labelIcon={<ShoppingBag className="w-4 h-4" />} 
-                            onClick={() => router.push('/apartments')} 
-                          />
-                          <UserButton.Action 
-                            label="Settings" 
-                            labelIcon={<Settings className="w-4 h-4" />} 
-                            onClick={() => router.push('/settings')} 
+                            labelIcon={<LayoutDashboard className="w-4 h-4" />} 
+                            onClick={() => router.push(getDashboardUrl())} 
                           />
                         </UserButton.MenuItems>
                       </UserButton>
                     ) : (
                       <>
-                        <Link 
-                          href="/sign-in"
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-foreground/60 hover:text-foreground transition-colors duration-200"
-                        >
-                          Login
-                        </Link>
+                        {/* Login Dropdown - Desktop */}
+                        <div className="relative" ref={loginMenuRef}>
+                          <button
+                            onClick={() => setIsLoginMenuOpen(!isLoginMenuOpen)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-foreground/60 hover:text-foreground transition-colors duration-200 rounded-full hover:bg-accent/50"
+                          >
+                            <LogIn className="w-4 h-4" />
+                            <span>Login</span>
+                            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isLoginMenuOpen ? 'rotate-180' : ''}`} />
+                          </button>
+
+                          <AnimatePresence>
+                            {isLoginMenuOpen && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                transition={{ duration: 0.2 }}
+                                className="absolute right-0 mt-2 w-72 rounded-2xl border-2 border-border bg-background/95 backdrop-blur-xl shadow-2xl overflow-hidden z-50"
+                              >
+                                <div className="p-2">
+                                  {loginOptions.map((option, index) => (
+                                    <motion.button
+                                      key={option.href}
+                                      initial={{ opacity: 0, x: -10 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      transition={{ delay: index * 0.05 }}
+                                      onClick={() => handleLoginOptionClick(option.href)}
+                                      className="w-full group relative flex items-start gap-3 p-3 rounded-xl hover:bg-accent/60 transition-all duration-200 overflow-hidden"
+                                    >
+                                      <div className={`flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br ${option.gradient} opacity-10 group-hover:opacity-20 transition-opacity`}>
+                                        <option.icon className={`w-5 h-5 bg-gradient-to-br ${option.gradient} bg-clip-text text-transparent`} strokeWidth={2.5} />
+                                      </div>
+                                      <div className="flex-1 text-left">
+                                        <div className="font-semibold text-sm text-foreground group-hover:text-foreground transition-colors">
+                                          {option.label}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground mt-0.5">
+                                          {option.description}
+                                        </div>
+                                      </div>
+                                      <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-200 mt-1" />
+                                    </motion.button>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+
+                        {/* Get Started Button */}
                         <Link 
                           href="/sign-up"
                           className="group relative flex items-center gap-1.5 px-4 py-1.5 bg-foreground text-background text-sm font-semibold rounded-full hover:bg-foreground/90 transition-all duration-200 overflow-hidden"
@@ -263,7 +373,7 @@ const Navbar = () => {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.95 }}
                 transition={{ duration: 0.2 }}
-                className="mt-2 bg-background/95 backdrop-blur-xl border-2 border-blue-200/70 dark:border-blue-800/70 rounded-3xl overflow-hidden"
+                className="mt-2 bg-background/95 backdrop-blur-xl border-2 border-blue-200/70 dark:border-blue-800/70 rounded-3xl overflow-hidden shadow-2xl"
               >
                 <div className="px-4 py-4">
                   
@@ -314,25 +424,9 @@ const Navbar = () => {
                           <UserButton.MenuItems>
                             <UserButton.Action 
                               label="Dashboard" 
-                              labelIcon={<Package className="w-4 h-4" />} 
+                              labelIcon={<LayoutDashboard className="w-4 h-4" />} 
                               onClick={() => {
-                                router.push('/dashboard');
-                                closeMobileMenu();
-                              }} 
-                            />
-                            <UserButton.Action 
-                              label="Appointments" 
-                              labelIcon={<ShoppingBag className="w-4 h-4" />} 
-                              onClick={() => {
-                                router.push('/appointments');
-                                closeMobileMenu();
-                              }} 
-                            />
-                            <UserButton.Action 
-                              label="Settings" 
-                              labelIcon={<Settings className="w-4 h-4" />} 
-                              onClick={() => {
-                                router.push('/settings');
+                                router.push(getDashboardUrl());
                                 closeMobileMenu();
                               }} 
                             />
@@ -345,16 +439,58 @@ const Navbar = () => {
                       </div>
                     ) : (
                       <div className="space-y-2">
+                        {/* Mobile Login Dropdown */}
+                        <div>
+                          <button
+                            onClick={() => setIsMobileLoginOpen(!isMobileLoginOpen)}
+                            className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm font-medium rounded-xl border-2 border-border hover:bg-accent transition-all duration-200"
+                          >
+                            <div className="flex items-center gap-2">
+                              <LogIn className="w-4 h-4" />
+                              <span>Login</span>
+                            </div>
+                            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isMobileLoginOpen ? 'rotate-180' : ''}`} />
+                          </button>
+
+                          <AnimatePresence>
+                            {isMobileLoginOpen && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="mt-2 space-y-1 pl-2"
+                              >
+                                {loginOptions.map((option, index) => (
+                                  <motion.button
+                                    key={option.href}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: index * 0.05 }}
+                                    onClick={() => handleMobileLoginOptionClick(option.href)}
+                                    className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-accent/60 transition-all duration-200 text-left"
+                                  >
+                                    <div className={`flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br ${option.gradient} opacity-10`}>
+                                      <option.icon className={`w-4 h-4 bg-gradient-to-br ${option.gradient} bg-clip-text text-transparent`} strokeWidth={2.5} />
+                                    </div>
+                                    <div className="flex-1">
+                                      <div className="font-medium text-sm text-foreground">
+                                        {option.label}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground mt-0.5">
+                                        {option.description}
+                                      </div>
+                                    </div>
+                                  </motion.button>
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+
+                        {/* Mobile Get Started Button */}
                         <Link 
-                          href="/sign-in"
-                          onClick={closeMobileMenu}
-                          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl border-2 border-border hover:bg-accent transition-all duration-200"
-                        >
-                          <LogIn className="w-4 h-4" />
-                          Login
-                        </Link>
-                        <Link 
-                          href="/get-started"
+                          href="/sign-up"
                           onClick={closeMobileMenu}
                           className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-foreground text-background text-sm font-semibold rounded-xl hover:bg-foreground/90 transition-all duration-200"
                         >

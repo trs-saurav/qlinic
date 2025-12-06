@@ -1,7 +1,6 @@
 'use client'
-import { SignUp, useUser } from '@clerk/nextjs'
+import { SignUp } from '@clerk/nextjs'
 import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Users, 
@@ -19,8 +18,6 @@ import React from 'react'
 export default function SignUpPage() {
   const [selectedRole, setSelectedRole] = useState('patient')
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
-  const { isSignedIn, user } = useUser()
-  const router = useRouter()
   const containerRef = useRef(null)
 
   // Mouse movement gradient effect
@@ -38,36 +35,6 @@ export default function SignUpPage() {
     window.addEventListener('mousemove', handleMouseMove)
     return () => window.removeEventListener('mousemove', handleMouseMove)
   }, [])
-
-  // Save user to MongoDB after sign-up
-  useEffect(() => {
-    async function saveUser() {
-      if (isSignedIn && user && selectedRole) {
-        try {
-          console.log('💾 Saving user to MongoDB...')
-          
-          const response = await fetch('/api/user/create', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ role: selectedRole }),
-          })
-
-          const data = await response.json()
-          
-          if (data.success) {
-            console.log('✅ User saved successfully')
-            router.push(`/${selectedRole}`)
-          }
-        } catch (error) {
-          console.error('❌ Error saving user:', error)
-        }
-      }
-    }
-
-    saveUser()
-  }, [isSignedIn, user, selectedRole, router])
 
   const roles = [
     {

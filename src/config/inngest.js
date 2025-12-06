@@ -22,54 +22,110 @@ export const syncUserCreation = inngest.createFunction(
     const clerkId = data.id;
 
     console.log('🚀 syncUserCreation triggered for:', clerkId);
+    console.log('📦 Event data:', JSON.stringify(data, null, 2));
 
-    await step.run('update-clerk-metadata', async () => {
-      const role = data.unsafe_metadata?.role || 'patient';
-
+    // Step 1: Update Clerk metadata
+    const clerkResult = await step.run('update-clerk-metadata', async () => {
       try {
+        const role = data.unsafe_metadata?.role || data.public_metadata?.role || 'patient';
+        
+        console.log(`📝 Attempting to set role: "${role}"`);
+
         const clerk = await clerkClient();
+        
         await clerk.users.updateUserMetadata(clerkId, {
           publicMetadata: { role },
         });
 
         console.log(`✅ Clerk publicMetadata.role set to "${role}"`);
-        return { role };
+        return { role, success: true };
       } catch (error) {
-        console.error('❌ Clerk metadata update failed:', error);
-        throw error;
+        console.error('❌ Clerk metadata update failed:', {
+          message: error.message,
+          stack: error.stack,
+          clerkId
+        });
+        // Don't throw - continue to MongoDB step
+        return { role: 'patient', success: false, error: error.message };
       }
     });
 
-    await step.run('upsert-mongo-user', async () => {
-      await connectDB();
+    // Step 2: Save to MongoDB
+    const mongoResult = await step.run('upsert-mongo-user', async () => {
+      try {
+        console.log('🔌 Connecting to MongoDB...');
+        await connectDB();
+        console.log('✅ MongoDB connected');
 
-      const role = data.unsafe_metadata?.role || 'patient';
-      const email = data.email_addresses?.[0]?.email_address || '';
-      const firstName = data.first_name || '';
-      const lastName = data.last_name || '';
-      const imageUrl = data.image_url || '';
+        const role = clerkResult.role || 'patient';
+        const email = data.email_addresses?.[0]?.email_address || '';
+        const firstName = data.first_name || '';
+        const lastName = data.last_name || '';
+        const imageUrl = data.image_url || '';
 
-      const user = await User.findOneAndUpdate(
-        { clerkId },
-        {
+        console.log('📝 User data to save:', {
           clerkId,
           email,
           firstName,
           lastName,
           role,
-          profileImage: imageUrl,
-          isActive: true,
-          lastLogin: new Date(),
-        },
-        { new: true, upsert: true, setDefaultsOnInsert: true },
-      );
+          profileImage: imageUrl
+        });
 
-      console.log('✅ User saved to MongoDB:', user._id.toString());
-      return { mongoId: user._id.toString() };
+        if (!email) {
+          throw new Error('Email is required but not found in webhook data');
+        }
+
+        const user = await User.findOneAndUpdate(
+          { clerkId },
+          {
+            clerkId,
+            email,
+            firstName,
+            lastName,
+            role,
+            profileImage: imageUrl,
+            isActive: true,
+            lastLogin: new Date(),
+          },
+          { new: true, upsert: true, setDefaultsOnInsert: true }
+        );
+
+        console.log('✅ User saved to MongoDB:', {
+          mongoId: user._id.toString(),
+          email: user.email,
+          role: user.role
+        });
+        
+        return { mongoId: user._id.toString(), success: true };
+      } catch (error) {
+        console.error('❌ MongoDB save failed:', {
+          message: error.message,
+          stack: error.stack,
+          code: error.code,
+          clerkId
+        });
+        
+        // Return error instead of throwing to prevent function failure
+        return { 
+          success: false, 
+          error: error.message,
+          code: error.code 
+        };
+      }
     });
 
-    return { success: true };
-  },
+    console.log('🏁 syncUserCreation completed:', {
+      clerkSuccess: clerkResult.success,
+      mongoSuccess: mongoResult.success
+    });
+
+    return { 
+      success: clerkResult.success && mongoResult.success,
+      clerkResult,
+      mongoResult
+    };
+  }
 );
 
 // USER UPDATED
@@ -86,37 +142,55 @@ export const syncUserUpdate = inngest.createFunction(
 
     console.log('🔄 syncUserUpdate triggered for:', clerkId);
 
-    await step.run('update-mongo-user', async () => {
-      await connectDB();
+    await step.run('update-or-create-mongo-user', async () => {
+      try {
+        await connectDB();
 
-      const email = data.email_addresses?.[0]?.email_address || '';
-      const firstName = data.first_name || '';
-      const lastName = data.last_name || '';
-      const imageUrl = data.image_url || '';
+        const email = data.email_addresses?.[0]?.email_address || '';
+        const firstName = data.first_name || '';
+        const lastName = data.last_name || '';
+        const imageUrl = data.image_url || '';
+        const role = data.public_metadata?.role || data.unsafe_metadata?.role || 'patient';
 
-      const user = await User.findOneAndUpdate(
-        { clerkId },
-        {
+        const updateData = {
           email,
           firstName,
           lastName,
           profileImage: imageUrl,
+          role,
           lastLogin: new Date(),
-        },
-        { new: true },
-      );
+        };
 
-      if (!user) {
-        console.log(`⚠️ User ${clerkId} not found when updating`);
-        return { found: false };
+        // Use upsert: true to create if user doesn't exist (in case creation failed)
+        const user = await User.findOneAndUpdate(
+          { clerkId },
+          {
+            clerkId,
+            ...updateData,
+            isActive: true
+          },
+          { new: true, upsert: true }
+        );
+
+        console.log('✅ User updated/created:', {
+          mongoId: user._id.toString(),
+          email: user.email,
+          role: user.role
+        });
+        
+        return { found: true, mongoId: user._id.toString() };
+      } catch (error) {
+        console.error('❌ MongoDB update failed:', {
+          message: error.message,
+          stack: error.stack,
+          clerkId
+        });
+        throw error;
       }
-
-      console.log('✅ User updated:', user._id.toString());
-      return { found: true, mongoId: user._id.toString() };
     });
 
     return { success: true };
-  },
+  }
 );
 
 // USER DELETED
@@ -132,29 +206,34 @@ export const syncUserDeletion = inngest.createFunction(
     const clerkId = data.id;
 
     console.log('🗑️ syncUserDeletion triggered for:', clerkId);
-    console.log('🧪 Deletion raw event:', JSON.stringify(event, null, 2));
 
     await step.run('soft-delete-mongo-user', async () => {
-      await connectDB();
+      try {
+        await connectDB();
 
-      const before = await User.findOne({ clerkId });
-      console.log('🔎 Existing user before delete:', before?._id?.toString(), before);
+        const user = await User.findOneAndUpdate(
+          { clerkId },
+          { isActive: false, deletedAt: new Date() },
+          { new: true }
+        );
 
-      const user = await User.findOneAndUpdate(
-        { clerkId },
-        { isActive: false, deletedAt: new Date() },
-        { new: true },
-      );
+        if (!user) {
+          console.log(`⚠️ User ${clerkId} not found when deleting`);
+          return { found: false };
+        }
 
-      if (!user) {
-        console.log(`⚠️ User ${clerkId} not found when deleting`);
-        return { found: false };
+        console.log('✅ User soft-deleted:', user._id.toString());
+        return { found: true, mongoId: user._id.toString() };
+      } catch (error) {
+        console.error('❌ MongoDB deletion failed:', {
+          message: error.message,
+          stack: error.stack,
+          clerkId
+        });
+        throw error;
       }
-
-      console.log('✅ User soft-deleted:', user._id.toString());
-      return { found: true, mongoId: user._id.toString() };
     });
 
     return { success: true };
-  },
+  }
 );

@@ -1,213 +1,285 @@
-// app/sign-up/[[...sign-up]]/page.jsx
+// app/sign-in/[[...sign-in]]/page.jsx
 'use client'
-import { SignUp } from '@clerk/nextjs'
-import { useState } from 'react'
+import { SignIn } from '@clerk/nextjs'
+import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { 
   Users, 
   Stethoscope, 
-  Building2, 
-  Shield,
-  ArrowRight,
+  Building2,
   Heart,
-  Sparkles
+  Sparkles,
+  ArrowLeft,
+  Shield
 } from 'lucide-react'
 import Link from 'next/link'
 
-export default function SignUpPage() {
-  const [selectedRole, setSelectedRole] = useState(null)
+export default function SignInPage() {
+  const searchParams = useSearchParams()
+  const roleFromUrl = searchParams.get('role') || 'patient'
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
+  const containerRef = useRef(null)
 
-  const roles = [
-    {
-      value: 'patient',
-      label: 'Patient',
-      icon: Users,
-      description: 'Book appointments and manage health',
-      color: 'from-blue-500 to-blue-600'
-    },
-    {
-      value: 'doctor',
-      label: 'Doctor',
-      icon: Stethoscope,
-      description: 'Manage patients and appointments',
-      color: 'from-green-500 to-green-600'
-    },
-    {
-      value: 'hospital_admin',
-      label: 'Hospital Admin',
-      icon: Building2,
-      description: 'Manage hospital operations',
-      color: 'from-purple-500 to-purple-600'
-    },
-    {
-      value: 'admin',
-      label: 'Super Admin',
-      icon: Shield,
-      description: 'Platform administration',
-      color: 'from-red-500 to-red-600'
+  // Store role in localStorage for OAuth callback
+  useEffect(() => {
+    if (roleFromUrl) {
+      localStorage.setItem('pendingRole', roleFromUrl)
+      console.log('💾 Stored role in localStorage:', roleFromUrl)
     }
-  ]
+  }, [roleFromUrl])
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        setMousePosition({
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        })
+      }
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    return () => window.removeEventListener('mousemove', handleMouseMove)
+  }, [])
+
+  const roles = {
+    patient: {
+      label: 'Patient',
+      description: 'Access your health records and appointments',
+      icon: Users,
+      gradient: 'from-blue-500 to-violet-600',
+      redirectUrl: '/patient'
+    },
+    doctor: {
+      label: 'Doctor',
+      description: 'Manage your patients and appointments',
+      icon: Stethoscope,
+      gradient: 'from-emerald-500 to-teal-600',
+      redirectUrl: '/doctor'
+    },
+    hospital_admin: {
+      label: 'Hospital Admin',
+      description: 'Manage hospital operations and staff',
+      icon: Building2,
+      gradient: 'from-purple-500 to-pink-600',
+      redirectUrl: '/hospital-admin'
+    },
+    admin: {
+      label: 'Admin',
+      description: 'MAIN ADMIN ACCESS TO ALL FEATURES',
+      icon: Shield,
+      gradient: 'from-red-500 to-orange-600',
+      redirectUrl: '/admin'
+    }
+  }
+
+  const currentRole = roles[roleFromUrl] || roles.patient
+  const IconComponent = currentRole.icon
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
-      
-      {/* Background decorations */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-blue-400/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-20 right-10 w-96 h-96 bg-violet-400/10 rounded-full blur-3xl animate-pulse"></div>
-      </div>
+    <div 
+      ref={containerRef}
+      className="min-h-screen relative overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50/30 to-violet-50 dark:from-gray-950 dark:via-blue-950/20 dark:to-slate-900"
+    >
+      {/* Animated gradient following mouse */}
+      <motion.div
+        className="pointer-events-none absolute inset-0 opacity-20"
+        animate={{
+          background: `radial-gradient(600px circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(59, 130, 246, 0.15), transparent 40%)`
+        }}
+        transition={{ type: "tween", ease: "linear", duration: 0 }}
+      />
 
-      <div className="relative w-full max-w-6xl">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="grid md:grid-cols-2 gap-8 items-center"
+      {/* Grid pattern overlay */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.03)_1px,transparent_1px)] bg-[size:100px_100px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_50%,black,transparent)]" />
+
+      {/* Back button */}
+      <motion.div
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.5 }}
+        className="absolute top-8 left-8 z-20"
+      >
+        <Link 
+          href="/"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm text-gray-700 dark:text-gray-300 rounded-full font-medium hover:bg-white dark:hover:bg-gray-800 transition-all duration-200 shadow-lg hover:shadow-xl"
         >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Home
+        </Link>
+      </motion.div>
+
+      <div className="relative z-10 min-h-screen flex items-center justify-center p-4 md:p-8">
+        <div className="w-full max-w-5xl">
           
-          {/* Left Side - Role Selection */}
-          <div className="space-y-6">
-            {/* Logo and Title */}
-            <Link href="/" className="inline-flex items-center gap-2 mb-6 group">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-violet-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                <Heart className="w-7 h-7 text-white" />
-              </div>
+          {/* Header */}
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-12"
+          >
+            <Link href="/" className="inline-flex items-center gap-3 mb-6 group">
+              <motion.div 
+                whileHover={{ scale: 1.05, rotate: 5 }}
+                className="w-16 h-16 bg-gradient-to-br from-blue-600 to-violet-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30"
+              >
+                <Heart className="w-9 h-9 text-white" />
+              </motion.div>
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent flex items-center gap-1">
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-1">
                   QLINIC
-                  <Sparkles className="w-5 h-5 text-violet-500" />
+                  <Sparkles className="w-5 h-5 text-violet-500 group-hover:rotate-12 transition-transform" />
                 </h1>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Your healthcare partner</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Your healthcare partner</p>
               </div>
             </Link>
+          </motion.div>
 
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                Create Account
-              </h2>
-              <p className="text-gray-600 dark:text-gray-400">
-                Select your role to get started
-              </p>
-            </div>
+          <div className="grid lg:grid-cols-2 gap-8 items-center">
+            
+            {/* Left Side - Role Info */}
+            <motion.div
+              initial={{ opacity: 0, x: -50 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="space-y-6"
+            >
+              <div>
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.3, type: "spring", stiffness: 200 }}
+                  className={`inline-flex items-center gap-3 p-6 rounded-2xl bg-gradient-to-br ${currentRole.gradient} shadow-xl mb-6`}
+                >
+                  <IconComponent className="w-12 h-12 text-white" strokeWidth={2} />
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">
+                      {currentRole.label} Portal
+                    </h2>
+                    <p className="text-white/90 text-sm">
+                      Sign in to continue
+                    </p>
+                  </div>
+                </motion.div>
 
-            {/* Role Selection Cards */}
-            <div className="space-y-3">
-              {roles.map((role) => {
-                const IconComponent = role.icon
-                const isSelected = selectedRole === role.value
+                <motion.h3 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                  className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-3"
+                >
+                  Welcome Back!
+                </motion.h3>
                 
-                return (
-                  <motion.button
-                    key={role.value}
-                    onClick={() => setSelectedRole(role.value)}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className={`w-full p-4 rounded-xl border-2 transition-all duration-300 text-left ${
-                      isSelected
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-lg'
-                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-blue-300 dark:hover:border-blue-700'
-                    }`}
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${role.color} flex items-center justify-center flex-shrink-0`}>
-                        <IconComponent className="w-6 h-6 text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <h3 className="font-semibold text-gray-900 dark:text-white">
-                            {role.label}
-                          </h3>
-                          {isSelected && (
-                            <motion.div
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center"
-                            >
-                              <ArrowRight className="w-4 h-4 text-white" />
-                            </motion.div>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {role.description}
-                        </p>
-                      </div>
-                    </div>
-                  </motion.button>
-                )
-              })}
-            </div>
+                <motion.p 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.5 }}
+                  className="text-lg text-gray-600 dark:text-gray-400 mb-6"
+                >
+                  {currentRole.description}
+                </motion.p>
+              </div>
 
-            {!selectedRole && (
+              {/* Features */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 }}
+                className="bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-200 dark:border-gray-700"
+              >
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-blue-600" />
+                  Secure & Private
+                </h4>
+                <ul className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
+                  <li className="flex items-start gap-2">
+                    <div className={`w-1.5 h-1.5 rounded-full bg-gradient-to-r ${currentRole.gradient} mt-2`}></div>
+                    <span>End-to-end encrypted data</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className={`w-1.5 h-1.5 rounded-full bg-gradient-to-r ${currentRole.gradient} mt-2`}></div>
+                    <span>HIPAA compliant platform</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className={`w-1.5 h-1.5 rounded-full bg-gradient-to-r ${currentRole.gradient} mt-2`}></div>
+                    <span>24/7 technical support</span>
+                  </li>
+                </ul>
+              </motion.div>
+
+              {/* Switch role link */}
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="text-sm text-amber-600 dark:text-amber-400 flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg"
+                transition={{ delay: 0.7 }}
+                className="text-sm text-gray-600 dark:text-gray-400"
               >
-                <Shield className="w-4 h-4" />
-                Please select your role to continue
+                Not a {currentRole.label.toLowerCase()}?{' '}
+                <Link 
+                  href="/"
+                  className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-semibold"
+                >
+                  Go back and select your role
+                </Link>
               </motion.p>
-            )}
-          </div>
+            </motion.div>
 
-          {/* Right Side - Clerk Sign Up */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8"
-          >
-            {selectedRole ? (
-              <SignUp
+            {/* Right Side - Sign In Form */}
+            <motion.div
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+              className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-gray-200/50 dark:border-gray-700/50"
+            >
+              <SignIn
                 appearance={{
                   elements: {
                     rootBox: "w-full",
                     card: "shadow-none bg-transparent",
-                    headerTitle: "text-2xl font-bold",
-                    headerSubtitle: "text-gray-600 dark:text-gray-400",
+                    headerTitle: "hidden",
+                    headerSubtitle: "hidden",
                     formButtonPrimary: 
-                      "bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-semibold rounded-lg",
+                      `bg-gradient-to-r ${currentRole.gradient} hover:opacity-90 text-white font-semibold rounded-xl py-3.5 shadow-lg hover:shadow-xl transition-all duration-200`,
                     formFieldInput: 
-                      "rounded-lg border-gray-300 dark:border-gray-600 focus:border-blue-500",
-                    footerActionLink: "text-blue-600 hover:text-blue-700 font-medium",
+                      "rounded-xl border-2 border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400 px-4 py-3 transition-colors duration-200",
+                    formFieldLabel: "text-gray-700 dark:text-gray-300 font-semibold mb-2",
+                    footerActionLink: "text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-semibold",
+                    socialButtonsBlockButton: 
+                      "border-2 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-xl transition-all duration-200",
+                    socialButtonsBlockButtonText: "font-semibold",
+                    dividerLine: "bg-gray-300 dark:bg-gray-600",
+                    dividerText: "text-gray-500 dark:text-gray-400",
+                    formFieldInputShowPasswordButton: "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200",
+                    footerAction: "hidden",
+                    identityPreviewEditButton: "text-blue-600 hover:text-blue-700 dark:text-blue-400",
                   }
                 }}
-                redirectUrl={`/${selectedRole}/dashboard`}
-                afterSignUpUrl={`/${selectedRole}/dashboard`}
-                signInUrl="/sign-in"
-                unsafeMetadata={{
-                  role: selectedRole
-                }}
+                signUpUrl="/sign-up"
+                // ✅ FIXED: Redirect through callback to assign role
+                redirectUrl={`/auth/callback?role=${roleFromUrl}`}
+                afterSignInUrl={`/auth/callback?role=${roleFromUrl}`}
               />
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center">
-                <div className="w-20 h-20 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
-                  <Shield className="w-10 h-10 text-gray-400 dark:text-gray-500" />
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                  Select Your Role
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400 max-w-xs">
-                  Choose your role from the options on the left to access the sign-up form
+              
+              {/* Custom Sign Up Link */}
+              <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+                  Don't have an account?{' '}
+                  <Link 
+                    href="/sign-up" 
+                    className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-semibold transition-colors inline-flex items-center gap-1 group"
+                  >
+                    Sign up here
+                    <ArrowLeft className="w-3.5 h-3.5 rotate-180 group-hover:translate-x-1 transition-transform" />
+                  </Link>
                 </p>
               </div>
-            )}
-          </motion.div>
-        </motion.div>
-
-        {/* Footer Links */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-          className="mt-8 text-center"
-        >
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Already have an account?{' '}
-            <Link href="/sign-in" className="text-blue-600 hover:text-blue-700 font-medium">
-              Sign in here
-            </Link>
-          </p>
-        </motion.div>
+            </motion.div>
+          </div>
+        </div>
       </div>
     </div>
   )
