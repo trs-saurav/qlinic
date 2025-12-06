@@ -25,7 +25,7 @@ export default function AuthCallbackContent() {
       const existingRole = user.publicMetadata?.role
 
       if (existingRole) {
-        console.log('✅ User already has role:', existingRole)
+        console.log('✅ User already has role in publicMetadata:', existingRole)
         const redirectMap = {
           patient: '/patient',
           doctor: '/doctor',
@@ -39,37 +39,42 @@ export default function AuthCallbackContent() {
         return
       }
 
-      // New OAuth user - update unsafeMetadata with role
-      console.log('⚙️ New user - setting role in unsafeMetadata:', roleFromUrl)
+      // New user - call API to set role in BOTH metadata fields
+      console.log('⚙️ New user - calling API to set role:', roleFromUrl)
       
       try {
-        await user.update({
-          unsafeMetadata: {
-            role: roleFromUrl
-          }
+        const response = await fetch('/api/user/set-role', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: roleFromUrl })
         })
 
-        console.log('✅ Role set in unsafeMetadata - webhook will process it')
-
-        // Wait for Clerk to sync and webhook to process
-        await new Promise(resolve => setTimeout(resolve, 2000))
-
-        // Reload user to get updated metadata
-        await user.reload()
-
-        const redirectMap = {
-          patient: '/patient',
-          doctor: '/doctor',
-          hospital_admin: '/hospital-admin',
-          admin: '/admin'
+        if (response.ok) {
+          const data = await response.json()
+          console.log('✅ Role set successfully via API:', data.role)
+          
+          // Reload user to get updated metadata
+          await user.reload()
+          
+          const redirectMap = {
+            patient: '/patient',
+            doctor: '/doctor',
+            hospital_admin: '/hospital-admin',
+            admin: '/admin'
+          }
+          
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('pendingRole')
+          }
+          
+          router.push(redirectMap[roleFromUrl] || '/patient')
+        } else {
+          console.error('❌ Failed to set role')
+          setIsProcessing(false)
+          router.push('/')
         }
-        
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('pendingRole')
-        }
-        router.push(redirectMap[roleFromUrl] || '/patient')
       } catch (error) {
-        console.error('❌ Error setting role:', error)
+        console.error('❌ Error calling API:', error)
         setIsProcessing(false)
         router.push('/')
       }

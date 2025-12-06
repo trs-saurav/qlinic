@@ -22,59 +22,76 @@ export const syncUserCreation = inngest.createFunction(
     const clerkId = data.id;
 
     console.log('🚀 syncUserCreation triggered for:', clerkId);
-    console.log('📦 Event data:', JSON.stringify(data, null, 2));
 
-    // Step 1: Update Clerk metadata
-    const clerkResult = await step.run('update-clerk-metadata', async () => {
+    // Check if role already exists in publicMetadata (set by API)
+    const existingRole = data.public_metadata?.role;
+    
+    if (existingRole) {
+      console.log('✅ Role already in publicMetadata (set by API):', existingRole);
+      
+      // Just save to MongoDB
+      await step.run('save-to-mongo', async () => {
+        try {
+          await connectDB();
+
+          const email = data.email_addresses?.[0]?.email_address || '';
+          const firstName = data.first_name || '';
+          const lastName = data.last_name || '';
+          const imageUrl = data.image_url || '';
+
+          const user = await User.findOneAndUpdate(
+            { clerkId },
+            {
+              clerkId,
+              email,
+              firstName,
+              lastName,
+              role: existingRole,
+              profileImage: imageUrl,
+              isActive: true,
+              lastLogin: new Date(),
+            },
+            { new: true, upsert: true, setDefaultsOnInsert: true }
+          );
+
+          console.log('✅ User saved to MongoDB:', user._id.toString());
+          return { mongoId: user._id.toString(), success: true };
+        } catch (error) {
+          console.error('❌ MongoDB save failed:', error.message);
+          return { success: false, error: error.message };
+        }
+      });
+
+      return { success: true, source: 'api' };
+    }
+
+    // If no publicMetadata role, check unsafeMetadata (sign-up flow)
+    const role = data.unsafe_metadata?.role || 'patient';
+    console.log('📝 No publicMetadata role, using unsafe/default:', role);
+
+    await step.run('update-clerk-metadata', async () => {
       try {
-        const role = data.unsafe_metadata?.role || data.public_metadata?.role || 'patient';
-        
-        console.log(`📝 Attempting to set role: "${role}"`);
-
         const clerk = await clerkClient();
-        
         await clerk.users.updateUserMetadata(clerkId, {
           publicMetadata: { role },
         });
 
-        console.log(`✅ Clerk publicMetadata.role set to "${role}"`);
+        console.log(`✅ Moved role to publicMetadata: "${role}"`);
         return { role, success: true };
       } catch (error) {
-        console.error('❌ Clerk metadata update failed:', {
-          message: error.message,
-          stack: error.stack,
-          clerkId
-        });
-        // Don't throw - continue to MongoDB step
-        return { role: 'patient', success: false, error: error.message };
+        console.error('❌ Clerk metadata update failed:', error.message);
+        return { role, success: false, error: error.message };
       }
     });
 
-    // Step 2: Save to MongoDB
-    const mongoResult = await step.run('upsert-mongo-user', async () => {
+    await step.run('save-to-mongo', async () => {
       try {
-        console.log('🔌 Connecting to MongoDB...');
         await connectDB();
-        console.log('✅ MongoDB connected');
 
-        const role = clerkResult.role || 'patient';
         const email = data.email_addresses?.[0]?.email_address || '';
         const firstName = data.first_name || '';
         const lastName = data.last_name || '';
         const imageUrl = data.image_url || '';
-
-        console.log('📝 User data to save:', {
-          clerkId,
-          email,
-          firstName,
-          lastName,
-          role,
-          profileImage: imageUrl
-        });
-
-        if (!email) {
-          throw new Error('Email is required but not found in webhook data');
-        }
 
         const user = await User.findOneAndUpdate(
           { clerkId },
@@ -91,44 +108,19 @@ export const syncUserCreation = inngest.createFunction(
           { new: true, upsert: true, setDefaultsOnInsert: true }
         );
 
-        console.log('✅ User saved to MongoDB:', {
-          mongoId: user._id.toString(),
-          email: user.email,
-          role: user.role
-        });
-        
+        console.log('✅ User saved to MongoDB:', user._id.toString());
         return { mongoId: user._id.toString(), success: true };
       } catch (error) {
-        console.error('❌ MongoDB save failed:', {
-          message: error.message,
-          stack: error.stack,
-          code: error.code,
-          clerkId
-        });
-        
-        // Return error instead of throwing to prevent function failure
-        return { 
-          success: false, 
-          error: error.message,
-          code: error.code 
-        };
+        console.error('❌ MongoDB save failed:', error.message);
+        return { success: false, error: error.message };
       }
     });
 
-    console.log('🏁 syncUserCreation completed:', {
-      clerkSuccess: clerkResult.success,
-      mongoSuccess: mongoResult.success
-    });
-
-    return { 
-      success: clerkResult.success && mongoResult.success,
-      clerkResult,
-      mongoResult
-    };
+    return { success: true, source: 'signup' };
   }
 );
 
-// USER UPDATED
+// USER UPDATED (keep as is)
 export const syncUserUpdate = inngest.createFunction(
   { id: 'qlinic-sync-user-updated' },
   {
@@ -152,39 +144,25 @@ export const syncUserUpdate = inngest.createFunction(
         const imageUrl = data.image_url || '';
         const role = data.public_metadata?.role || data.unsafe_metadata?.role || 'patient';
 
-        const updateData = {
-          email,
-          firstName,
-          lastName,
-          profileImage: imageUrl,
-          role,
-          lastLogin: new Date(),
-        };
-
-        // Use upsert: true to create if user doesn't exist (in case creation failed)
         const user = await User.findOneAndUpdate(
           { clerkId },
           {
             clerkId,
-            ...updateData,
-            isActive: true
+            email,
+            firstName,
+            lastName,
+            profileImage: imageUrl,
+            role,
+            isActive: true,
+            lastLogin: new Date(),
           },
           { new: true, upsert: true }
         );
 
-        console.log('✅ User updated/created:', {
-          mongoId: user._id.toString(),
-          email: user.email,
-          role: user.role
-        });
-        
+        console.log('✅ User updated/created:', user._id.toString());
         return { found: true, mongoId: user._id.toString() };
       } catch (error) {
-        console.error('❌ MongoDB update failed:', {
-          message: error.message,
-          stack: error.stack,
-          clerkId
-        });
+        console.error('❌ MongoDB update failed:', error.message);
         throw error;
       }
     });
@@ -193,7 +171,7 @@ export const syncUserUpdate = inngest.createFunction(
   }
 );
 
-// USER DELETED
+// USER DELETED (keep as is)
 export const syncUserDeletion = inngest.createFunction(
   { id: 'qlinic-sync-user-deleted' },
   {
@@ -225,11 +203,7 @@ export const syncUserDeletion = inngest.createFunction(
         console.log('✅ User soft-deleted:', user._id.toString());
         return { found: true, mongoId: user._id.toString() };
       } catch (error) {
-        console.error('❌ MongoDB deletion failed:', {
-          message: error.message,
-          stack: error.stack,
-          clerkId
-        });
+        console.error('❌ MongoDB deletion failed:', error.message);
         throw error;
       }
     });

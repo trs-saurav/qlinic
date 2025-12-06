@@ -18,14 +18,14 @@ export async function POST(req) {
 
     console.log('🎯 Setting role:', role, 'for user:', userId)
 
-    // Update both publicMetadata and unsafeMetadata immediately
+    // Update BOTH publicMetadata and unsafeMetadata immediately
     const clerk = await clerkClient()
     await clerk.users.updateUserMetadata(userId, {
-      publicMetadata: { role },
-      unsafeMetadata: { role }
+      publicMetadata: { role },  // ← Secure, used by middleware/backend
+      unsafeMetadata: { role }   // ← Available immediately on client
     })
 
-    console.log('✅ Role set in both metadata fields')
+    console.log('✅ Role set in both metadata fields:', role)
 
     return NextResponse.json({ success: true, role })
   } catch (error) {
