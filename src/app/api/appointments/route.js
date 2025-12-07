@@ -99,10 +99,4 @@ export async function POST(req) {
 }
 
 
-import { NextResponse } from 'next/server';
 
-export async function GET(req) {
-  return NextResponse.json({ 
-    message: 'Appointments route is working!' 
-  });
-}
