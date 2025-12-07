@@ -166,7 +166,7 @@ const Navbar = () => {
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-violet-500 rounded-xl opacity-0 group-hover:opacity-20 transition-opacity duration-300 blur-md"></div>
                     <div className="relative w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950 dark:to-violet-950 rounded-lg p-1 border border-blue-200/50 dark:border-blue-800/50">
                       <Image 
-                        src="/logo.png" 
+                        src="/LOGO.png" 
                         alt="QLINIC Logo" 
                         width={40} 
                         height={40} 

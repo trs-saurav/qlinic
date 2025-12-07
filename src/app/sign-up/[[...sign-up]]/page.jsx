@@ -58,13 +58,6 @@ export default function SignUpPage() {
       icon: Building2,
       gradient: 'from-purple-500 to-pink-600'
     },
-    {
-      value: 'admin',
-      label: 'Admin',
-      description: 'Platform administration',
-      icon: Shield,
-      gradient: 'from-red-500 to-orange-600'
-    }
   ]
 
   return (

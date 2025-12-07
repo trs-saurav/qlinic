@@ -6,12 +6,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    // ❌ Remove: index: true (already defined below)
   },
   email: {
     type: String,
     required: true,
-    unique: true,  // ← This automatically creates an index
+    unique: true,
     lowercase: true,
     trim: true
   },
@@ -50,21 +49,28 @@ const userSchema = new mongoose.Schema({
   deletedAt: {
     type: Date
   },
+  
   // Role-specific fields
-  patientProfile: {
-    dateOfBirth: Date,
-    gender: {
-      type: String,
-      enum: ['male', 'female', 'other']
-    },
-    bloodGroup: {
-      type: String,
-      enum: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-', null]
-    },
-    address: String,
-    emergencyContact: String,
-    medicalHistory: [String]
+patientProfile: {
+  dateOfBirth: Date,
+  gender: {
+    type: String,
+    enum: ['male', 'female', 'other']
   },
+  bloodGroup: {
+    type: String,
+    enum: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-', null]
+  },
+  address: String,
+  emergencyContact: String,
+  medicalHistory: [String],
+  allergies: [String],
+  chronicConditions: [String],
+  currentMedications: [String],
+  insuranceProvider: String,
+  insurancePolicyNumber: String
+},
+  
   doctorProfile: {
     specialization: String,
     qualification: String,
@@ -75,27 +81,59 @@ const userSchema = new mongoose.Schema({
     hospitalId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Hospital'
-    }
+    },
+    isAvailable: {  // ← ADDED: For reception desk to check if doctor is available
+      type: Boolean,
+      default: true
+    },
+    consultationRoomNumber: String  // ← ADDED: Optional room number
   },
+  
   hospitalAdminProfile: {
     hospitalId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Hospital'
+      ref: 'Hospital',
+      required: function() { 
+        return this.role === 'hospital_admin'; 
+      }
     },
-    designation: String
+    designation: String,
+    permissions: {  // ← ADDED: Optional granular permissions
+      canManageAppointments: {
+        type: Boolean,
+        default: true
+      },
+      canManageDoctors: {
+        type: Boolean,
+        default: false
+      },
+      canViewReports: {
+        type: Boolean,
+        default: true
+      }
+    }
   }
 }, {
   timestamps: true
 });
 
-// Indexes - Only define here, not in field definitions
-// Note: email and clerkId already have indexes from "unique: true"
+// Indexes
 userSchema.index({ role: 1 });
 userSchema.index({ isActive: 1 });
+userSchema.index({ 'doctorProfile.hospitalId': 1 }); // ← ADDED: For faster doctor queries
+userSchema.index({ 'hospitalAdminProfile.hospitalId': 1 }); // ← ADDED: For faster admin queries
 
 // Virtual fullName
 userSchema.virtual('fullName').get(function () {
   return `${this.firstName} ${this.lastName}`.trim();
+});
+
+// Virtual to check if doctor is currently available
+userSchema.virtual('isDoctorActive').get(function() {
+  if (this.role === 'doctor' && this.doctorProfile) {
+    return this.isActive && this.doctorProfile.isAvailable;
+  }
+  return false;
 });
 
 userSchema.set('toJSON', { virtuals: true });

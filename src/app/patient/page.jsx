@@ -1,10 +1,11 @@
-// app/patient/dashboard/page.jsx
-import ProtectedRoute from '@/components/ProtectedRoute'
+// app/patient/page.jsx
+import DashboardOverview from '@/components/patient/DashboardOverview'
 
 export default function PatientDashboard() {
   return (
-    <ProtectedRoute requiredRole="patient">
-      <div>Patient Dashboard Content</div>
-    </ProtectedRoute>
+    <>
+
+      <DashboardOverview />
+    </>
   )
 }
