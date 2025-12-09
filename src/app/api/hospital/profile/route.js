@@ -1,100 +1,128 @@
-// app/api/hospital/profile/route.js
-import { auth } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
-import connectDB from '@/config/db';
-import User from '@/models/user';
-import Hospital from '@/models/hospital';
+// src/app/api/hospital/profile/route.js
+import { auth } from '@clerk/nextjs/server'
+import  connectDB  from '@/config/db'
+import User from '@/models/user'
+import Hospital from '@/models/hospital'
+import { NextResponse } from 'next/server'
 
 export async function GET(req) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    await connectDB();
-
-    const user = await User.findOne({ clerkId: userId });
-    if (!user || user.role !== 'hospital_admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    let hospital = null;
-    if (user.hospitalAdminProfile?.hospitalId) {
-      hospital = await Hospital.findById(user.hospitalAdminProfile.hospitalId);
-    }
-
-    return NextResponse.json({ user, hospital });
-  } catch (error) {
-    console.error('Error fetching profile:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
-}
-
-export async function POST(req) {
-  try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    await connectDB();
-
-    const user = await User.findOne({ clerkId: userId });
-    if (!user || user.role !== 'hospital_admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const body = await req.json();
+    const { userId } = auth()
     
-    // Create hospital
-    const hospital = await Hospital.create({
-      ...body,
-      createdBy: user._id,
-      isProfileComplete: true
-    });
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
 
-    // Update user with hospital reference
-    await User.findByIdAndUpdate(user._id, {
-      'hospitalAdminProfile.hospitalId': hospital._id
-    });
+    await connectDB()
 
-    return NextResponse.json({ success: true, hospital });
+    // Find user and populate hospital
+    const user = await User.findOne({ clerkId: userId })
+      .populate('hospitalId')
+      .lean()
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    if (user.role !== 'hospital_admin') {
+      return NextResponse.json(
+        { error: 'Not authorized as hospital admin' },
+        { status: 403 }
+      )
+    }
+
+    const hospital = await Hospital.findById(user.hospitalId).lean()
+
+    if (!hospital) {
+      return NextResponse.json(
+        { error: 'Hospital not found' },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      hospital: {
+        _id: hospital._id,
+        name: hospital.name,
+        email: hospital.email,
+        phone: hospital.phone,
+        address: hospital.address,
+        city: hospital.city,
+        state: hospital.state,
+        pincode: hospital.pincode,
+        registrationNumber: hospital.registrationNumber,
+        consultationFee: hospital.consultationFee || 500,
+        facilities: hospital.facilities,
+        operatingHours: hospital.operatingHours,
+        isVerified: hospital.isVerified,
+        createdAt: hospital.createdAt
+      }
+    })
+
   } catch (error) {
-    console.error('Error creating hospital:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Hospital profile fetch error:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch hospital profile' },
+      { status: 500 }
+    )
   }
 }
 
 export async function PATCH(req) {
   try {
-    const { userId } = await auth();
+    const { userId } = auth()
+    
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
     }
 
-    await connectDB();
+    const body = await req.json()
+    const { name, consultationFee, operatingHours, facilities } = body
 
-    const user = await User.findOne({ clerkId: userId });
+    await connectDB()
+
+    const user = await User.findOne({ clerkId: userId })
+
     if (!user || user.role !== 'hospital_admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return NextResponse.json(
+        { error: 'Not authorized' },
+        { status: 403 }
+      )
     }
 
-    if (!user.hospitalAdminProfile?.hospitalId) {
-      return NextResponse.json({ error: 'No hospital found' }, { status: 404 });
-    }
-
-    const body = await req.json();
+    const updateData = {}
+    if (name) updateData.name = name
+    if (consultationFee) updateData.consultationFee = consultationFee
+    if (operatingHours) updateData.operatingHours = operatingHours
+    if (facilities) updateData.facilities = facilities
 
     const hospital = await Hospital.findByIdAndUpdate(
-      user.hospitalAdminProfile.hospitalId,
-      { ...body, isProfileComplete: true },
+      user.hospitalId,
+      { $set: updateData },
       { new: true }
-    );
+    )
 
-    return NextResponse.json({ success: true, hospital });
+    return NextResponse.json({
+      success: true,
+      message: 'Hospital profile updated',
+      hospital
+    })
+
   } catch (error) {
-    console.error('Error updating hospital:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Hospital update error:', error)
+    return NextResponse.json(
+      { error: 'Failed to update hospital profile' },
+      { status: 500 }
+    )
   }
 }

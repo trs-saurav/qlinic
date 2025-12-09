@@ -1,5 +1,5 @@
-// src/models/user.js
-import mongoose from 'mongoose';
+// src/models/user.js (Complete corrected version)
+import mongoose from 'mongoose'
 
 const userSchema = new mongoose.Schema({
   clerkId: {
@@ -42,6 +42,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  isProfileComplete: { // ✅ ADDED
+    type: Boolean,
+    default: false
+  },
   lastLogin: {
     type: Date,
     default: Date.now
@@ -50,55 +54,59 @@ const userSchema = new mongoose.Schema({
     type: Date
   },
   
-  // Role-specific fields
-patientProfile: {
-  dateOfBirth: Date,
-  gender: {
-    type: String,
-    enum: ['male', 'female', 'other']
+  // Patient Profile
+  patientProfile: {
+    dateOfBirth: Date,
+    gender: {
+      type: String,
+      enum: ['male', 'female', 'other']
+    },
+    bloodGroup: {
+      type: String,
+      enum: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-', null]
+    },
+    address: String,
+    emergencyContact: String,
+    medicalHistory: [String],
+    allergies: [String],
+    chronicConditions: [String],
+    currentMedications: [String],
+    insuranceProvider: String,
+    insurancePolicyNumber: String
   },
-  bloodGroup: {
-    type: String,
-    enum: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-', null]
-  },
-  address: String,
-  emergencyContact: String,
-  medicalHistory: [String],
-  allergies: [String],
-  chronicConditions: [String],
-  currentMedications: [String],
-  insuranceProvider: String,
-  insurancePolicyNumber: String
-},
   
+  // Doctor Profile
   doctorProfile: {
     specialization: String,
     qualification: String,
     experience: Number,
-    licenseNumber: String,
+    licenseNumber: String, // ✅ Medical registration number
     consultationFee: Number,
+    about: String, // ✅ ADDED
+    languages: [String], // ✅ ADDED
     availableDays: [String],
     hospitalId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Hospital'
     },
-    isAvailable: {  // ← ADDED: For reception desk to check if doctor is available
+    isAvailable: {
       type: Boolean,
       default: true
     },
-    consultationRoomNumber: String  // ← ADDED: Optional room number
+    consultationRoomNumber: String
   },
   
+  // Hospital Admin Profile
   hospitalAdminProfile: {
     hospitalId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Hospital',
       required: function() { 
-        return this.role === 'hospital_admin'; 
+        return this.role === 'hospital_admin'
       }
     },
     designation: String,
-    permissions: {  // ← ADDED: Optional granular permissions
+    permissions: {
       canManageAppointments: {
         type: Boolean,
         default: true
@@ -115,30 +123,30 @@ patientProfile: {
   }
 }, {
   timestamps: true
-});
+})
 
 // Indexes
-userSchema.index({ role: 1 });
-userSchema.index({ isActive: 1 });
-userSchema.index({ 'doctorProfile.hospitalId': 1 }); // ← ADDED: For faster doctor queries
-userSchema.index({ 'hospitalAdminProfile.hospitalId': 1 }); // ← ADDED: For faster admin queries
+userSchema.index({ role: 1 })
+userSchema.index({ isActive: 1 })
+userSchema.index({ 'doctorProfile.hospitalId': 1 })
+userSchema.index({ 'hospitalAdminProfile.hospitalId': 1 })
 
 // Virtual fullName
 userSchema.virtual('fullName').get(function () {
-  return `${this.firstName} ${this.lastName}`.trim();
-});
+  return `${this.firstName} ${this.lastName}`.trim()
+})
 
 // Virtual to check if doctor is currently available
 userSchema.virtual('isDoctorActive').get(function() {
   if (this.role === 'doctor' && this.doctorProfile) {
-    return this.isActive && this.doctorProfile.isAvailable;
+    return this.isActive && this.doctorProfile.isAvailable
   }
-  return false;
-});
+  return false
+})
 
-userSchema.set('toJSON', { virtuals: true });
-userSchema.set('toObject', { virtuals: true });
+userSchema.set('toJSON', { virtuals: true })
+userSchema.set('toObject', { virtuals: true })
 
-const User = mongoose.models.User || mongoose.model('User', userSchema);
+const User = mongoose.models.User || mongoose.model('User', userSchema)
 
-export default User;
+export default User

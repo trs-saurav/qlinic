@@ -1,76 +1,44 @@
 // app/api/doctor/affiliations/route.js
-import { auth } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
-import connectDB from '@/config/db';
-import User from '@/models/user';
-import HospitalAffiliation from '@/models/hospitalAffiliation';
-import Hospital from '@/models/hospital';
+import { auth } from '@clerk/nextjs/server'
+import connectDB from '@/config/db'
+import User from '@/models/user'
+import HospitalAffiliation from '@/models/hospitalAffiliation'
+import { NextResponse } from 'next/server'
 
+// GET - Fetch all affiliations and pending requests
 export async function GET(req) {
   try {
-    const { userId } = await auth();
+    const { userId } = auth()
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    await connectDB();
+    await connectDB()
 
-    const user = await User.findOne({ clerkId: userId });
-    if (!user || user.role !== 'doctor') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const doctor = await User.findOne({ clerkId: userId, role: 'doctor' })
+    if (!doctor) {
+      return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
     }
 
-    const affiliations = await HospitalAffiliation.find({ doctorId: user._id })
-      .populate('hospitalId', 'name address city state')
-      .sort({ createdAt: -1 });
+    // Fetch accepted affiliations
+    const affiliations = await HospitalAffiliation.find({
+      doctorId: doctor._id,
+      status: 'accepted'
+    }).populate('hospitalId', 'name address phone email')
 
-    return NextResponse.json({ affiliations });
+    // Fetch pending requests
+    const pendingRequests = await HospitalAffiliation.find({
+      doctorId: doctor._id,
+      status: 'pending'
+    }).populate('hospitalId', 'name address phone email')
+
+    return NextResponse.json({
+      success: true,
+      affiliations,
+      pendingRequests
+    })
   } catch (error) {
-    console.error('Error fetching affiliations:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
-}
-
-export async function POST(req) {
-  try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    await connectDB();
-
-    const user = await User.findOne({ clerkId: userId });
-    if (!user || user.role !== 'doctor') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const body = await req.json();
-    const { hospitalId, consultationFee, availableDays, notes } = body;
-
-    // Check if already exists
-    const existing = await HospitalAffiliation.findOne({
-      doctorId: user._id,
-      hospitalId,
-      status: { $in: ['PENDING', 'APPROVED'] }
-    });
-
-    if (existing) {
-      return NextResponse.json({ error: 'Request already exists' }, { status: 400 });
-    }
-
-    const affiliation = await HospitalAffiliation.create({
-      doctorId: user._id,
-      hospitalId,
-      requestType: 'DOCTOR_TO_HOSPITAL',
-      consultationFee,
-      availableDays,
-      notes
-    });
-
-    return NextResponse.json({ success: true, affiliation });
-  } catch (error) {
-    console.error('Error creating affiliation:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Error fetching affiliations:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

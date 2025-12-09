@@ -1,62 +1,127 @@
 // app/api/doctor/profile/route.js
-import { auth } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
-import connectDB from '@/config/db';
-import User from '@/models/user';
+import { auth } from '@clerk/nextjs/server'
+import connectDB from '@/config/db'
+import User from '@/models/user'
+import { v2 as cloudinary } from 'cloudinary'
+import { NextResponse } from 'next/server'
 
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+})
+
+// GET - Fetch doctor profile
 export async function GET(req) {
   try {
-    const { userId } = await auth();
+    const { userId } = await auth()
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    await connectDB();
+    await connectDB()
 
-    const user = await User.findOne({ clerkId: userId });
-    if (!user || user.role !== 'doctor') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const doctor = await User.findOne({ clerkId: userId, role: 'doctor' })
+    if (!doctor) {
+      return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ user });
+    return NextResponse.json({ success: true, profile: doctor })
   } catch (error) {
-    console.error('Error fetching profile:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Error fetching doctor profile:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-export async function PATCH(req) {
+// POST - Update doctor profile
+export async function POST(req) {
   try {
-    const { userId } = await auth();
+    const { userId } = await auth()
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    await connectDB();
+    await connectDB()
 
-    const body = await req.json();
-    const { specialization, qualification, experience, licenseNumber, consultationFee, availableDays } = body;
+    const formData = await req.formData()
+    
+    // Root level profile data
+    const profileData = {
+      firstName: formData.get('firstName'),
+      lastName: formData.get('lastName'),
+      phoneNumber: formData.get('phone'),
+      isProfileComplete: true
+    }
 
-    const user = await User.findOneAndUpdate(
+    // Parse languages from comma-separated string
+    const languagesString = formData.get('languages')
+    const languagesArray = languagesString 
+      ? languagesString.split(',').map(l => l.trim()).filter(l => l)
+      : []
+
+    // Doctor profile nested data
+    const doctorProfileData = {
+      specialization: formData.get('specialization'),
+      experience: parseInt(formData.get('experience')),
+      qualification: formData.get('qualification'),
+      licenseNumber: formData.get('registrationNumber'),
+      consultationFee: parseFloat(formData.get('consultationFee')),
+      about: formData.get('about'), // ✅ ADDED
+      languages: languagesArray // ✅ ADDED
+    }
+
+    // Handle profile photo upload
+    const profilePhoto = formData.get('profilePhoto')
+    if (profilePhoto && profilePhoto.size > 0) {
+      const bytes = await profilePhoto.arrayBuffer()
+      const buffer = Buffer.from(bytes)
+
+      // Upload to Cloudinary
+      const uploadResponse = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          { folder: 'doctor_profiles', resource_type: 'image' },
+          (error, result) => {
+            if (error) reject(error)
+            else resolve(result)
+          }
+        ).end(buffer)
+      })
+
+      profileData.profileImage = uploadResponse.secure_url
+    }
+
+    // ✅ FIX: Get existing doctor to merge data
+    const existingDoctor = await User.findOne({ clerkId: userId, role: 'doctor' })
+    if (!existingDoctor) {
+      return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
+    }
+
+    // ✅ Merge existing doctorProfile with new data
+    const mergedDoctorProfile = {
+      ...existingDoctor.doctorProfile?.toObject?.() || {},
+      ...doctorProfileData
+    }
+
+    // Update the doctor profile
+    const doctor = await User.findOneAndUpdate(
       { clerkId: userId, role: 'doctor' },
-      {
-        'doctorProfile.specialization': specialization,
-        'doctorProfile.qualification': qualification,
-        'doctorProfile.experience': experience,
-        'doctorProfile.licenseNumber': licenseNumber,
-        'doctorProfile.consultationFee': consultationFee,
-        'doctorProfile.availableDays': availableDays
+      { 
+        $set: {
+          ...profileData,
+          doctorProfile: mergedDoctorProfile
+        }
       },
-      { new: true }
-    );
+      { new: true, runValidators: true }
+    )
 
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (!doctor) {
+      return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, user });
+    return NextResponse.json({ success: true, profile: doctor })
   } catch (error) {
-    console.error('Error updating profile:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Error updating doctor profile:', error)
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
   }
 }

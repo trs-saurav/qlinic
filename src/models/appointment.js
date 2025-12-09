@@ -1,5 +1,5 @@
 // src/models/appointment.js
-import mongoose from 'mongoose';
+import mongoose from 'mongoose'
 
 const appointmentSchema = new mongoose.Schema({
   patientId: {
@@ -49,18 +49,29 @@ const appointmentSchema = new mongoose.Schema({
     heartRate: String
   },
   notes: String,
+  cancelReason: String,
+  cancelledBy: {
+    type: String,
+    enum: ['patient', 'doctor', 'hospital_admin']
+  },
+  cancelledAt: Date,
+  consultationStartTime: Date,
+  consultationEndTime: Date,
   synced: {
     type: Boolean,
     default: false
   }
 }, {
   timestamps: true
-});
+})
 
-appointmentSchema.index({ hospitalId: 1, scheduledTime: 1 });
-appointmentSchema.index({ patientId: 1 });
-appointmentSchema.index({ doctorId: 1 });
+// Indexes
+appointmentSchema.index({ hospitalId: 1, scheduledTime: 1 })
+appointmentSchema.index({ patientId: 1 })
+appointmentSchema.index({ doctorId: 1, scheduledTime: 1 })
+appointmentSchema.index({ status: 1 })
+appointmentSchema.index({ tokenNumber: 1, hospitalId: 1 })
 
-const Appointment = mongoose.models.Appointment || mongoose.model('Appointment', appointmentSchema);
+const Appointment = mongoose.models.Appointment || mongoose.model('Appointment', appointmentSchema)
 
-export default Appointment;
+export default Appointment

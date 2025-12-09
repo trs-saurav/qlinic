@@ -1,446 +1,251 @@
 // src/components/doctor/HospitalAffiliations.jsx
 'use client'
 import { useState, useEffect } from 'react'
-import toast from 'react-hot-toast'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import toast from 'react-hot-toast'
 import { 
-  Building2, 
-  Plus, 
-  Clock, 
-  CheckCircle, 
-  XCircle,
-  AlertCircle,
-  MapPin,
-  Search,
-  IndianRupee
+  Hospital, CheckCircle, XCircle, Clock, 
+  MapPin, Phone, Mail, Loader2, AlertCircle 
 } from 'lucide-react'
 
-const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-
-export default function HospitalAffiliations({ doctorId }) {
+export default function HospitalAffiliations() {
   const [affiliations, setAffiliations] = useState([])
-  const [hospitals, setHospitals] = useState([])
-  const [searchQuery, setSearchQuery] = useState('')
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-
-  const [newRequest, setNewRequest] = useState({
-    hospitalId: '',
-    consultationFee: '',
-    availableDays: [],
-    notes: ''
-  })
+  const [pendingRequests, setPendingRequests] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [processingId, setProcessingId] = useState(null)
 
   useEffect(() => {
     fetchAffiliations()
   }, [])
 
-  useEffect(() => {
-    if (searchQuery.length > 2) {
-      searchHospitals()
-    } else {
-      setHospitals([])
-    }
-  }, [searchQuery])
-
   const fetchAffiliations = async () => {
     try {
       const response = await fetch('/api/doctor/affiliations')
       const data = await response.json()
-      
-      if (data.affiliations) {
-        setAffiliations(data.affiliations)
+
+      if (data.success) {
+        setAffiliations(data.affiliations || [])
+        setPendingRequests(data.pendingRequests || [])
       }
     } catch (error) {
       console.error('Error fetching affiliations:', error)
-    }
-  }
-
-  const searchHospitals = async () => {
-    try {
-      const response = await fetch(`/api/hospitals/search?q=${searchQuery}`)
-      const data = await response.json()
-      
-      if (data.hospitals) {
-        setHospitals(data.hospitals)
-      }
-    } catch (error) {
-      console.error('Error searching hospitals:', error)
-    }
-  }
-
-  const toggleDay = (day) => {
-    setNewRequest(prev => ({
-      ...prev,
-      availableDays: prev.availableDays.includes(day)
-        ? prev.availableDays.filter(d => d !== day)
-        : [...prev.availableDays, day]
-    }))
-  }
-
-  const handleSubmitRequest = async (e) => {
-    e.preventDefault()
-    setIsLoading(true)
-
-    const loadingToast = toast.loading('Sending request...')
-
-    try {
-      const response = await fetch('/api/doctor/affiliations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newRequest)
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        toast.success('✅ Request sent successfully', { id: loadingToast })
-        setIsDialogOpen(false)
-        setNewRequest({
-          hospitalId: '',
-          consultationFee: '',
-          availableDays: [],
-          notes: ''
-        })
-        setSearchQuery('')
-        fetchAffiliations()
-      } else {
-        toast.error(data.error || 'Failed to send request', { id: loadingToast })
-      }
-    } catch (error) {
-      console.error('Error sending request:', error)
-      toast.error('Something went wrong', { id: loadingToast })
+      toast.error('Failed to load affiliations')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleRespondToRequest = async (affiliationId, status) => {
-    const loadingToast = toast.loading(`${status === 'APPROVED' ? 'Accepting' : 'Rejecting'} request...`)
+  const handleRequest = async (requestId, action) => {
+    setProcessingId(requestId)
+    const loadingToast = toast.loading(`${action === 'accept' ? 'Accepting' : 'Rejecting'} request...`)
 
     try {
-      const response = await fetch(`/api/doctor/affiliations/${affiliationId}`, {
+      const response = await fetch(`/api/doctor/affiliations/${requestId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status: action === 'accept' ? 'accepted' : 'rejected' })
       })
 
       const data = await response.json()
 
       if (data.success) {
         toast.success(
-          status === 'APPROVED' ? '✅ Request accepted!' : '❌ Request rejected',
+          `✅ Request ${action === 'accept' ? 'accepted' : 'rejected'} successfully`,
           { id: loadingToast }
         )
         fetchAffiliations()
       } else {
-        toast.error('Failed to update request', { id: loadingToast })
+        toast.error(data.error || 'Failed to process request', { id: loadingToast })
       }
     } catch (error) {
-      console.error('Error updating request:', error)
+      console.error('Error processing request:', error)
+      toast.error('Something went wrong', { id: loadingToast })
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  const handleRemoveAffiliation = async (affiliationId) => {
+    if (!confirm('Are you sure you want to remove this affiliation?')) return
+
+    const loadingToast = toast.loading('Removing affiliation...')
+
+    try {
+      const response = await fetch(`/api/doctor/affiliations/${affiliationId}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        toast.success('Affiliation removed successfully', { id: loadingToast })
+        fetchAffiliations()
+      } else {
+        toast.error('Failed to remove affiliation', { id: loadingToast })
+      }
+    } catch (error) {
+      console.error('Error removing affiliation:', error)
       toast.error('Something went wrong', { id: loadingToast })
     }
   }
 
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'APPROVED':
-        return <Badge className="bg-green-100 text-green-700 border-green-200"><CheckCircle className="w-3 h-3 mr-1" />Active</Badge>
-      case 'PENDING':
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200"><Clock className="w-3 h-3 mr-1" />Pending</Badge>
-      case 'REJECTED':
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>
-      default:
-        return null
-    }
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+      </div>
+    )
   }
 
-  const activeAffiliations = affiliations.filter(a => a.status === 'APPROVED')
-  const pendingRequests = affiliations.filter(a => a.status === 'PENDING')
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">Hospital Affiliations</h2>
-          <p className="text-slate-500 mt-1">Manage your hospital connections</p>
-        </div>
+    <Tabs defaultValue="pending" className="space-y-6">
+      <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsTrigger value="pending" className="relative">
+          Pending Requests
+          {pendingRequests.length > 0 && (
+            <Badge className="ml-2 h-5 w-5 p-0 flex items-center justify-center">
+              {pendingRequests.length}
+            </Badge>
+          )}
+        </TabsTrigger>
+        <TabsTrigger value="active">Active Affiliations</TabsTrigger>
+      </TabsList>
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Request Affiliation
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Request Hospital Affiliation</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmitRequest} className="space-y-6">
-              {/* Hospital Search */}
-              <div className="space-y-3">
-                <Label>Search Hospital <span className="text-red-500">*</span></Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-                  <Input
-                    placeholder="Search by hospital name or city..."
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-
-                {hospitals.length > 0 && (
-                  <div className="border rounded-lg divide-y max-h-60 overflow-y-auto">
-                    {hospitals.map(hospital => (
-                      <div
-                        key={hospital._id}
-                        onClick={() => {
-                          setNewRequest({ ...newRequest, hospitalId: hospital._id })
-                          setSearchQuery(hospital.name)
-                          setHospitals([])
-                        }}
-                        className={`p-3 cursor-pointer hover:bg-slate-50 transition-colors ${
-                          newRequest.hospitalId === hospital._id ? 'bg-primary/5' : ''
-                        }`}
-                      >
-                        <h4 className="font-semibold text-slate-900">{hospital.name}</h4>
-                        <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
-                          <MapPin className="w-3 h-3" />
-                          {hospital.city}, {hospital.state}
+      {/* Pending Requests */}
+      <TabsContent value="pending" className="space-y-4">
+        {pendingRequests.length > 0 ? (
+          pendingRequests.map((request) => (
+            <Card key={request._id} className="border-0 shadow-lg hover:shadow-xl transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Hospital className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+                        {request.hospitalId?.name || 'Hospital Name'}
+                      </h3>
+                      <div className="space-y-1 text-sm text-slate-600 dark:text-slate-400">
+                        <p className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4" />
+                          {request.hospitalId?.address || 'Address not available'}
+                        </p>
+                        <p className="flex items-center gap-2">
+                          <Phone className="w-4 h-4" />
+                          {request.hospitalId?.phone || 'Phone not available'}
+                        </p>
+                        <p className="flex items-center gap-2">
+                          <Mail className="w-4 h-4" />
+                          {request.hospitalId?.email || 'Email not available'}
                         </p>
                       </div>
-                    ))}
+                      <Badge variant="outline" className="mt-3 bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800">
+                        <Clock className="w-3 h-3 mr-1" />
+                        Pending Review
+                      </Badge>
+                    </div>
                   </div>
-                )}
-              </div>
-
-              {/* Consultation Fee */}
-              <div className="space-y-2">
-                <Label htmlFor="fee">Your Consultation Fee (₹)</Label>
-                <div className="relative">
-                  <IndianRupee className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                  <Input
-                    id="fee"
-                    type="number"
-                    min="0"
-                    value={newRequest.consultationFee}
-                    onChange={e => setNewRequest({ ...newRequest, consultationFee: e.target.value })}
-                    placeholder="500"
-                    className="pl-9"
-                  />
-                </div>
-              </div>
-
-              {/* Available Days */}
-              <div className="space-y-3">
-                <Label>Available Days at this Hospital</Label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {DAYS_OF_WEEK.map(day => (
-                    <label
-                      key={day}
-                      className={`flex items-center justify-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                        newRequest.availableDays.includes(day)
-                          ? 'border-primary bg-primary/10 text-primary font-semibold'
-                          : 'border-slate-200 hover:border-slate-300'
-                      }`}
+                  <div className="flex flex-col sm:flex-row gap-3 lg:flex-col">
+                    <Button
+                      onClick={() => handleRequest(request._id, 'accept')}
+                      disabled={processingId === request._id}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
                     >
-                      <input
-                        type="checkbox"
-                        checked={newRequest.availableDays.includes(day)}
-                        onChange={() => toggleDay(day)}
-                        className="hidden"
-                      />
-                      {newRequest.availableDays.includes(day) && (
+                      {processingId === request._id ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
                         <CheckCircle className="w-4 h-4 mr-2" />
                       )}
-                      {day.substring(0, 3)}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div className="space-y-2">
-                <Label htmlFor="notes">Additional Notes (Optional)</Label>
-                <textarea
-                  id="notes"
-                  rows={3}
-                  value={newRequest.notes}
-                  onChange={e => setNewRequest({ ...newRequest, notes: e.target.value })}
-                  className="w-full border border-slate-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  placeholder="Any additional information for the hospital..."
-                />
-              </div>
-
-              <Button 
-                type="submit" 
-                className="w-full" 
-                size="lg" 
-                disabled={isLoading || !newRequest.hospitalId}
-              >
-                {isLoading ? 'Sending...' : 'Send Request'}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Active Affiliations</p>
-                <p className="text-3xl font-bold text-green-600">{activeAffiliations.length}</p>
-              </div>
-              <Building2 className="w-8 h-8 text-green-600/20" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Pending Requests</p>
-                <p className="text-3xl font-bold text-yellow-600">{pendingRequests.length}</p>
-              </div>
-              <Clock className="w-8 h-8 text-yellow-600/20" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Pending Hospital Invitations */}
-      {pendingRequests.some(a => a.requestType === 'HOSPITAL_TO_DOCTOR') && (
-        <Card className="border-blue-200 bg-blue-50">
-          <CardHeader>
-            <CardTitle className="text-blue-900 flex items-center gap-2">
-              <AlertCircle className="w-5 h-5" />
-              Pending Hospital Invitations
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {pendingRequests
-                .filter(a => a.requestType === 'HOSPITAL_TO_DOCTOR')
-                .map(affiliation => (
-                  <div key={affiliation._id} className="bg-white p-4 rounded-lg border border-blue-200">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-bold text-slate-900">{affiliation.hospitalId?.name}</h4>
-                        <p className="text-sm text-slate-500 mt-1 flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          {affiliation.hospitalId?.city}
-                        </p>
-                        {affiliation.notes && (
-                          <p className="text-sm text-slate-600 mt-2 italic">"{affiliation.notes}"</p>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handleRespondToRequest(affiliation._id, 'APPROVED')}
-                        >
-                          <CheckCircle className="w-4 h-4 mr-1" />
-                          Accept
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleRespondToRequest(affiliation._id, 'REJECTED')}
-                        >
-                          <XCircle className="w-4 h-4 mr-1" />
-                          Reject
-                        </Button>
-                      </div>
-                    </div>
+                      Accept
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleRequest(request._id, 'reject')}
+                      disabled={processingId === request._id}
+                      className="text-red-600 hover:bg-red-50 dark:hover:bg-red-950 border-red-200 dark:border-red-800 font-semibold"
+                    >
+                      <XCircle className="w-4 h-4 mr-2" />
+                      Reject
+                    </Button>
                   </div>
-                ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <Card className="border-0 shadow-lg">
+            <CardContent className="py-12 text-center">
+              <AlertCircle className="w-16 h-16 mx-auto text-slate-300 dark:text-slate-700 mb-4" />
+              <p className="text-lg font-medium text-slate-600 dark:text-slate-400">
+                No pending requests
+              </p>
+              <p className="text-sm text-slate-500 dark:text-slate-500 mt-2">
+                Hospital affiliation requests will appear here
+              </p>
+            </CardContent>
+          </Card>
+        )}
+      </TabsContent>
 
-      {/* All Affiliations */}
-      <Card>
-        <CardHeader>
-          <CardTitle>All Affiliations</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {affiliations.length > 0 ? (
-            <div className="space-y-3">
-              {affiliations.map(affiliation => (
-                <div
-                  key={affiliation._id}
-                  className="p-4 border rounded-lg hover:border-slate-300 transition-colors"
-                >
-                  <div className="flex justify-between items-start">
+      {/* Active Affiliations */}
+      <TabsContent value="active" className="space-y-4">
+        {affiliations.length > 0 ? (
+          affiliations.map((affiliation) => (
+            <Card key={affiliation._id} className="border-0 shadow-lg hover:shadow-xl transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Hospital className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+                    </div>
                     <div className="flex-1">
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <h4 className="font-bold text-slate-900 flex items-center gap-2">
-                            <Building2 className="w-4 h-4" />
-                            {affiliation.hospitalId?.name}
-                          </h4>
-                          <p className="text-sm text-slate-500 mt-1 flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {affiliation.hospitalId?.city}, {affiliation.hospitalId?.state}
-                          </p>
-                        </div>
-                        {getStatusBadge(affiliation.status)}
+                      <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+                        {affiliation.hospitalId?.name || 'Hospital Name'}
+                      </h3>
+                      <div className="space-y-1 text-sm text-slate-600 dark:text-slate-400">
+                        <p className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4" />
+                          {affiliation.hospitalId?.address || 'Address not available'}
+                        </p>
+                        <p className="flex items-center gap-2">
+                          <Phone className="w-4 h-4" />
+                          {affiliation.hospitalId?.phone || 'Phone not available'}
+                        </p>
                       </div>
-
-                      <div className="grid grid-cols-2 gap-4 mt-3 text-sm">
-                        {affiliation.consultationFee && (
-                          <div>
-                            <p className="text-slate-500">Consultation Fee</p>
-                            <p className="font-semibold">₹{affiliation.consultationFee}</p>
-                          </div>
-                        )}
-                        {affiliation.availableDays && affiliation.availableDays.length > 0 && (
-                          <div>
-                            <p className="text-slate-500">Available Days</p>
-                            <p className="font-semibold">
-                              {affiliation.availableDays.map(d => d.substring(0, 3)).join(', ')}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="mt-3 flex items-center gap-4 text-xs text-slate-400">
-                        <span>
-                          Request Type: {affiliation.requestType === 'DOCTOR_TO_HOSPITAL' ? 'You → Hospital' : 'Hospital → You'}
-                        </span>
-                        <span>•</span>
-                        <span>
-                          {new Date(affiliation.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
+                      <Badge className="mt-3 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Active
+                      </Badge>
                     </div>
                   </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleRemoveAffiliation(affiliation._id)}
+                    className="text-red-600 hover:bg-red-50 dark:hover:bg-red-950 border-red-200 dark:border-red-800 font-semibold"
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Remove
+                  </Button>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 text-slate-400">
-              <Building2 className="w-12 h-12 mx-auto mb-2 opacity-30" />
-              <p>No hospital affiliations yet</p>
-              <p className="text-sm mt-1">Request affiliation to start working with hospitals</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <Card className="border-0 shadow-lg">
+            <CardContent className="py-12 text-center">
+              <Hospital className="w-16 h-16 mx-auto text-slate-300 dark:text-slate-700 mb-4" />
+              <p className="text-lg font-medium text-slate-600 dark:text-slate-400">
+                No active affiliations
+              </p>
+              <p className="text-sm text-slate-500 dark:text-slate-500 mt-2">
+                Accept hospital requests to start working
+              </p>
+            </CardContent>
+          </Card>
+        )}
+      </TabsContent>
+    </Tabs>
   )
 }
