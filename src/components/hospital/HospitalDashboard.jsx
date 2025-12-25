@@ -1,125 +1,54 @@
 // src/components/hospital/HospitalDashboard.jsx
 'use client'
-import { useState, useEffect } from 'react'
+
+import { useEffect } from 'react'
+import { useHospitalAdmin } from '@/context/HospitalAdminContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { 
-  Users, Calendar, Hospital, Clock, 
+  Users, Calendar, Hospital, Clock, Bed,
   DollarSign, TrendingUp, Activity, AlertCircle,
   Stethoscope, UserPlus, ArrowRight, CheckCircle,
   XCircle, Package, MessageSquare, BarChart3,
-  Bell, Download, FileText, Phone, Mail
+  Bell, Download, FileText, Phone, Mail, RefreshCw
 } from 'lucide-react'
 import Link from 'next/link'
-import toast from 'react-hot-toast'
 
 export default function HospitalDashboard() {
-  const [isLoading, setIsLoading] = useState(true)
-  const [dashboardData, setDashboardData] = useState({
-    stats: {
-      todayAppointments: 0,
-      totalPatients: 0,
-      activeStaff: 0,
-      revenue: 0,
-      pendingRevenue: 0,
-      avgWaitTime: 0
-    },
-    todaySchedule: [],
-    recentAppointments: [],
-    doctors: [],
-    lowStockItems: [],
-    recentReviews: [],
-    hospital: null
-  })
+  const { 
+    hospital,
+    hospitalLoading,
+    stats,
+    statsLoading,
+    appointments,
+    appointmentsLoading,
+    doctors,
+    doctorsLoading,
+    lowStockItems,
+    fetchAppointments,
+    fetchDoctors,
+    fetchInventory,
+    fetchStats,
+    refreshAll
+  } = useHospitalAdmin()
 
+  // Fetch initial data
   useEffect(() => {
-    fetchDashboardData()
-    const interval = setInterval(fetchDashboardData, 30000) // Refresh every 30s
+    fetchAppointments('today')
+    fetchDoctors()
+    fetchInventory()
+    
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      fetchStats()
+      fetchAppointments('today')
+    }, 30000)
+    
     return () => clearInterval(interval)
   }, [])
-
-  const fetchDashboardData = async () => {
-    setIsLoading(true)
-    try {
-      const [hospitalRes, appointmentsRes, doctorsRes, inventoryRes] = await Promise.all([
-        fetch('/api/hospital/profile'),
-        fetch('/api/appointments'),
-        fetch('/api/hospital/doctors'),
-        fetch('/api/hospital/inventory')
-      ])
-
-      const [hospitalData, appointmentsData, doctorsData, inventoryData] = await Promise.all([
-        hospitalRes.json(),
-        appointmentsRes.json(),
-        doctorsRes.json(),
-        inventoryRes.json()
-      ])
-
-      const appointments = appointmentsData.appointments || []
-      const doctors = doctorsData.doctors || []
-      const hospital = hospitalData.hospital
-
-      // Calculate today's appointments
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const tomorrow = new Date(today)
-      tomorrow.setDate(tomorrow.getDate() + 1)
-
-      const todayAppointments = appointments.filter(apt => {
-        const aptDate = new Date(apt.scheduledTime)
-        return aptDate >= today && aptDate < tomorrow
-      })
-
-      // Calculate stats
-      const uniquePatients = new Set(appointments.map(apt => apt.patientId?._id)).size
-      const activeStaff = doctors.filter(doc => doc.doctorProfile?.isAvailable).length
-      
-      const paidAppts = appointments.filter(a => a.paymentStatus === 'PAID')
-      const pendingAppts = appointments.filter(a => a.paymentStatus === 'PENDING')
-      
-      const revenue = paidAppts.length * (hospital?.consultationFee || 500)
-      const pendingRevenue = pendingAppts.length * (hospital?.consultationFee || 500)
-
-      // Calculate average wait time (mock for now)
-      const avgWaitTime = 15
-
-      // Get low stock items
-      const lowStockItems = (inventoryData.items || []).filter(item => 
-        item.currentStock <= item.minStockLevel
-      ).slice(0, 5)
-
-      // Sort today's schedule
-      const sortedTodaySchedule = todayAppointments
-        .sort((a, b) => new Date(a.scheduledTime) - new Date(b.scheduledTime))
-        .slice(0, 8)
-
-      setDashboardData({
-        stats: {
-          todayAppointments: todayAppointments.length,
-          totalPatients: uniquePatients,
-          activeStaff: activeStaff,
-          revenue: revenue,
-          pendingRevenue: pendingRevenue,
-          avgWaitTime: avgWaitTime
-        },
-        todaySchedule: sortedTodaySchedule,
-        recentAppointments: appointments.slice(0, 5),
-        doctors: doctors.slice(0, 6),
-        lowStockItems: lowStockItems,
-        recentReviews: [],
-        hospital: hospital
-      })
-
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error)
-      toast.error('Failed to load dashboard data')
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   const formatTime = (date) => {
     return new Date(date).toLocaleTimeString('en-IN', {
@@ -147,11 +76,24 @@ export default function HospitalDashboard() {
     return colors[status] || colors.BOOKED
   }
 
-  if (isLoading) {
+  // Show loading skeleton
+  if (hospitalLoading) {
     return <DashboardSkeleton />
   }
 
-  const { stats, todaySchedule, doctors, lowStockItems, hospital } = dashboardData
+  // Filter today's appointments
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+
+  const todaySchedule = appointments
+    .filter(apt => {
+      const aptDate = new Date(apt.scheduledTime)
+      return aptDate >= today && aptDate < tomorrow
+    })
+    .sort((a, b) => new Date(a.scheduledTime) - new Date(b.scheduledTime))
+    .slice(0, 8)
 
   return (
     <div className="space-y-6">
@@ -167,7 +109,18 @@ export default function HospitalDashboard() {
                 You have {stats.todayAppointments} appointment{stats.todayAppointments !== 1 ? 's' : ''} scheduled for today
               </p>
             </div>
-            <Hospital className="w-32 h-32 opacity-20 absolute right-6" />
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={refreshAll}
+                className="bg-white/20 hover:bg-white/30 text-white border-white/30"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Refresh
+              </Button>
+              <Hospital className="w-32 h-32 opacity-20 absolute right-6" />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -179,8 +132,9 @@ export default function HospitalDashboard() {
           value={stats.todayAppointments}
           icon={Calendar}
           color="blue"
-          trend={`${stats.todayAppointments} scheduled`}
+          trend={`${stats.pendingAppointments} pending`}
           href="/hospital-admin/appointments"
+          loading={statsLoading}
         />
         <StatCard
           label="Total Patients"
@@ -189,22 +143,25 @@ export default function HospitalDashboard() {
           color="emerald"
           trend="All time"
           href="/hospital-admin/patients"
+          loading={statsLoading}
         />
         <StatCard
           label="Active Staff"
-          value={`${stats.activeStaff}/${doctors.length}`}
+          value={`${stats.totalDoctors}`}
           icon={Stethoscope}
           color="purple"
-          trend={`${stats.activeStaff} available now`}
+          trend={`${doctors.filter(d => d.doctorProfile?.isAvailable).length} available now`}
           href="/hospital-admin/staff"
+          loading={statsLoading}
         />
         <StatCard
           label="Revenue Today"
-          value={`₹${stats.revenue.toLocaleString()}`}
+          value={`₹${(stats.revenue?.today || 0).toLocaleString()}`}
           icon={DollarSign}
           color="green"
-          trend={`₹${stats.pendingRevenue.toLocaleString()} pending`}
+          trend={`₹${(stats.revenue?.month || 0).toLocaleString()} this month`}
           href="/hospital-admin/reports"
+          loading={statsLoading}
         />
       </div>
 
@@ -256,7 +213,13 @@ export default function HospitalDashboard() {
             </Link>
           </CardHeader>
           <CardContent>
-            {todaySchedule.length > 0 ? (
+            {appointmentsLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-20 w-full" />
+                ))}
+              </div>
+            ) : todaySchedule.length > 0 ? (
               <div className="space-y-3">
                 {todaySchedule.map((appointment) => {
                   const patientName = `${appointment.patientId?.firstName || ''} ${appointment.patientId?.lastName || ''}`.trim()
@@ -286,10 +249,12 @@ export default function HospitalDashboard() {
                               <Stethoscope className="w-3 h-3" />
                               {doctorName}
                             </span>
-                            <span className="flex items-center gap-1">
-                              <Activity className="w-3 h-3" />
-                              Token: #{appointment.tokenNumber}
-                            </span>
+                            {appointment.tokenNumber && (
+                              <span className="flex items-center gap-1">
+                                <Activity className="w-3 h-3" />
+                                Token: #{appointment.tokenNumber}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -348,11 +313,22 @@ export default function HospitalDashboard() {
                   <p className="font-bold text-slate-900 dark:text-slate-100">{doctors.length} Doctors</p>
                 </div>
               </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <Bed className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Beds</p>
+                  <p className="font-bold text-slate-900 dark:text-slate-100">
+                    {stats.availableBeds}/{stats.totalBeds}
+                  </p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
           {/* Low Stock Alert */}
-          {lowStockItems.length > 0 && (
+          {lowStockItems?.length > 0 && (
             <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950 shadow-lg">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2 text-orange-900 dark:text-orange-100">
@@ -362,7 +338,7 @@ export default function HospitalDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {lowStockItems.map(item => (
+                  {lowStockItems.slice(0, 5).map(item => (
                     <div key={item._id} className="flex items-center justify-between p-2 bg-white dark:bg-orange-900 rounded-lg">
                       <div>
                         <p className="font-semibold text-sm text-slate-900 dark:text-slate-100">{item.name}</p>
@@ -392,11 +368,14 @@ export default function HospitalDashboard() {
             <CardContent className="space-y-4">
               <div>
                 <div className="flex justify-between text-sm mb-2">
-                  <span className="text-slate-600">Avg Wait Time</span>
-                  <span className="font-bold">{stats.avgWaitTime} mins</span>
+                  <span className="text-slate-600">Completed Today</span>
+                  <span className="font-bold">{stats.completedAppointments || 0}</span>
                 </div>
                 <div className="w-full bg-slate-200 rounded-full h-2">
-                  <div className="bg-emerald-500 h-2 rounded-full" style={{width: '70%'}}></div>
+                  <div 
+                    className="bg-emerald-500 h-2 rounded-full transition-all" 
+                    style={{width: `${Math.min((stats.completedAppointments || 0) / Math.max(stats.todayAppointments, 1) * 100, 100)}%`}}
+                  ></div>
                 </div>
               </div>
               <div>
@@ -425,29 +404,44 @@ export default function HospitalDashboard() {
           </Link>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {doctors.map(doc => (
-              <div key={doc._id} className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100">
-                <Avatar className="w-14 h-14 border-2 border-emerald-500">
-                  <AvatarImage src={doc.profileImage} />
-                  <AvatarFallback className="text-lg font-bold">
-                    {doc.firstName?.[0]}{doc.lastName?.[0]}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <p className="font-bold text-slate-900 dark:text-slate-100">
-                    Dr. {doc.firstName} {doc.lastName}
-                  </p>
-                  <p className="text-sm text-emerald-600 dark:text-emerald-400">
-                    {doc.doctorProfile?.specialization}
-                  </p>
-                  <Badge className="mt-1" variant={doc.doctorProfile?.isAvailable ? 'default' : 'secondary'}>
-                    {doc.doctorProfile?.isAvailable ? 'Available' : 'Busy'}
-                  </Badge>
+          {doctorsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-20 w-full" />
+              ))}
+            </div>
+          ) : doctors.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {doctors.slice(0, 6).map(doc => (
+                <div key={doc._id} className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100">
+                  <Avatar className="w-14 h-14 border-2 border-emerald-500">
+                    <AvatarImage src={doc.profileImage} />
+                    <AvatarFallback className="text-lg font-bold">
+                      {doc.firstName?.[0]}{doc.lastName?.[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <p className="font-bold text-slate-900 dark:text-slate-100">
+                      Dr. {doc.firstName} {doc.lastName}
+                    </p>
+                    <p className="text-sm text-emerald-600 dark:text-emerald-400">
+                      {doc.doctorProfile?.specialization || 'General'}
+                    </p>
+                    <Badge className="mt-1" variant={doc.doctorProfile?.isAvailable ? 'default' : 'secondary'}>
+                      {doc.doctorProfile?.isAvailable ? 'Available' : 'Busy'}
+                    </Badge>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <Stethoscope className="w-16 h-16 mx-auto text-slate-300 dark:text-slate-700 mb-4" />
+              <p className="text-lg font-medium text-slate-600 dark:text-slate-400">
+                No doctors registered yet
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -487,7 +481,7 @@ export default function HospitalDashboard() {
 }
 
 // Stat Card Component
-function StatCard({ label, value, icon: Icon, color, trend, href }) {
+function StatCard({ label, value, icon: Icon, color, trend, href, loading }) {
   const colorClasses = {
     blue: 'text-blue-600 bg-blue-50 dark:bg-blue-950',
     emerald: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950',
@@ -502,25 +496,33 @@ function StatCard({ label, value, icon: Icon, color, trend, href }) {
     <CardWrapper href={href || '#'} className="block">
       <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow cursor-pointer">
         <CardContent className="p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <p className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
-                {label}
-              </p>
-              <p className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-                {value}
-              </p>
-              <div className="flex items-center gap-1">
-                <TrendingUp className={`w-3 h-3 ${colorClasses[color].split(' ')[0]}`} />
-                <span className={`text-xs font-semibold ${colorClasses[color].split(' ')[0]}`}>
-                  {trend}
-                </span>
+          {loading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-3 w-32" />
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                  {label}
+                </p>
+                <p className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+                  {value}
+                </p>
+                <div className="flex items-center gap-1">
+                  <TrendingUp className={`w-3 h-3 ${colorClasses[color].split(' ')[0]}`} />
+                  <span className={`text-xs font-semibold ${colorClasses[color].split(' ')[0]}`}>
+                    {trend}
+                  </span>
+                </div>
+              </div>
+              <div className={`w-16 h-16 rounded-full ${colorClasses[color]} flex items-center justify-center`}>
+                <Icon className={`w-8 h-8 ${colorClasses[color].split(' ')[0]}`} />
               </div>
             </div>
-            <div className={`w-16 h-16 rounded-full ${colorClasses[color]} flex items-center justify-center`}>
-              <Icon className={`w-8 h-8 ${colorClasses[color].split(' ')[0]}`} />
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
     </CardWrapper>

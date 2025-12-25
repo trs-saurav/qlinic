@@ -1,27 +1,49 @@
-// middleware.js
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
+// ✅ Only truly public routes (no auth needed)
 const isPublicRoute = createRouteMatcher([
   "/",
   "/sign-in(.*)",
   "/sign-up(.*)",
-  "/patient",
-  "/doctor",
-  "/hospital-admin",
-  "/admin",
   "/aboutus",
-  "/solution",
+  "/solutions",
   "/contact-us",
   "/api/webhooks(.*)",
-  "/api/inngest(.*)",   // ← allow Inngest endpoint without auth
+  "/api/inngest(.*)",
 ]);
 
+// ✅ Protected API routes (return JSON errors, not redirects)
+const isProtectedApiRoute = createRouteMatcher([
+  "/api/hospital(.*)",
+  "/api/patient(.*)",
+  "/api/doctor(.*)",
+  "/api/appointments(.*)",
+]);
 
-export default clerkMiddleware((auth, request) => {
-  // Public routes are accessible to everyone
-  // Protected routes will be handled by ProtectedRoute component
-  if (!isPublicRoute(request)) {
-    auth.protect();
+// ✅ Protected page routes (can redirect to sign-in)
+const isProtectedPageRoute = createRouteMatcher([
+  "/patient(.*)",
+  "/doctor(.*)",
+  "/hospital-admin(.*)",
+  "/admin(.*)",
+]);
+
+export default clerkMiddleware(async (auth, request) => {
+  // ✅ Allow public routes
+  if (isPublicRoute(request)) {
+    return;
+  }
+
+  // ✅ Protect API routes (will return 401 JSON, not redirect)
+  if (isProtectedApiRoute(request)) {
+    await auth.protect();
+    return;
+  }
+
+  // ✅ Protect page routes (will redirect to sign-in)
+  if (isProtectedPageRoute(request)) {
+    await auth.protect();
+    return;
   }
 });
 
