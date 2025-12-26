@@ -1,4 +1,3 @@
-// src/config/inngest.js
 import { Inngest } from 'inngest'
 import { clerkClient } from '@clerk/nextjs/server'
 import connectDB from './db'
@@ -20,40 +19,60 @@ function getRole(user) {
   return user.public_metadata?.role || user.unsafe_metadata?.role || 'patient'
 }
 
+/**
+ * BEST APPROACH (for retention + no E11000):
+ * - Email is canonical identity.
+ * - If same email arrives with a new clerkId, merge into existing Mongo user.
+ * - Keep email unique in MongoDB.
+ */
 async function upsertMongoUserFromClerkUser(clerkUser) {
   await connectDB()
 
-  const clerkId = clerkUser.id
+  const clerkId = clerkUser?.id
   const email = pickPrimaryEmail(clerkUser)
+
   if (!clerkId) throw new Error('Missing clerkId in Clerk payload')
   if (!email) throw new Error('Missing email in Clerk payload')
 
   const role = getRole(clerkUser)
-  const firstName = clerkUser.first_name || ''
-  const lastName = clerkUser.last_name || ''
-  const imageUrl = clerkUser.image_url || clerkUser.profile_image_url || ''
+  const now = new Date()
 
-  const doc = await User.findOneAndUpdate(
-    { clerkId },
-    {
-      $set: {
-        clerkId,
-        email,
-        firstName,
-        lastName,
-        role,
-        profileImage: imageUrl,
-        isActive: !clerkUser.banned,
-        lastLogin: new Date(),
-      },
-      $setOnInsert: {
-        isProfileComplete: false,
-      },
-    },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
-  )
+  const baseUpdate = {
+    clerkId,
+    email,
+    firstName: clerkUser.first_name || '',
+    lastName: clerkUser.last_name || '',
+    role,
+    profileImage: clerkUser.image_url || clerkUser.profile_image_url || '',
+    isActive: !clerkUser.banned,
+    lastLogin: now,
+    lastSeenAt: now,
+  }
 
-  return doc
+  // 1) Find by clerkId
+  let doc = await User.findOne({ clerkId })
+
+  // 2) Merge by email if clerkId not found (prevents duplicate email insert)
+  if (!doc) {
+    doc = await User.findOne({ email })
+  }
+
+  if (doc) {
+    // Merge: keep a single Mongo user
+    Object.assign(doc, baseUpdate)
+    doc.firstSeenAt = doc.firstSeenAt || now
+    await doc.save()
+    return doc
+  }
+
+  // Create new user
+  const created = await User.create({
+    ...baseUpdate,
+    isProfileComplete: false,
+    firstSeenAt: now,
+  })
+
+  return created
 }
 
 // USER CREATED
@@ -67,23 +86,19 @@ export const syncUserCreation = inngest.createFunction(
 
     console.log('🚀 syncUserCreation triggered for:', clerkId)
 
-    // Optional: Move role from unsafe -> public
+    // Optional: move role from unsafe -> public
     const role = getRole(user)
-
     if (!user.public_metadata?.role && user.unsafe_metadata?.role) {
       await step.run('update-clerk-metadata', async () => {
         const clerk = await clerkClient()
-        await clerk.users.updateUserMetadata(clerkId, {
-          publicMetadata: { role },
-        })
-        console.log(`✅ Moved role to publicMetadata: "${role}"`)
+        await clerk.users.updateUserMetadata(clerkId, { publicMetadata: { role } })
         return { success: true, role }
       })
     }
 
-    const saved = await step.run('upsert-user-mongo', async () => {
+    const saved = await step.run('save-user-mongo', async () => {
       const doc = await upsertMongoUserFromClerkUser(user)
-      console.log('✅ User upserted in MongoDB:', doc._id.toString())
+      console.log('✅ User saved/upserted:', doc._id.toString(), doc.email)
       return { mongoId: doc._id.toString() }
     })
 
@@ -91,7 +106,7 @@ export const syncUserCreation = inngest.createFunction(
   }
 )
 
-// USER UPDATED (also upsert; never skip)
+// USER UPDATED
 export const syncUserUpdate = inngest.createFunction(
   { id: 'qlinic-sync-user-updated' },
   { event: 'webhook/request.received', if: 'event.data.type == "user.updated"' },
@@ -102,9 +117,9 @@ export const syncUserUpdate = inngest.createFunction(
 
     console.log('🔄 syncUserUpdate triggered for:', clerkId)
 
-    const saved = await step.run('upsert-user-mongo', async () => {
+    const saved = await step.run('save-user-mongo', async () => {
       const doc = await upsertMongoUserFromClerkUser(user)
-      console.log('✅ User upserted (update) in MongoDB:', doc._id.toString())
+      console.log('✅ User updated/upserted:', doc._id.toString(), doc.email)
       return { mongoId: doc._id.toString() }
     })
 
@@ -112,7 +127,7 @@ export const syncUserUpdate = inngest.createFunction(
   }
 )
 
-// USER DELETED
+// USER DELETED (soft delete)
 export const syncUserDeletion = inngest.createFunction(
   { id: 'qlinic-sync-user-deleted' },
   { event: 'webhook/request.received', if: 'event.data.type == "user.deleted"' },
@@ -120,14 +135,16 @@ export const syncUserDeletion = inngest.createFunction(
     const clerkEvent = event.data
     const user = clerkEvent.data
     const clerkId = user?.id
+    const now = new Date()
 
     console.log('🗑️ syncUserDeletion triggered for:', clerkId)
 
     const result = await step.run('soft-delete-mongo-user', async () => {
       await connectDB()
+
       const doc = await User.findOneAndUpdate(
         { clerkId },
-        { isActive: false, deletedAt: new Date() },
+        { isActive: false, deletedAt: now, lastSeenAt: now },
         { new: true }
       )
 

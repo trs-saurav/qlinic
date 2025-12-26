@@ -6,11 +6,11 @@ const pointSchema = new mongoose.Schema(
     type: {
       type: String,
       enum: ['Point'],
-      default: undefined, // IMPORTANT: prevents { type: undefined } being stored
+      default: undefined, // prevents invalid GeoJSON objects being stored
     },
     coordinates: {
       type: [Number],
-      default: undefined, // IMPORTANT: prevents [] being stored
+      default: undefined, // prevents [] being stored (breaks 2dsphere)
     },
     address: String,
     city: String,
@@ -24,22 +24,34 @@ const pointSchema = new mongoose.Schema(
 const userSchema = new mongoose.Schema(
   {
     clerkId: { type: String, required: true, unique: true },
+
+    // Keep email unique (best for identity + retention)
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+
     firstName: { type: String, trim: true, default: '' },
     lastName: { type: String, trim: true, default: '' },
+
     role: {
       type: String,
       enum: ['patient', 'doctor', 'hospital_admin', 'admin'],
       default: 'patient',
       required: true,
     },
+
     phoneNumber: { type: String, trim: true },
     profileImage: { type: String, default: '' },
+
     isActive: { type: Boolean, default: true },
     isProfileComplete: { type: Boolean, default: false },
+
     lastLogin: { type: Date, default: Date.now },
     deletedAt: { type: Date },
 
+    // ✅ retention metrics helpers
+    firstSeenAt: { type: Date },
+    lastSeenAt: { type: Date },
+
+    // Patient Profile
     patientProfile: {
       dateOfBirth: Date,
       gender: { type: String, enum: ['male', 'female', 'other'] },
@@ -54,6 +66,7 @@ const userSchema = new mongoose.Schema(
       insurancePolicyNumber: String,
     },
 
+    // Doctor Profile
     doctorProfile: {
       specialization: String,
       qualification: String,
@@ -69,7 +82,7 @@ const userSchema = new mongoose.Schema(
       awards: { type: [String], default: undefined },
       publications: { type: [String], default: undefined },
 
-      // ✅ Fix: location is a pointSchema, but NOT auto-created with empty arrays
+      // ✅ GeoJSON-safe
       location: { type: pointSchema, default: undefined },
 
       availableDays: { type: [String], default: undefined },
@@ -87,6 +100,7 @@ const userSchema = new mongoose.Schema(
       videoConsultationFee: Number,
     },
 
+    // Hospital Admin Profile
     hospitalAdminProfile: {
       hospitalId: { type: mongoose.Schema.Types.ObjectId, ref: 'Hospital' },
       designation: String,
@@ -104,10 +118,10 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 )
 
-// ✅ Index the GeoJSON field (2dsphere requires valid GeoJSON)
+// ✅ 2dsphere index requires valid GeoJSON; invalid values will crash writes [web:395]
 userSchema.index({ 'doctorProfile.location': '2dsphere' })
 
-// ---- Fix invalid geo data before saving ----
+// Clean invalid location before save
 userSchema.pre('save', function (next) {
   const loc = this.doctorProfile?.location
   const coords = loc?.coordinates
@@ -120,7 +134,6 @@ userSchema.pre('save', function (next) {
     typeof coords[0] === 'number' &&
     typeof coords[1] === 'number'
 
-  // If not valid, remove the field completely (so index doesn't break)
   if (this.doctorProfile && !isValidPoint) {
     this.doctorProfile.location = undefined
   }
@@ -128,6 +141,7 @@ userSchema.pre('save', function (next) {
   next()
 })
 
+// Indexes
 userSchema.index({
   firstName: 'text',
   lastName: 'text',
@@ -141,6 +155,7 @@ userSchema.index({ 'doctorProfile.specialization': 1 })
 userSchema.index({ 'doctorProfile.isAvailable': 1 })
 userSchema.index({ 'hospitalAdminProfile.hospitalId': 1 })
 
+// Virtuals
 userSchema.virtual('hospital', {
   ref: 'Hospital',
   localField: 'hospitalAdminProfile.hospitalId',
@@ -159,6 +174,7 @@ userSchema.virtual('isDoctorActive').get(function () {
   return false
 })
 
+// Methods
 userSchema.methods.updateLocation = function (latitude, longitude, address) {
   if (this.role !== 'doctor') throw new Error('Only doctors can have location')
 
@@ -172,6 +188,7 @@ userSchema.methods.updateLocation = function (latitude, longitude, address) {
   return this.save()
 }
 
+// Static for nearby
 userSchema.statics.findNearbyDoctors = function (longitude, latitude, maxDistance = 10000, specialization = null) {
   const query = {
     role: 'doctor',
