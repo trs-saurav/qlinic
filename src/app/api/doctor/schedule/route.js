@@ -1,72 +1,35 @@
-// app/api/doctor/schedule/route.js
-import { auth } from '@clerk/nextjs/server'
+import { NextResponse } from 'next/server'
 import connectDB from '@/config/db'
 import User from '@/models/user'
-import { NextResponse } from 'next/server'
+import { requireRole } from '@/lib/apiAuth'
 
-// GET - Fetch doctor's schedule
-export async function GET(req) {
-  try {
-    const { userId } = auth()
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+export async function GET() {
+  const gate = await requireRole(['doctor'])
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status })
 
-    await connectDB()
+  await connectDB()
 
-    const doctor = await User.findOne({ clerkId: userId, role: 'doctor' })
-    if (!doctor) {
-      return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
-    }
+  const doctor = await User.findById(gate.me._id).select('doctorSchedule')
+  const schedule = doctor?.doctorSchedule || { weekly: [], exceptions: [] }
 
-    const schedules = doctor.workSchedule || []
-
-    return NextResponse.json({ success: true, schedules })
-  } catch (error) {
-    console.error('Error fetching schedule:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
+  return NextResponse.json({ schedule }, { status: 200 })
 }
 
-// POST - Update doctor's schedule
-export async function POST(req) {
-  try {
-    const { userId } = auth()
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+export async function PATCH(req) {
+  const gate = await requireRole(['doctor'])
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status })
 
-    await connectDB()
+  const body = await req.json()
+  const weekly = Array.isArray(body?.weekly) ? body.weekly : []
+  const exceptions = Array.isArray(body?.exceptions) ? body.exceptions : []
 
-    const doctor = await User.findOne({ clerkId: userId, role: 'doctor' })
-    if (!doctor) {
-      return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
-    }
+  await connectDB()
 
-    const scheduleData = await req.json()
-    const { hospitalId, workingDays } = scheduleData
+  await User.findByIdAndUpdate(
+    gate.me._id,
+    { $set: { doctorSchedule: { weekly, exceptions } } },
+    { new: true }
+  )
 
-    if (!hospitalId || !workingDays) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-    }
-
-    // Update or add schedule for this hospital
-    const existingScheduleIndex = doctor.workSchedule?.findIndex(
-      s => s.hospitalId.toString() === hospitalId
-    )
-
-    if (existingScheduleIndex >= 0) {
-      doctor.workSchedule[existingScheduleIndex] = { hospitalId, workingDays }
-    } else {
-      if (!doctor.workSchedule) doctor.workSchedule = []
-      doctor.workSchedule.push({ hospitalId, workingDays })
-    }
-
-    await doctor.save()
-
-    return NextResponse.json({ success: true, schedules: doctor.workSchedule })
-  } catch (error) {
-    console.error('Error updating schedule:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
+  return NextResponse.json({ ok: true }, { status: 200 })
 }

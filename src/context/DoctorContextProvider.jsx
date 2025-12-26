@@ -33,7 +33,7 @@ export function DoctorProvider({ children }) {
   // ================= Appointments =================
   const [appointments, setAppointments] = useState([])
   const [appointmentsLoading, setAppointmentsLoading] = useState(false)
-  const [appointmentsFilter, setAppointmentsFilter] = useState('today') // today/upcoming/past/all
+  const [appointmentsFilter, setAppointmentsFilter] = useState('today')
 
   // ================= Affiliations =================
   const [affiliations, setAffiliations] = useState([])
@@ -52,34 +52,44 @@ export function DoctorProvider({ children }) {
 
   // ================= Fetchers =================
 
-  const fetchDoctorProfile = useCallback(async () => {
-    if (!user) return
+const fetchDoctorProfile = useCallback(async () => {
+  console.log('🚀 fetchDoctorProfile called, user:', user?.id)
+  
+  if (!user) {
+    console.log('❌ No user, returning')
+    return
+  }
 
-    try {
-      setDoctorLoading(true)
-      setDoctorError(null)
+  try {
+    setDoctorLoading(true)
+    setDoctorError(null)
 
-      const res = await fetch('/api/doctor/profile', {
-        headers: { Accept: 'application/json' },
-      })
-      const data = await res.json()
+    console.log('📡 Fetching /api/doctor/profile...')
+    const res = await fetch('/api/doctor/profile', {
+      headers: { Accept: 'application/json' },
+    })
+    const data = await res.json()
 
-      if (!res.ok) {
-        setDoctor(null)
-        setDoctorError(data?.error || 'Failed to load doctor profile')
-        return
-      }
+    console.log('📊 Profile response:', { status: res.status, data })
 
-      setDoctor(data?.doctor || null)
-    } catch (err) {
-      console.error('❌ fetchDoctorProfile:', err)
+    if (!res.ok) {
       setDoctor(null)
-      setDoctorError('Failed to load doctor profile')
-      toast.error('Failed to load doctor profile')
-    } finally {
-      setDoctorLoading(false)
+      setDoctorError(data?.error || 'Failed to load doctor profile')
+      return
     }
-  }, [user])
+
+    console.log('✅ Setting doctor:', data?.profile || data?.doctor) // ✅ Handle both keys
+    setDoctor(data?.profile || data?.doctor || null) // ✅ Try both 'profile' and 'doctor'
+  } catch (err) {
+    console.error('❌ fetchDoctorProfile:', err)
+    setDoctor(null)
+    setDoctorError('Failed to load doctor profile')
+    toast.error('Failed to load doctor profile')
+  } finally {
+    setDoctorLoading(false)
+  }
+}, [user])
+
 
   const fetchDoctorDashboard = useCallback(async () => {
     if (!doctor?._id) return
@@ -131,6 +141,8 @@ export function DoctorProvider({ children }) {
         headers: { Accept: 'application/json' },
       })
       const data = await res.json()
+
+      console.log('✅ Affiliations response:', { status: res.status, data }) // DEBUG
 
       if (!res.ok) {
         toast.error(data?.error || 'Failed to load affiliations')
@@ -186,7 +198,7 @@ export function DoctorProvider({ children }) {
     }
   }, [doctor?._id])
 
-  // ================= Actions (optional scaffolds) =================
+  // ================= Actions =================
 
   const markNotificationRead = useCallback(async (notificationId) => {
     try {
@@ -220,7 +232,7 @@ export function DoctorProvider({ children }) {
 
   // ================= Effects =================
 
-  // init once when Clerk is ready
+  // 1. Init once when Clerk is ready
   useEffect(() => {
     if (!isLoaded || !user) return
     if (didInitRef.current) return
@@ -228,12 +240,13 @@ export function DoctorProvider({ children }) {
     fetchDoctorProfile()
   }, [isLoaded, user, fetchDoctorProfile])
 
-  // after doctor is known, fetch baseline data once
+  // 2. After doctor is known, fetch baseline data once
   useEffect(() => {
     if (!doctor?._id) return
     fetchDoctorDashboard()
+    fetchAffiliations()    // ✅ ADDED: Fetch affiliations on mount
     fetchNotifications()
-  }, [doctor?._id, fetchDoctorDashboard, fetchNotifications])
+  }, [doctor?._id, fetchDoctorDashboard, fetchAffiliations, fetchNotifications])
 
   const value = {
     // doctor

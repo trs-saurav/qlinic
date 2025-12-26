@@ -27,7 +27,9 @@ export async function GET(req) {
       return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, profile: doctor })
+    console.log('✅ Doctor profile loaded:', doctor._id, doctor.email) // DEBUG
+
+    return NextResponse.json({ success: true, doctor: doctor }) // ✅ CHANGED from 'profile' to 'doctor'
   } catch (error) {
     console.error('Error fetching doctor profile:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -67,8 +69,8 @@ export async function POST(req) {
       qualification: formData.get('qualification'),
       licenseNumber: formData.get('registrationNumber'),
       consultationFee: parseFloat(formData.get('consultationFee')),
-      about: formData.get('about'), // ✅ ADDED
-      languages: languagesArray // ✅ ADDED
+      about: formData.get('about'),
+      languages: languagesArray
     }
 
     // Handle profile photo upload
@@ -91,13 +93,13 @@ export async function POST(req) {
       profileData.profileImage = uploadResponse.secure_url
     }
 
-    // ✅ FIX: Get existing doctor to merge data
+    // Get existing doctor to merge data
     const existingDoctor = await User.findOne({ clerkId: userId, role: 'doctor' })
     if (!existingDoctor) {
       return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
     }
 
-    // ✅ Merge existing doctorProfile with new data
+    // Merge existing doctorProfile with new data
     const mergedDoctorProfile = {
       ...existingDoctor.doctorProfile?.toObject?.() || {},
       ...doctorProfileData
@@ -119,7 +121,9 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, profile: doctor })
+    console.log('✅ Doctor profile updated:', doctor._id) // DEBUG
+
+    return NextResponse.json({ success: true, doctor: doctor }) // ✅ CHANGED from 'profile' to 'doctor'
   } catch (error) {
     console.error('Error updating doctor profile:', error)
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })

@@ -1,44 +1,47 @@
-// app/api/doctor/affiliations/route.js
-import { auth } from '@clerk/nextjs/server'
-import connectDB from '@/config/db'
-import User from '@/models/user'
-import HospitalAffiliation from '@/models/hospitalAffiliation'
 import { NextResponse } from 'next/server'
+import connectDB from '@/config/db'
+import HospitalAffiliation from '@/models/hospitalAffiliation'
+import { requireRole } from '@/lib/apiAuth'
 
-// GET - Fetch all affiliations and pending requests
-export async function GET(req) {
+// ✅ GET handler - fetch doctor's affiliations
+export async function GET() {
+  const gate = await requireRole(['doctor'])
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status })
+
+  await connectDB()
+
+  const affiliations = await HospitalAffiliation.find({ doctorId: gate.me._id })
+    .populate('hospitalId', 'name city state address')
+    .sort({ createdAt: -1 })
+
+  return NextResponse.json({ affiliations }, { status: 200 })
+}
+
+// ✅ POST handler - create affiliation request
+export async function POST(req) {
+  const gate = await requireRole(['doctor'])
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status })
+
+  const body = await req.json()
+  const { hospitalId, notes } = body || {}
+  if (!hospitalId) return NextResponse.json({ error: 'hospitalId is required' }, { status: 400 })
+
+  await connectDB()
+
   try {
-    const { userId } = auth()
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    await connectDB()
-
-    const doctor = await User.findOne({ clerkId: userId, role: 'doctor' })
-    if (!doctor) {
-      return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
-    }
-
-    // Fetch accepted affiliations
-    const affiliations = await HospitalAffiliation.find({
-      doctorId: doctor._id,
-      status: 'accepted'
-    }).populate('hospitalId', 'name address phone email')
-
-    // Fetch pending requests
-    const pendingRequests = await HospitalAffiliation.find({
-      doctorId: doctor._id,
-      status: 'pending'
-    }).populate('hospitalId', 'name address phone email')
-
-    return NextResponse.json({
-      success: true,
-      affiliations,
-      pendingRequests
+    const doc = await HospitalAffiliation.create({
+      doctorId: gate.me._id,
+      hospitalId,
+      status: 'PENDING',
+      requestType: 'DOCTOR_TO_HOSPITAL',
+      notes: notes || '',
     })
-  } catch (error) {
-    console.error('Error fetching affiliations:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+
+    return NextResponse.json({ affiliation: doc }, { status: 201 })
+  } catch (e) {
+    if (String(e?.code) === '11000') {
+      return NextResponse.json({ error: 'Affiliation already exists' }, { status: 409 })
+    }
+    return NextResponse.json({ error: 'Failed to create affiliation request' }, { status: 500 })
   }
 }

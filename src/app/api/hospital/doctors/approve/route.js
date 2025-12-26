@@ -1,91 +1,31 @@
-import { auth } from "@clerk/nextjs/server";
-import connectDB from "@/config/db";
-import User from "@/models/user";
-import HospitalAffiliation from "@/models/hospitalAffiliation";
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server'
+import connectDB from '@/config/db'
+import HospitalAffiliation from '@/models/hospitalAffiliation'
+import { requireRole, getMyHospitalOrFail } from '@/lib/apiAuth'
 
 export async function POST(req) {
-  try {
-    const { userId } = await auth();
+  const gate = await requireRole(['hospital_admin'])
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status })
 
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  const body = await req.json()
+  const { affiliationId } = body || {}
+  if (!affiliationId) return NextResponse.json({ error: 'affiliationId required' }, { status: 400 })
 
-    await connectDB();
+  await connectDB()
+  const h = await getMyHospitalOrFail(gate.me)
+  if (!h.ok) return NextResponse.json({ error: h.error }, { status: h.status })
 
-    const admin = await User.findOne({ clerkId: userId });
+  const aff = await HospitalAffiliation.findOne({ _id: affiliationId, hospitalId: h.hospital._id })
+  if (!aff) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    if (!admin || admin.role !== "hospital_admin") {
-      return NextResponse.json(
-        { error: "Not authorized" },
-        { status: 403 }
-      );
-    }
-
-    const body = await req.json();
-    const { affiliationId } = body;
-
-    if (!affiliationId) {
-      return NextResponse.json(
-        { error: "Affiliation ID is required" },
-        { status: 400 }
-      );
-    }
-
-    // Find and update affiliation
-    const affiliation = await HospitalAffiliation.findById(affiliationId);
-
-    if (!affiliation) {
-      return NextResponse.json(
-        { error: "Affiliation not found" },
-        { status: 404 }
-      );
-    }
-
-    // Verify this affiliation belongs to the admin's hospital
-    if (affiliation.hospitalId.toString() !== admin.hospitalAdminProfile.hospitalId.toString()) {
-      return NextResponse.json(
-        { error: "Not authorized to approve this request" },
-        { status: 403 }
-      );
-    }
-
-    // Update status
-    affiliation.status = "APPROVED";
-    affiliation.approvedBy = admin._id;
-    affiliation.approvedAt = new Date();
-    await affiliation.save();
-
-    // Add hospital to doctor's affiliations
-    const doctor = await User.findById(affiliation.doctorId);
-    if (doctor) {
-      if (!doctor.doctorProfile.affiliatedHospitals) {
-        doctor.doctorProfile.affiliatedHospitals = [];
-      }
-      
-      if (!doctor.doctorProfile.affiliatedHospitals.includes(affiliation.hospitalId)) {
-        doctor.doctorProfile.affiliatedHospitals.push(affiliation.hospitalId);
-        await doctor.save();
-      }
-    }
-
-    // TODO: Send notification to doctor
-    // await sendApprovalNotification(doctor.email, hospital.name);
-
-    return NextResponse.json(
-      {
-        success: true,
-        message: "Doctor approved successfully",
-        affiliation,
-      },
-      { status: 200 }
-    );
-  } catch (error) {
-    console.error("❌ Approve doctor error:", error);
-    return NextResponse.json(
-      { error: "Failed to approve doctor", details: error.message },
-      { status: 500 }
-    );
+  if (aff.status !== 'PENDING') {
+    return NextResponse.json({ error: 'Only pending requests can be approved' }, { status: 400 })
   }
+
+  aff.status = 'APPROVED'
+  aff.respondedAt = new Date()
+  aff.respondedBy = gate.me._id
+  await aff.save()
+
+  return NextResponse.json({ ok: true }, { status: 200 })
 }
