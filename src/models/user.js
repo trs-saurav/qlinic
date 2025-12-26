@@ -122,7 +122,7 @@ const userSchema = new mongoose.Schema(
 userSchema.index({ 'doctorProfile.location': '2dsphere' })
 
 // Clean invalid location before save
-userSchema.pre('save', function (next) {
+userSchema.pre('save', async function () {
   const loc = this.doctorProfile?.location
   const coords = loc?.coordinates
 
@@ -137,9 +137,8 @@ userSchema.pre('save', function (next) {
   if (this.doctorProfile && !isValidPoint) {
     this.doctorProfile.location = undefined
   }
-
-  next()
 })
+
 
 // Indexes
 userSchema.index({
