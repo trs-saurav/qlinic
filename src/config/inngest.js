@@ -1,3 +1,4 @@
+// src/config/inngest.js
 import { Inngest } from 'inngest'
 import { clerkClient } from '@clerk/nextjs/server'
 import connectDB from './db'
@@ -15,14 +16,37 @@ function pickPrimaryEmail(user) {
   return (primary?.email_address || emails[0]?.email_address || '').trim().toLowerCase()
 }
 
-function getRole(user) {
+function getRoleFromEvent(user) {
   return user.public_metadata?.role || user.unsafe_metadata?.role || 'patient'
 }
 
 /**
- * BEST APPROACH (for retention + no E11000):
+ * Ensures publicMetadata.role is set in Clerk and verifies it by refetching the user.
+ * This makes role robust after delete + re-register cases.
+ */
+async function ensurePublicRole({ clerkId, role, step }) {
+  return await step.run('ensure-public-role', async () => {
+    const clerk = await clerkClient()
+
+    // Write
+    await clerk.users.updateUserMetadata(clerkId, {
+      publicMetadata: { role },
+    })
+
+    // Read-back verify (helps if you suspect it isn't sticking)
+    const refreshed = await clerk.users.getUser(clerkId)
+    const savedRole = refreshed.publicMetadata?.role
+
+    console.log('✅ ensurePublicRole:', { clerkId, requestedRole: role, savedRole })
+
+    return { requestedRole: role, savedRole }
+  })
+}
+
+/**
+ * BEST APPROACH (retention + no E11000):
  * - Email is canonical identity.
- * - If same email arrives with a new clerkId, merge into existing Mongo user.
+ * - If same email comes with new clerkId, merge into existing Mongo user.
  * - Keep email unique in MongoDB.
  */
 async function upsertMongoUserFromClerkUser(clerkUser) {
@@ -34,7 +58,7 @@ async function upsertMongoUserFromClerkUser(clerkUser) {
   if (!clerkId) throw new Error('Missing clerkId in Clerk payload')
   if (!email) throw new Error('Missing email in Clerk payload')
 
-  const role = getRole(clerkUser)
+  const role = getRoleFromEvent(clerkUser)
   const now = new Date()
 
   const baseUpdate = {
@@ -49,23 +73,20 @@ async function upsertMongoUserFromClerkUser(clerkUser) {
     lastSeenAt: now,
   }
 
-  // 1) Find by clerkId
+  // 1) Try find by clerkId
   let doc = await User.findOne({ clerkId })
 
-  // 2) Merge by email if clerkId not found (prevents duplicate email insert)
-  if (!doc) {
-    doc = await User.findOne({ email })
-  }
+  // 2) If not found, merge by email (prevents duplicate email insert)
+  if (!doc) doc = await User.findOne({ email })
 
   if (doc) {
-    // Merge: keep a single Mongo user
     Object.assign(doc, baseUpdate)
     doc.firstSeenAt = doc.firstSeenAt || now
     await doc.save()
     return doc
   }
 
-  // Create new user
+  // 3) Create new
   const created = await User.create({
     ...baseUpdate,
     isProfileComplete: false,
@@ -86,19 +107,15 @@ export const syncUserCreation = inngest.createFunction(
 
     console.log('🚀 syncUserCreation triggered for:', clerkId)
 
-    // Optional: move role from unsafe -> public
-    const role = getRole(user)
-    if (!user.public_metadata?.role && user.unsafe_metadata?.role) {
-      await step.run('update-clerk-metadata', async () => {
-        const clerk = await clerkClient()
-        await clerk.users.updateUserMetadata(clerkId, { publicMetadata: { role } })
-        return { success: true, role }
-      })
+    // ✅ Always ensure role is set in publicMetadata (even after re-register)
+    const roleFromEvent = getRoleFromEvent(user)
+    if (user.public_metadata?.role !== roleFromEvent) {
+      await ensurePublicRole({ clerkId, role: roleFromEvent, step })
     }
 
     const saved = await step.run('save-user-mongo', async () => {
       const doc = await upsertMongoUserFromClerkUser(user)
-      console.log('✅ User saved/upserted:', doc._id.toString(), doc.email)
+      console.log('✅ Mongo user upserted (created):', doc._id.toString(), doc.email, doc.role)
       return { mongoId: doc._id.toString() }
     })
 
@@ -117,9 +134,15 @@ export const syncUserUpdate = inngest.createFunction(
 
     console.log('🔄 syncUserUpdate triggered for:', clerkId)
 
+    // ✅ Ensure role in publicMetadata if missing or mismatched
+    const roleFromEvent = getRoleFromEvent(user)
+    if (user.public_metadata?.role !== roleFromEvent) {
+      await ensurePublicRole({ clerkId, role: roleFromEvent, step })
+    }
+
     const saved = await step.run('save-user-mongo', async () => {
       const doc = await upsertMongoUserFromClerkUser(user)
-      console.log('✅ User updated/upserted:', doc._id.toString(), doc.email)
+      console.log('✅ Mongo user upserted (updated):', doc._id.toString(), doc.email, doc.role)
       return { mongoId: doc._id.toString() }
     })
 
@@ -127,7 +150,7 @@ export const syncUserUpdate = inngest.createFunction(
   }
 )
 
-// USER DELETED (soft delete)
+// USER DELETED (soft delete in Mongo)
 export const syncUserDeletion = inngest.createFunction(
   { id: 'qlinic-sync-user-deleted' },
   { event: 'webhook/request.received', if: 'event.data.type == "user.deleted"' },
@@ -141,7 +164,6 @@ export const syncUserDeletion = inngest.createFunction(
 
     const result = await step.run('soft-delete-mongo-user', async () => {
       await connectDB()
-
       const doc = await User.findOneAndUpdate(
         { clerkId },
         { isActive: false, deletedAt: now, lastSeenAt: now },
@@ -149,7 +171,7 @@ export const syncUserDeletion = inngest.createFunction(
       )
 
       if (!doc) return { found: false }
-      console.log('✅ User soft-deleted:', doc._id.toString())
+      console.log('✅ Mongo user soft-deleted:', doc._id.toString())
       return { found: true, mongoId: doc._id.toString() }
     })
 
