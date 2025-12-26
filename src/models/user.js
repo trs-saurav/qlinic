@@ -1,5 +1,26 @@
 import mongoose from 'mongoose'
 
+// Reusable Point schema (GeoJSON)
+const pointSchema = new mongoose.Schema(
+  {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: undefined, // IMPORTANT: prevents { type: undefined } being stored
+    },
+    coordinates: {
+      type: [Number],
+      default: undefined, // IMPORTANT: prevents [] being stored
+    },
+    address: String,
+    city: String,
+    state: String,
+    pincode: String,
+    country: String,
+  },
+  { _id: false }
+)
+
 const userSchema = new mongoose.Schema(
   {
     clerkId: { type: String, required: true, unique: true },
@@ -23,18 +44,12 @@ const userSchema = new mongoose.Schema(
       dateOfBirth: Date,
       gender: { type: String, enum: ['male', 'female', 'other'] },
       bloodGroup: { type: String, enum: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-', null] },
-      address: {
-        street: String,
-        city: String,
-        state: String,
-        pincode: String,
-        country: String,
-      },
+      address: { street: String, city: String, state: String, pincode: String, country: String },
       emergencyContact: String,
-      medicalHistory: [String],
-      allergies: [String],
-      chronicConditions: [String],
-      currentMedications: [String],
+      medicalHistory: { type: [String], default: undefined },
+      allergies: { type: [String], default: undefined },
+      chronicConditions: { type: [String], default: undefined },
+      currentMedications: { type: [String], default: undefined },
       insuranceProvider: String,
       insurancePolicyNumber: String,
     },
@@ -42,34 +57,32 @@ const userSchema = new mongoose.Schema(
     doctorProfile: {
       specialization: String,
       qualification: String,
-      qualifications: [String],
+      qualifications: { type: [String], default: undefined },
       experience: Number,
       licenseNumber: String,
       registrationNumber: String,
       registrationCouncil: String,
       consultationFee: Number,
       about: String,
-      languages: [String],
-      expertise: [String],
-      awards: [String],
-      publications: [String],
-      location: {
-        type: { type: String, enum: ['Point'] },
-        coordinates: [Number],
-        address: String,
-        city: String,
-        state: String,
-        pincode: String,
-        country: String,
-      },
-      availableDays: [String],
-      timeSlots: [{ day: String, startTime: String, endTime: String }],
+      languages: { type: [String], default: undefined },
+      expertise: { type: [String], default: undefined },
+      awards: { type: [String], default: undefined },
+      publications: { type: [String], default: undefined },
+
+      // ✅ Fix: location is a pointSchema, but NOT auto-created with empty arrays
+      location: { type: pointSchema, default: undefined },
+
+      availableDays: { type: [String], default: undefined },
+      timeSlots: { type: [{ day: String, startTime: String, endTime: String }], default: undefined },
       isAvailable: { type: Boolean, default: true },
+
       rating: { type: Number, default: 0, min: 0, max: 5 },
       totalReviews: { type: Number, default: 0 },
       totalConsultations: { type: Number, default: 0 },
+
       affiliatedHospitals: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Hospital' }],
       consultationRoomNumber: String,
+
       isOnlineConsultationAvailable: { type: Boolean, default: false },
       videoConsultationFee: Number,
     },
@@ -91,7 +104,30 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 )
 
-userSchema.index({ 'doctorProfile.location': '2dsphere' }, { sparse: true })
+// ✅ Index the GeoJSON field (2dsphere requires valid GeoJSON)
+userSchema.index({ 'doctorProfile.location': '2dsphere' })
+
+// ---- Fix invalid geo data before saving ----
+userSchema.pre('save', function (next) {
+  const loc = this.doctorProfile?.location
+  const coords = loc?.coordinates
+
+  const isValidPoint =
+    loc &&
+    loc.type === 'Point' &&
+    Array.isArray(coords) &&
+    coords.length === 2 &&
+    typeof coords[0] === 'number' &&
+    typeof coords[1] === 'number'
+
+  // If not valid, remove the field completely (so index doesn't break)
+  if (this.doctorProfile && !isValidPoint) {
+    this.doctorProfile.location = undefined
+  }
+
+  next()
+})
+
 userSchema.index({
   firstName: 'text',
   lastName: 'text',
@@ -125,11 +161,14 @@ userSchema.virtual('isDoctorActive').get(function () {
 
 userSchema.methods.updateLocation = function (latitude, longitude, address) {
   if (this.role !== 'doctor') throw new Error('Only doctors can have location')
+
+  this.doctorProfile = this.doctorProfile || {}
   this.doctorProfile.location = {
     type: 'Point',
     coordinates: [longitude, latitude],
     ...address,
   }
+
   return this.save()
 }
 
@@ -138,7 +177,7 @@ userSchema.statics.findNearbyDoctors = function (longitude, latitude, maxDistanc
     role: 'doctor',
     isActive: true,
     'doctorProfile.isAvailable': true,
-    'doctorProfile.location.coordinates': { $exists: true, $ne: [] },
+    'doctorProfile.location.coordinates': { $exists: true },
   }
 
   if (specialization) query['doctorProfile.specialization'] = new RegExp(specialization, 'i')
