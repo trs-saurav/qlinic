@@ -1,36 +1,27 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useUser } from '@clerk/nextjs'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 
-// Create Context
 const HospitalAdminContext = createContext(undefined)
 
-// Custom hook to use the context
 export const useHospitalAdmin = () => {
-  const context = useContext(HospitalAdminContext)
-  if (!context) {
-    throw new Error('useHospitalAdmin must be used within HospitalAdminProvider')
-  }
-  return context
+  const ctx = useContext(HospitalAdminContext)
+  if (!ctx) throw new Error('useHospitalAdmin must be used within HospitalAdminProvider')
+  return ctx
 }
 
-// Provider Component
 export const HospitalAdminProvider = ({ children }) => {
   const { user, isLoaded } = useUser()
   const router = useRouter()
-  const pathname = usePathname()
 
-  // ============ STATE MANAGEMENT ============
-  
-  // Hospital Core Data
+  // ============ STATE ============
   const [hospital, setHospital] = useState(null)
   const [hospitalLoading, setHospitalLoading] = useState(true)
   const [hospitalError, setHospitalError] = useState(null)
 
-  // Dashboard Stats
   const [stats, setStats] = useState({
     todayAppointments: 0,
     totalAppointments: 0,
@@ -42,59 +33,43 @@ export const HospitalAdminProvider = ({ children }) => {
     availableBeds: 0,
     occupiedBeds: 0,
     totalBeds: 0,
-    revenue: {
-      today: 0,
-      month: 0,
-      year: 0,
-    },
+    revenue: { today: 0, month: 0, year: 0 },
   })
   const [statsLoading, setStatsLoading] = useState(false)
 
-  // Appointments
   const [appointments, setAppointments] = useState([])
   const [appointmentsLoading, setAppointmentsLoading] = useState(false)
-  const [appointmentsFilter, setAppointmentsFilter] = useState('all') // all, today, upcoming, past
+  const [appointmentsFilter, setAppointmentsFilter] = useState('all')
 
-  // Doctors
   const [doctors, setDoctors] = useState([])
   const [doctorsLoading, setDoctorsLoading] = useState(false)
   const [pendingDoctorRequests, setPendingDoctorRequests] = useState([])
 
-  // Patients
   const [patients, setPatients] = useState([])
   const [patientsLoading, setPatientsLoading] = useState(false)
   const [todayPatients, setTodayPatients] = useState([])
 
-  // Staff
   const [staff, setStaff] = useState([])
   const [staffLoading, setStaffLoading] = useState(false)
 
-  // Inventory
   const [inventory, setInventory] = useState([])
   const [inventoryLoading, setInventoryLoading] = useState(false)
   const [lowStockItems, setLowStockItems] = useState([])
 
-  // Notifications
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
 
-  // Settings
   const [settings, setSettings] = useState({
-    notifications: {
-      email: true,
-      sms: false,
-      push: true,
-    },
-    privacy: {
-      showProfile: true,
-      allowMessages: true,
-    },
+    notifications: { email: true, sms: false, push: true },
+    privacy: { showProfile: true, allowMessages: true },
     theme: 'light',
   })
 
-  // ============ FETCH FUNCTIONS ============
+  // Prevent duplicate initial fetches (helps dev/StrictMode too)
+  const didInitRef = useRef(false)
 
-  // Fetch Hospital Profile
+  // ============ FETCHERS ============
+
   const fetchHospital = useCallback(async () => {
     if (!user) return
 
@@ -102,186 +77,148 @@ export const HospitalAdminProvider = ({ children }) => {
       setHospitalLoading(true)
       setHospitalError(null)
 
-      console.log('🏥 Fetching hospital profile...')
-      const res = await fetch('/api/hospital/profile')
+      const res = await fetch('/api/hospital/profile', {
+        headers: { Accept: 'application/json' },
+      })
       const data = await res.json()
 
-      if (res.ok) {
-        if (data.hospital) {
-          setHospital(data.hospital)
-          console.log('✅ Hospital loaded:', data.hospital.name)
-        } else {
-          // No hospital found, redirect to setup
-          console.log('⚠️ No hospital found, redirecting to setup')
-          if (pathname !== '/hospital-admin/setup') {
-            router.push('/hospital-admin/setup')
-          }
-        }
-      } else {
-        setHospitalError(data.error || 'Failed to load hospital')
-        if (res.status === 404 && pathname !== '/hospital-admin/setup') {
-          router.push('/hospital-admin/setup')
-        }
+      if (!res.ok) {
+        setHospital(null)
+        setHospitalError(data?.error || 'Failed to load hospital')
+        return
       }
+
+      setHospital(data?.hospital || null)
     } catch (err) {
-      console.error('❌ Error fetching hospital:', err)
+      console.error('❌ fetchHospital:', err)
+      setHospital(null)
       setHospitalError('Failed to load hospital data')
       toast.error('Failed to load hospital data')
     } finally {
       setHospitalLoading(false)
     }
-  }, [user, router, pathname])
+  }, [user])
 
-  // Fetch Dashboard Stats
   const fetchStats = useCallback(async () => {
     if (!hospital?._id) return
-
     try {
       setStatsLoading(true)
-      const res = await fetch(`/api/hospital/dashboard/stats?hospitalId=${hospital._id}`)
+      const res = await fetch('/api/hospital/dashboard/stats', { headers: { Accept: 'application/json' } })
       const data = await res.json()
-
-      if (res.ok) {
-        setStats(data.stats)
-        console.log('📊 Stats loaded')
-      }
+      if (res.ok) setStats(data.stats)
     } catch (err) {
-      console.error('❌ Error fetching stats:', err)
+      console.error('❌ fetchStats:', err)
     } finally {
       setStatsLoading(false)
     }
   }, [hospital?._id])
 
-  // Fetch Appointments
   const fetchAppointments = useCallback(async (filter = 'all') => {
     if (!hospital?._id) return
-
     try {
       setAppointmentsLoading(true)
-      const params = new URLSearchParams({
-        hospitalId: hospital._id,
-        filter,
-      })
-
+      const params = new URLSearchParams({ filter })
       const res = await fetch(`/api/hospital/appointments?${params}`)
       const data = await res.json()
 
       if (res.ok) {
         setAppointments(data.appointments || [])
         setAppointmentsFilter(filter)
-        console.log(`📅 Appointments loaded (${filter}):`, data.appointments?.length)
       } else {
-        toast.error('Failed to load appointments')
+        toast.error(data?.error || 'Failed to load appointments')
       }
     } catch (err) {
-      console.error('❌ Error fetching appointments:', err)
+      console.error('❌ fetchAppointments:', err)
       toast.error('Failed to load appointments')
     } finally {
       setAppointmentsLoading(false)
     }
   }, [hospital?._id])
 
-  // Fetch Doctors
   const fetchDoctors = useCallback(async () => {
     if (!hospital?._id) return
-
     try {
       setDoctorsLoading(true)
-      const res = await fetch(`/api/hospital/doctors?hospitalId=${hospital._id}`)
+      const res = await fetch('/api/hospital/doctors')
       const data = await res.json()
 
       if (res.ok) {
         setDoctors(data.doctors || [])
         setPendingDoctorRequests(data.pendingRequests || [])
-        console.log('👨‍⚕️ Doctors loaded:', data.doctors?.length)
       } else {
-        toast.error('Failed to load doctors')
+        toast.error(data?.error || 'Failed to load doctors')
       }
     } catch (err) {
-      console.error('❌ Error fetching doctors:', err)
+      console.error('❌ fetchDoctors:', err)
       toast.error('Failed to load doctors')
     } finally {
       setDoctorsLoading(false)
     }
   }, [hospital?._id])
 
-  // Fetch Patients
   const fetchPatients = useCallback(async () => {
     if (!hospital?._id) return
-
     try {
       setPatientsLoading(true)
-      const res = await fetch(`/api/hospital/patients?hospitalId=${hospital._id}`)
+      const res = await fetch('/api/hospital/patients')
       const data = await res.json()
 
       if (res.ok) {
         setPatients(data.patients || [])
         setTodayPatients(data.todayPatients || [])
-        console.log('👥 Patients loaded:', data.patients?.length)
       } else {
-        toast.error('Failed to load patients')
+        toast.error(data?.error || 'Failed to load patients')
       }
     } catch (err) {
-      console.error('❌ Error fetching patients:', err)
+      console.error('❌ fetchPatients:', err)
       toast.error('Failed to load patients')
     } finally {
       setPatientsLoading(false)
     }
   }, [hospital?._id])
 
-  // Fetch Staff
   const fetchStaff = useCallback(async () => {
     if (!hospital?._id) return
-
     try {
       setStaffLoading(true)
-      const res = await fetch(`/api/hospital/staff?hospitalId=${hospital._id}`)
+      const res = await fetch('/api/hospital/staff')
       const data = await res.json()
 
-      if (res.ok) {
-        setStaff(data.staff || [])
-        console.log('👨‍💼 Staff loaded:', data.staff?.length)
-      } else {
-        toast.error('Failed to load staff')
-      }
+      if (res.ok) setStaff(data.staff || [])
+      else toast.error(data?.error || 'Failed to load staff')
     } catch (err) {
-      console.error('❌ Error fetching staff:', err)
+      console.error('❌ fetchStaff:', err)
       toast.error('Failed to load staff')
     } finally {
       setStaffLoading(false)
     }
   }, [hospital?._id])
 
-  // Fetch Inventory
   const fetchInventory = useCallback(async () => {
     if (!hospital?._id) return
-
     try {
       setInventoryLoading(true)
-      const res = await fetch(`/api/hospital/inventory?hospitalId=${hospital._id}`)
+      const res = await fetch('/api/hospital/inventory')
       const data = await res.json()
 
       if (res.ok) {
         setInventory(data.inventory || [])
         setLowStockItems(data.lowStock || [])
-        console.log('📦 Inventory loaded:', data.inventory?.length)
       } else {
-        toast.error('Failed to load inventory')
+        toast.error(data?.error || 'Failed to load inventory')
       }
     } catch (err) {
-      console.error('❌ Error fetching inventory:', err)
+      console.error('❌ fetchInventory:', err)
       toast.error('Failed to load inventory')
     } finally {
       setInventoryLoading(false)
     }
   }, [hospital?._id])
 
-  // Fetch Notifications
   const fetchNotifications = useCallback(async () => {
     if (!hospital?._id) return
-
     try {
-      const res = await fetch(`/api/hospital/notifications?hospitalId=${hospital._id}`)
+      const res = await fetch('/api/hospital/notifications')
       const data = await res.json()
 
       if (res.ok) {
@@ -289,144 +226,49 @@ export const HospitalAdminProvider = ({ children }) => {
         setUnreadCount(data.unreadCount || 0)
       }
     } catch (err) {
-      console.error('❌ Error fetching notifications:', err)
+      console.error('❌ fetchNotifications:', err)
     }
   }, [hospital?._id])
 
-  // ============ ACTION FUNCTIONS ============
+  // ============ ACTIONS ============
 
-  // Update Hospital Profile
-  const updateHospital = async (updates) => {
-    if (!hospital?._id) return { success: false, error: 'No hospital found' }
-
+  const approveDoctorRequest = useCallback(async (affiliationId) => {
     try {
-      const res = await fetch('/api/hospital/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hospitalId: hospital._id, ...updates }),
-      })
-
-      const data = await res.json()
-
-      if (res.ok) {
-        setHospital(data.hospital)
-        toast.success('Hospital updated successfully')
-        return { success: true, hospital: data.hospital }
-      } else {
-        toast.error(data.error || 'Failed to update hospital')
-        return { success: false, error: data.error }
-      }
-    } catch (err) {
-      console.error('❌ Error updating hospital:', err)
-      toast.error('Failed to update hospital')
-      return { success: false, error: err.message }
-    }
-  }
-
-  // Create Appointment
-  const createAppointment = async (appointmentData) => {
-    try {
-      const res = await fetch('/api/hospital/appointments', {
+      const res = await fetch('/api/hospital/doctors/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...appointmentData, hospitalId: hospital._id }),
+        body: JSON.stringify({ affiliationId }),
       })
-
       const data = await res.json()
 
-      if (res.ok) {
-        toast.success('Appointment created successfully')
-        await fetchAppointments(appointmentsFilter)
-        await fetchStats()
-        return { success: true, appointment: data.appointment }
-      } else {
-        toast.error(data.error || 'Failed to create appointment')
-        return { success: false, error: data.error }
+      if (!res.ok) {
+        toast.error(data?.error || 'Failed to approve doctor')
+        return { success: false, error: data?.error }
       }
+
+      toast.success('Doctor approved successfully')
+      await Promise.all([fetchDoctors(), fetchStats()])
+      return { success: true }
     } catch (err) {
-      console.error('❌ Error creating appointment:', err)
-      toast.error('Failed to create appointment')
-      return { success: false, error: err.message }
-    }
-  }
-
-  // Update Appointment Status
-  const updateAppointmentStatus = async (appointmentId, status) => {
-    try {
-      const res = await fetch(`/api/hospital/appointments/${appointmentId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      })
-
-      const data = await res.json()
-
-      if (res.ok) {
-        toast.success(`Appointment ${status}`)
-        await fetchAppointments(appointmentsFilter)
-        await fetchStats()
-        return { success: true }
-      } else {
-        toast.error(data.error || 'Failed to update appointment')
-        return { success: false, error: data.error }
-      }
-    } catch (err) {
-      console.error('❌ Error updating appointment:', err)
-      toast.error('Failed to update appointment')
-      return { success: false, error: err.message }
-    }
-  }
-
-  // Approve Doctor Request
-  const approveDoctorRequest = async (affiliationId) => {
-    try {
-      const res = await fetch(`/api/hospital/doctors/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ affiliationId, hospitalId: hospital._id }),
-      })
-
-      const data = await res.json()
-
-      if (res.ok) {
-        toast.success('Doctor approved successfully')
-        await fetchDoctors()
-        await fetchStats()
-        return { success: true }
-      } else {
-        toast.error(data.error || 'Failed to approve doctor')
-        return { success: false, error: data.error }
-      }
-    } catch (err) {
-      console.error('❌ Error approving doctor:', err)
+      console.error('❌ approveDoctorRequest:', err)
       toast.error('Failed to approve doctor')
       return { success: false, error: err.message }
     }
-  }
+  }, [fetchDoctors, fetchStats])
 
-  // Mark Notification as Read
-  const markNotificationRead = async (notificationId) => {
+  const markNotificationRead = useCallback(async (notificationId) => {
     try {
-      const res = await fetch(`/api/hospital/notifications/${notificationId}/read`, {
-        method: 'PATCH',
-      })
-
-      if (res.ok) {
-        setNotifications((prev) =>
-          prev.map((n) => (n._id === notificationId ? { ...n, read: true } : n))
-        )
-        setUnreadCount((prev) => Math.max(0, prev - 1))
-      }
+      const res = await fetch(`/api/hospital/notifications/${notificationId}/read`, { method: 'PATCH' })
+      if (!res.ok) return
+      setNotifications((prev) => prev.map((n) => (n._id === notificationId ? { ...n, read: true } : n)))
+      setUnreadCount((prev) => Math.max(0, prev - 1))
     } catch (err) {
-      console.error('❌ Error marking notification read:', err)
+      console.error('❌ markNotificationRead:', err)
     }
-  }
+  }, [])
 
-  // Refresh All Data
   const refreshAll = useCallback(async () => {
     if (!hospital?._id) return
-    
-    console.log('🔄 Refreshing all hospital data...')
     await Promise.all([
       fetchStats(),
       fetchAppointments(appointmentsFilter),
@@ -434,89 +276,83 @@ export const HospitalAdminProvider = ({ children }) => {
       fetchPatients(),
       fetchNotifications(),
     ])
-    console.log('✅ All data refreshed')
   }, [hospital?._id, appointmentsFilter, fetchStats, fetchAppointments, fetchDoctors, fetchPatients, fetchNotifications])
 
   // ============ EFFECTS ============
 
-  // Initial load - Fetch hospital profile
+  // 1) Fetch hospital once when auth is ready (NOT on pathname changes)
   useEffect(() => {
-    if (isLoaded && user) {
-      fetchHospital()
-    }
+    if (!isLoaded) return
+    if (!user) return
+
+    if (didInitRef.current) return
+    didInitRef.current = true
+
+    fetchHospital()
   }, [isLoaded, user, fetchHospital])
 
-  // Load dashboard stats when hospital is ready
+  // 2) After hospital is known, load “global” data once
   useEffect(() => {
-    if (hospital?._id) {
-      fetchStats()
-      fetchNotifications()
-    }
+    if (!hospital?._id) return
+    fetchStats()
+    fetchNotifications()
   }, [hospital?._id, fetchStats, fetchNotifications])
 
-  // ============ CONTEXT VALUE ============
+  // 3) Redirect if hospital missing (but only after fetch finishes)
+  useEffect(() => {
+    if (!isLoaded || !user) return
+    if (hospitalLoading) return
+
+    if (!hospital) {
+      router.push('/hospital-admin/setup')
+    }
+  }, [isLoaded, user, hospitalLoading, hospital, router])
+
   const value = {
-    // Hospital Core
     hospital,
     hospitalLoading,
     hospitalError,
     fetchHospital,
-    updateHospital,
 
-    // Dashboard Stats
     stats,
     statsLoading,
     fetchStats,
 
-    // Appointments
     appointments,
     appointmentsLoading,
     appointmentsFilter,
     fetchAppointments,
-    createAppointment,
-    updateAppointmentStatus,
 
-    // Doctors
     doctors,
     doctorsLoading,
     pendingDoctorRequests,
     fetchDoctors,
     approveDoctorRequest,
 
-    // Patients
     patients,
     patientsLoading,
     todayPatients,
     fetchPatients,
 
-    // Staff
     staff,
     staffLoading,
     fetchStaff,
 
-    // Inventory
     inventory,
     inventoryLoading,
     lowStockItems,
     fetchInventory,
 
-    // Notifications
     notifications,
     unreadCount,
     fetchNotifications,
     markNotificationRead,
 
-    // Settings
     settings,
     setSettings,
 
-    // Utilities
     refreshAll,
   }
 
-  return (
-    <HospitalAdminContext.Provider value={value}>
-      {children}
-    </HospitalAdminContext.Provider>
-  )
+  return <HospitalAdminContext.Provider value={value}>{children}</HospitalAdminContext.Provider>
 }

@@ -1,3 +1,5 @@
+'use client'
+
 import { HospitalAdminProvider } from '@/context/HospitalAdminContext'
 import HospitalNavbar from '@/components/hospital/HospitalNavbar'
 import ProtectedRoute from '@/components/ProtectedRoute'

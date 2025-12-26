@@ -1,187 +1,176 @@
-// src/components/doctor/DoctorNavbar.jsx
 'use client'
-import { useState } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { UserButton } from '@clerk/nextjs'
+
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ModeToggle } from '@/components/extra/ModeToggle'
-import { 
-  LayoutDashboard, 
-  Stethoscope, 
-  Calendar, 
-  Hospital,
+import { useDoctor } from '@/context/DoctorContextProvider'
+
+import {
+  LayoutDashboard,
+  Calendar,
   Clock,
-  Menu, 
-  X, 
+  Hospital,
+  Settings,
   Bell,
-  UserCircle
+  Menu,
+  X,
+  Stethoscope,
 } from 'lucide-react'
 
+const NAV = [
+  { href: '/doctor', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/doctor/appointments', label: 'Appointments', icon: Calendar },
+  { href: '/doctor/schedule', label: 'Schedule', icon: Clock },
+  { href: '/doctor/affiliations', label: 'Hospitals', icon: Hospital },
+  { href: '/doctor/settings', label: 'Settings', icon: Settings },
+]
+
+function isActivePath(pathname, href) {
+  if (href === '/doctor') return pathname === '/doctor'
+  return pathname === href || pathname.startsWith(href + '/')
+}
+
 export default function DoctorNavbar() {
-  const router = useRouter()
   const pathname = usePathname()
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
 
-  const navItems = [
-    { href: '/doctor', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/doctor/profile', label: 'Profile', icon: UserCircle },
-    { href: '/doctor/affiliations', label: 'Hospitals', icon: Hospital },
-    { href: '/doctor/appointments', label: 'Appointments', icon: Calendar },
-    { href: '/doctor/schedule', label: 'Schedule', icon: Clock }
-  ]
+  const { unreadCount, dashboard } = useDoctor()
 
-  const isActive = (href) => {
-    if (href === '/doctor') return pathname === '/doctor'
-    return pathname.startsWith(href)
-  }
-
-  const handleNavClick = (href) => {
-    router.push(href)
-    setIsMobileMenuOpen(false)
-  }
+  const nav = useMemo(
+    () => NAV.map((i) => ({ ...i, active: isActivePath(pathname, i.href) })),
+    [pathname]
+  )
 
   return (
-    <motion.nav
-      initial={{ y: -100 }}
-      animate={{ y: 0 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="bg-background/95 backdrop-blur-xl border-b-2 border-emerald-200/70 dark:border-emerald-800/70 shadow-lg sticky top-0 z-50"
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 lg:h-18">
-          
-          {/* Logo */}
-          <Link href="/doctor" className="flex items-center gap-3 group transition-all duration-300">
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <div className="relative w-11 h-11 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950 dark:to-teal-950 rounded-lg p-2 border border-emerald-200/50 dark:border-emerald-800/50">
-                <Stethoscope className="w-full h-full text-emerald-600 dark:text-emerald-400" />
-              </div>
-            </motion.div>
-            <div className="hidden sm:block">
-              <h1 className="text-lg font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
-                Qlinic
-              </h1>
-              <p className="text-xs text-muted-foreground font-medium">Doctor Portal</p>
+    <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-xl">
+      <motion.div
+        initial={{ y: -18, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.25, ease: 'easeOut' }}
+        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+      >
+        <div className="h-16 flex items-center justify-between gap-3">
+          {/* Brand */}
+          <Link href="/doctor" className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-sm">
+              <Stethoscope className="w-5 h-5 text-white" />
+            </div>
+            <div className="hidden sm:block leading-tight">
+              <div className="text-sm font-bold text-foreground">Qlinic</div>
+              <div className="text-xs text-muted-foreground">Doctor Portal</div>
             </div>
           </Link>
 
-          {/* Desktop Navigation */}
-          <div className="hidden lg:flex items-center space-x-4">
-            {navItems.map((item, index) => (
-              <motion.div
-                key={item.href}
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-              >
+          {/* Desktop nav */}
+          <nav className="hidden lg:flex items-center gap-1">
+            {nav.map((item) => {
+              const Icon = item.icon
+              return (
                 <Link
+                  key={item.href}
                   href={item.href}
-                  className={`
-                    relative px-4 py-2 text-sm font-medium transition-all duration-200 group
-                    ${isActive(item.href) 
-                      ? 'text-foreground font-semibold' 
-                      : 'text-foreground/70 hover:text-foreground'
-                    }
-                  `}
+                  className={cn(
+                    'flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors',
+                    item.active
+                      ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
+                  )}
                 >
-                  <div className="flex items-center gap-2">
-                    <item.icon className="w-4 h-4" />
-                    <span>{item.label}</span>
-                  </div>
-                  <span className={`
-                    absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 bg-gradient-to-r from-emerald-600 to-teal-600 rounded-full transition-all duration-300
-                    ${isActive(item.href) ? 'w-6' : 'w-0 group-hover:w-4'}
-                  `} />
+                  <Icon className="w-4 h-4" />
+                  <span>{item.label}</span>
+
+                  {/* Optional badges */}
+                  {item.href === '/doctor/appointments' &&
+                    typeof dashboard?.todayAppointments === 'number' &&
+                    dashboard.todayAppointments > 0 && (
+                      <Badge className="ml-1 h-5 px-2 text-[10px] bg-emerald-600">
+                        {dashboard.todayAppointments > 9 ? '9+' : dashboard.todayAppointments}
+                      </Badge>
+                    )}
                 </Link>
-              </motion.div>
-            ))}
-          </div>
+              )
+            })}
+          </nav>
 
-          {/* Right Section */}
-          <div className="flex items-center gap-2 lg:gap-3">
-            
+          {/* Right actions (required on top) */}
+          <div className="flex items-center gap-2">
             {/* Notifications */}
-            <motion.div whileHover={{ scale: 1.05 }}>
-              <Button variant="ghost" size="sm" className="relative h-9 px-3">
-                <Bell className="w-4 h-4" />
-                <Badge className="absolute -top-1 -right-1 h-5 w-5 p-0 text-xs font-semibold bg-emerald-500 border-2 border-background">
-                  5
-                </Badge>
-              </Button>
-            </motion.div>
+            <Button variant="ghost" size="icon" className="relative">
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1">
+                  <Badge className="h-5 min-w-5 px-1.5 p-0 flex items-center justify-center text-[10px] bg-emerald-600 border border-background">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Badge>
+                </span>
+              )}
+            </Button>
 
-            {/* Mode Toggle */}
             <div className="hidden md:block">
               <ModeToggle />
             </div>
 
-            {/* User Button */}
             <UserButton afterSignOutUrl="/sign-in" />
 
-            {/* Mobile Menu */}
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="lg:hidden flex items-center justify-center w-10 h-10 bg-accent/50 hover:bg-accent rounded-lg transition-all duration-200"
+            {/* Mobile menu */}
+            <button
+              className="lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-xl hover:bg-accent"
+              onClick={() => setMobileOpen((v) => !v)}
+              aria-label="Toggle menu"
             >
-              <AnimatePresence mode="wait">
-                {isMobileMenuOpen ? (
-                  <motion.div key="close" initial={{ rotate: -90 }} animate={{ rotate: 0 }} exit={{ rotate: 90 }}>
-                    <X className="w-5 h-5" />
-                  </motion.div>
-                ) : (
-                  <motion.div key="menu" initial={{ rotate: 90 }} animate={{ rotate: 0 }} exit={{ rotate: -90 }}>
-                    <Menu className="w-5 h-5" />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.button>
+              {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      {/* Mobile Menu */}
+      {/* Mobile menu */}
       <AnimatePresence>
-        {isMobileMenuOpen && (
+        {mobileOpen && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="lg:hidden border-t-2 border-emerald-200/50 dark:border-emerald-800/50 bg-background/95 backdrop-blur-xl overflow-hidden"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="lg:hidden border-t border-border bg-background/95 backdrop-blur-xl overflow-hidden"
           >
-            <div className="px-4 py-4 space-y-2">
-              {navItems.map((item, index) => (
-                <motion.div
-                  key={item.href}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                >
-                  <Button
-                    variant="ghost"
-                    className={`w-full justify-start h-12 px-4 rounded-xl ${
-                      isActive(item.href)
-                        ? 'bg-accent/80 text-foreground font-semibold'
-                        : 'text-foreground/80 hover:bg-accent/50'
-                    }`}
-                    onClick={() => handleNavClick(item.href)}
+            <div className="px-4 py-3 space-y-1">
+              {nav.map((item) => {
+                const Icon = item.icon
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    className={cn(
+                      'flex items-center justify-between rounded-xl px-4 py-3 font-semibold',
+                      item.active
+                        ? 'bg-accent text-foreground'
+                        : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+                    )}
                   >
-                    <item.icon className="w-5 h-5 mr-3" />
-                    {item.label}
-                  </Button>
-                </motion.div>
-              ))}
-              <div className="flex items-center justify-between px-4 py-3 border-t border-border/50 mt-4">
-                <span className="text-sm font-medium">Theme</span>
+                    <span className="flex items-center gap-3">
+                      <Icon className="w-5 h-5" />
+                      {item.label}
+                    </span>
+                  </Link>
+                )
+              })}
+
+              <div className="flex items-center justify-between rounded-xl px-4 py-3 border-t border-border mt-2">
+                <span className="text-sm font-semibold">Theme</span>
                 <ModeToggle />
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.nav>
+    </header>
   )
 }
