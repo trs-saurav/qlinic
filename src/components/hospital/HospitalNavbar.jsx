@@ -23,8 +23,12 @@ import {
   MapPin,
   CheckCircle,
   AlertCircle,
+  Hash,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ModeToggle } from "@/components/extra/ModeToggle";
 import {
   DropdownMenu,
@@ -32,6 +36,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import toast from "react-hot-toast";
 
 const navigationTabs = [
   { id: "OVERVIEW", label: "Overview", icon: Home, href: "/hospital-admin" },
@@ -87,6 +92,7 @@ const navigationTabs = [
 
 export default function HospitalNavbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [idCopied, setIdCopied] = useState(false);
   const pathname = usePathname();
   const { user } = useUser();
 
@@ -102,6 +108,9 @@ export default function HospitalNavbar() {
     fetchNotifications,
   } = useHospitalAdmin();
 
+  // Calculate short ID
+  const shortId = hospital?._id?.toString().slice(-8).toUpperCase();
+
   // Fetch notifications on mount
   useEffect(() => {
     fetchNotifications();
@@ -111,6 +120,20 @@ export default function HospitalNavbar() {
 
   // Calculate total alerts
   const totalAlerts = unreadCount + (lowStockItems?.length || 0) + (pendingDoctorRequests?.length || 0);
+
+  // Copy short ID function
+  const copyShortId = async () => {
+    if (!shortId) return;
+
+    try {
+      await navigator.clipboard.writeText(shortId);
+      setIdCopied(true);
+      toast.success("Hospital ID copied to clipboard");
+      setTimeout(() => setIdCopied(false), 2000);
+    } catch (err) {
+      toast.error("Failed to copy ID");
+    }
+  };
 
   return (
     <>
@@ -154,7 +177,33 @@ export default function HospitalNavbar() {
                           <CheckCircle className="w-4 h-4 text-emerald-500" title="Verified Hospital" />
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {/* Hospital ID Badge */}
+                        {shortId && (
+                          <div className="flex items-center gap-1">
+                            <Hash className="w-3 h-3" />
+                            <button
+                              onClick={copyShortId}
+                              className="font-mono hover:text-foreground transition-colors"
+                              title="Click to copy"
+                            >
+                              {shortId}
+                            </button>
+                            <button
+                              onClick={copyShortId}
+                              className="p-0.5 hover:bg-accent rounded transition-colors"
+                            >
+                              {idCopied ? (
+                                <Check className="w-3 h-3 text-green-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        )}
+                        {hospital?.address?.city && shortId && (
+                          <span className="text-muted-foreground/50">•</span>
+                        )}
                         {hospital?.address?.city && (
                           <>
                             <MapPin className="w-3 h-3" />
@@ -163,7 +212,7 @@ export default function HospitalNavbar() {
                             </span>
                           </>
                         )}
-                        {!hospital?.address?.city && (
+                        {!hospital?.address?.city && !shortId && (
                           <span>Hospital Administration</span>
                         )}
                       </div>
@@ -348,12 +397,31 @@ export default function HospitalNavbar() {
                 <div>
                   <h2 className="text-xl font-bold">Menu</h2>
                   {hospital && (
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <p className="text-xs text-muted-foreground">
-                        {hospital.name}
-                      </p>
-                      {hospital.isVerified && (
-                        <CheckCircle className="w-3 h-3 text-emerald-500" />
+                    <div className="mt-0.5 space-y-1">
+                      <div className="flex items-center gap-1">
+                        <p className="text-xs text-muted-foreground">
+                          {hospital.name}
+                        </p>
+                        {hospital.isVerified && (
+                          <CheckCircle className="w-3 h-3 text-emerald-500" />
+                        )}
+                      </div>
+                      {/* Hospital ID in Mobile Menu */}
+                      {shortId && (
+                        <div className="flex items-center gap-1 text-xs">
+                          <Hash className="w-3 h-3 text-muted-foreground" />
+                          <span className="font-mono text-muted-foreground">{shortId}</span>
+                          <button
+                            onClick={copyShortId}
+                            className="p-0.5 hover:bg-accent rounded transition-colors"
+                          >
+                            {idCopied ? (
+                              <Check className="w-3 h-3 text-green-600" />
+                            ) : (
+                              <Copy className="w-3 h-3 text-muted-foreground" />
+                            )}
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}

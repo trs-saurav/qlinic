@@ -29,6 +29,9 @@ import {
   Clock,
   AlertCircle,
   X,
+  Hash,
+  Copy,
+  Check,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -123,6 +126,8 @@ export default function HospitalProfileSettings() {
   const [saving, setSaving] = useState(false);
   const [requestingVerification, setRequestingVerification] = useState(false);
   const [hospital, setHospital] = useState(null);
+  const [shortId, setShortId] = useState("");
+  const [idCopied, setIdCopied] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -178,6 +183,9 @@ export default function HospitalProfileSettings() {
       const h = data.hospital || {};
       setHospital(h);
 
+      // Set short ID
+      setShortId(h.shortId || h._id?.toString().slice(-8).toUpperCase());
+
       setForm({
         name: h.name || "",
         registrationNumber: h.registrationNumber || "",
@@ -217,6 +225,19 @@ export default function HospitalProfileSettings() {
       toast.error("Failed to load hospital profile");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const copyShortId = async () => {
+    if (!shortId) return;
+
+    try {
+      await navigator.clipboard.writeText(shortId);
+      setIdCopied(true);
+      toast.success("Hospital ID copied to clipboard");
+      setTimeout(() => setIdCopied(false), 2000);
+    } catch (err) {
+      toast.error("Failed to copy ID");
     }
   };
 
@@ -385,6 +406,46 @@ export default function HospitalProfileSettings() {
           )}
         </div>
       </div>
+
+      {/* Hospital ID Card */}
+      {shortId && (
+        <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1 flex items-center gap-2">
+                  <Hash className="h-4 w-4" />
+                  Your Hospital ID
+                </p>
+                <div className="flex items-center gap-3">
+                  <p className="text-3xl font-bold font-mono tracking-wider">
+                    {shortId}
+                  </p>
+                  <Button variant="outline" size="sm" onClick={copyShortId}>
+                    {idCopied ? (
+                      <>
+                        <Check className="h-4 w-4 mr-2 text-green-600" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy ID
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Share this ID with doctors to help them find your hospital
+                </p>
+              </div>
+              <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center">
+                <Hash className="h-10 w-10 text-primary" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Verification Card */}
       {!isVerified && (

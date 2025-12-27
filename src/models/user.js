@@ -6,11 +6,11 @@ const pointSchema = new mongoose.Schema(
     type: {
       type: String,
       enum: ['Point'],
-      default: undefined, // prevents invalid GeoJSON objects being stored
+      default: undefined,
     },
     coordinates: {
       type: [Number],
-      default: undefined, // prevents [] being stored (breaks 2dsphere)
+      default: undefined,
     },
     address: String,
     city: String,
@@ -25,7 +25,6 @@ const userSchema = new mongoose.Schema(
   {
     clerkId: { type: String, required: true, unique: true },
 
-    // Keep email unique (best for identity + retention)
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
 
     firstName: { type: String, trim: true, default: '' },
@@ -47,7 +46,6 @@ const userSchema = new mongoose.Schema(
     lastLogin: { type: Date, default: Date.now },
     deletedAt: { type: Date },
 
-    // ✅ retention metrics helpers
     firstSeenAt: { type: Date },
     lastSeenAt: { type: Date },
 
@@ -82,7 +80,6 @@ const userSchema = new mongoose.Schema(
       awards: { type: [String], default: undefined },
       publications: { type: [String], default: undefined },
 
-      // ✅ GeoJSON-safe
       location: { type: pointSchema, default: undefined },
 
       availableDays: { type: [String], default: undefined },
@@ -115,13 +112,29 @@ const userSchema = new mongoose.Schema(
       },
     },
   },
-  { timestamps: true }
+  { 
+    timestamps: true,
+    toJSON: { virtuals: true },    // ✅ Enable virtuals in JSON
+    toObject: { virtuals: true }   // ✅ Enable virtuals in objects
+  }
 )
 
-// ✅ 2dsphere index requires valid GeoJSON; invalid values will crash writes [web:395]
+// Indexes
 userSchema.index({ 'doctorProfile.location': '2dsphere' })
+userSchema.index({
+  firstName: 'text',
+  lastName: 'text',
+  'doctorProfile.specialization': 'text',
+  'doctorProfile.expertise': 'text',
+})
+userSchema.index({ role: 1 })
+userSchema.index({ isActive: 1 })
+userSchema.index({ 'doctorProfile.affiliatedHospitals': 1 })
+userSchema.index({ 'doctorProfile.specialization': 1 })
+userSchema.index({ 'doctorProfile.isAvailable': 1 })
+userSchema.index({ 'hospitalAdminProfile.hospitalId': 1 })
 
-// Clean invalid location before save
+// ✅ Pre-save hook: Clean invalid location
 userSchema.pre('save', async function () {
   const loc = this.doctorProfile?.location
   const coords = loc?.coordinates
@@ -139,33 +152,17 @@ userSchema.pre('save', async function () {
   }
 })
 
-
-// Indexes
-userSchema.index({
-  firstName: 'text',
-  lastName: 'text',
-  'doctorProfile.specialization': 'text',
-  'doctorProfile.expertise': 'text',
-})
-userSchema.index({ role: 1 })
-userSchema.index({ isActive: 1 })
-userSchema.index({ 'doctorProfile.affiliatedHospitals': 1 })
-userSchema.index({ 'doctorProfile.specialization': 1 })
-userSchema.index({ 'doctorProfile.isAvailable': 1 })
-userSchema.index({ 'hospitalAdminProfile.hospitalId': 1 })
-
-// Virtuals
-userSchema.virtual('hospital', {
-  ref: 'Hospital',
-  localField: 'hospitalAdminProfile.hospitalId',
-  foreignField: '_id',
-  justOne: true,
+// ✅ Virtual: Short ID (last 8 chars of _id)
+userSchema.virtual('shortId').get(function () {
+  return this._id ? this._id.toString().slice(-8).toUpperCase() : null
 })
 
+// ✅ Virtual: Full name
 userSchema.virtual('fullName').get(function () {
-  return `${this.firstName} ${this.lastName}`.trim()
+  return `${this.firstName} ${this.lastName}`.trim() || this.email
 })
 
+// ✅ Virtual: Is doctor active
 userSchema.virtual('isDoctorActive').get(function () {
   if (this.role === 'doctor' && this.doctorProfile) {
     return this.isActive && this.doctorProfile.isAvailable
@@ -173,7 +170,15 @@ userSchema.virtual('isDoctorActive').get(function () {
   return false
 })
 
-// Methods
+// ✅ Virtual: Hospital reference
+userSchema.virtual('hospital', {
+  ref: 'Hospital',
+  localField: 'hospitalAdminProfile.hospitalId',
+  foreignField: '_id',
+  justOne: true,
+})
+
+// ✅ Method: Update location
 userSchema.methods.updateLocation = function (latitude, longitude, address) {
   if (this.role !== 'doctor') throw new Error('Only doctors can have location')
 
@@ -187,7 +192,7 @@ userSchema.methods.updateLocation = function (latitude, longitude, address) {
   return this.save()
 }
 
-// Static for nearby
+// ✅ Static: Find nearby doctors
 userSchema.statics.findNearbyDoctors = function (longitude, latitude, maxDistance = 10000, specialization = null) {
   const query = {
     role: 'doctor',
@@ -206,9 +211,6 @@ userSchema.statics.findNearbyDoctors = function (longitude, latitude, maxDistanc
     })
     .limit(20)
 }
-
-userSchema.set('toJSON', { virtuals: true })
-userSchema.set('toObject', { virtuals: true })
 
 const User = mongoose.models.User || mongoose.model('User', userSchema)
 export default User

@@ -294,12 +294,34 @@ hospitalSchema.index({ isActive: 1, isVerified: 1 });
 hospitalSchema.index({ 'verificationRequest.status': 1 });
 hospitalSchema.index({ name: 'text', description: 'text' });
 
-// Virtual for checking if hospital can be edited
+// ✅ Virtual: Short ID (last 8 chars of _id)
+hospitalSchema.virtual('shortId').get(function () {
+  return this._id ? this._id.toString().slice(-8).toUpperCase() : null
+});
+
+// ✅ Virtual: Full address
+hospitalSchema.virtual('fullAddress').get(function () {
+  const addr = this.address
+  if (!addr) return ''
+  
+  const parts = [
+    addr.street,
+    addr.landmark,
+    addr.city,
+    addr.state,
+    addr.pincode,
+    addr.country
+  ].filter(Boolean)
+  
+  return parts.join(', ')
+});
+
+// ✅ Virtual: Check if hospital can be edited
 hospitalSchema.virtual('canEditBasicInfo').get(function () {
   return !this.isVerified && this.verificationRequest?.status !== 'pending';
 });
 
-// Method to check profile completeness
+// ✅ Method: Check profile completeness
 hospitalSchema.methods.checkProfileCompletion = function () {
   this.isProfileComplete = !!(
     this.name &&
@@ -318,7 +340,7 @@ hospitalSchema.methods.checkProfileCompletion = function () {
   return this.isProfileComplete;
 };
 
-// ✅ FIXED: Pre-save hook without next() callback
+// ✅ Pre-save hook
 hospitalSchema.pre('save', function () {
   this.checkProfileCompletion();
 });

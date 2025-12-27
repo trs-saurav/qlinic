@@ -20,7 +20,7 @@ import toast from 'react-hot-toast'
 import { 
   Upload, CheckCircle, AlertCircle, Loader2, Edit2, 
   User, Phone, Award, Briefcase, DollarSign, Languages,
-  Mail, Calendar, X, Camera, Save
+  Mail, X, Camera, Save, Copy, Check, Hash
 } from 'lucide-react'
 
 const SPECIALIZATIONS = [
@@ -41,7 +41,9 @@ export default function ProfileCompletion() {
   const [profilePhoto, setProfilePhoto] = useState(null)
   const [photoPreview, setPhotoPreview] = useState('')
   const [existingPhotoUrl, setExistingPhotoUrl] = useState('')
-  
+  const [shortId, setShortId] = useState('')
+  const [idCopied, setIdCopied] = useState(false)
+
   const [profile, setProfile] = useState({
     firstName: '',
     lastName: '',
@@ -62,14 +64,14 @@ export default function ProfileCompletion() {
 
   const fetchProfile = async () => {
     setState(prev => ({ ...prev, isFetching: true }))
-    
+
     try {
       const response = await fetch('/api/doctor/profile')
       const data = await response.json()
 
-      if (data.success && data.profile) {
-        const p = data.profile
-        
+      if (data.success && data.doctor) {
+        const p = data.doctor
+
         setProfile({
           firstName: p.firstName || '',
           lastName: p.lastName || '',
@@ -85,13 +87,15 @@ export default function ProfileCompletion() {
             ? p.doctorProfile.languages.join(', ') 
             : ''
         })
-        
+
+        setShortId(p.shortId || p._id?.toString().slice(-8).toUpperCase())
+
         setState(prev => ({
           ...prev,
           profileComplete: p.isProfileComplete || false,
           isEditing: !p.isProfileComplete
         }))
-        
+
         setExistingPhotoUrl(p.profileImage || '')
       }
     } catch (error) {
@@ -99,6 +103,19 @@ export default function ProfileCompletion() {
       toast.error('Failed to load profile')
     } finally {
       setState(prev => ({ ...prev, isFetching: false }))
+    }
+  }
+
+  const copyShortId = async () => {
+    if (!shortId) return
+
+    try {
+      await navigator.clipboard.writeText(shortId)
+      setIdCopied(true)
+      toast.success('Doctor ID copied to clipboard')
+      setTimeout(() => setIdCopied(false), 2000)
+    } catch (err) {
+      toast.error('Failed to copy ID')
     }
   }
 
@@ -169,7 +186,7 @@ export default function ProfileCompletion() {
 
     try {
       const formData = new FormData()
-      
+
       Object.entries(profile).forEach(([key, value]) => {
         formData.append(key, value.toString())
       })
@@ -257,6 +274,48 @@ export default function ProfileCompletion() {
           </CardContent>
         </Card>
 
+        {/* Doctor ID Card */}
+        {shortId && (
+          <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1 flex items-center gap-2">
+                    <Hash className="h-4 w-4" />
+                    Your Doctor ID
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <p className="text-3xl font-bold font-mono tracking-wider">{shortId}</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={copyShortId}
+                    >
+                      {idCopied ? (
+                        <>
+                          <Check className="h-4 w-4 mr-2 text-green-600" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4 mr-2" />
+                          Copy ID
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Share this ID with hospitals to receive invitations
+                  </p>
+                </div>
+                <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Hash className="h-10 w-10 text-primary" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Profile Header Card */}
         <Card className="border-0 shadow-lg">
           <CardContent className="p-8">
@@ -282,7 +341,7 @@ export default function ProfileCompletion() {
                 <p className="text-xl text-emerald-600 dark:text-emerald-400 font-semibold mb-4">
                   {profile.specialization}
                 </p>
-                
+
                 <div className="flex flex-wrap gap-2 mb-6">
                   <Badge variant="secondary" className="px-3 py-1 text-sm">
                     <Briefcase className="w-3 h-3 mr-1" />
@@ -385,7 +444,7 @@ export default function ProfileCompletion() {
 
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-8">
-            
+
             {/* Profile Photo Section */}
             <div className="flex flex-col items-center gap-4 p-6 bg-slate-50 dark:bg-slate-900 rounded-lg">
               <div className="relative group">
@@ -395,7 +454,7 @@ export default function ProfileCompletion() {
                     {initials}
                   </AvatarFallback>
                 </Avatar>
-                
+
                 {(photoPreview || existingPhotoUrl) && (
                   <button
                     type="button"
@@ -405,7 +464,7 @@ export default function ProfileCompletion() {
                     <X className="w-4 h-4" />
                   </button>
                 )}
-                
+
                 <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
                      onClick={() => document.getElementById('photo-upload').click()}>
                   <Camera className="w-8 h-8 text-white" />
@@ -441,7 +500,7 @@ export default function ProfileCompletion() {
                 <User className="w-5 h-5 text-emerald-600" />
                 Personal Information
               </h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="firstName">
@@ -510,7 +569,7 @@ export default function ProfileCompletion() {
                 <Briefcase className="w-5 h-5 text-emerald-600" />
                 Professional Information
               </h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="specialization">
@@ -634,7 +693,7 @@ export default function ProfileCompletion() {
                   </>
                 )}
               </Button>
-              
+
               {state.profileComplete && (
                 <Button
                   type="button"

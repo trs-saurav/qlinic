@@ -16,7 +16,18 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   Select,
   SelectContent,
@@ -41,6 +52,8 @@ import {
   Send,
   UserCheck,
   CalendarClock,
+  Info,
+  UserMinus,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -50,9 +63,6 @@ function buildEmptyWeekly() {
   return DAYS.map((d) => ({ day: d, slots: [] }))
 }
 
-// supports both shapes:
-// - doctor = User doc
-// - affiliation = { doctorId: User doc, ... }
 function getDoctorUser(row) {
   return row?.doctorId && typeof row.doctorId === 'object' ? row.doctorId : row
 }
@@ -60,9 +70,10 @@ function getDoctorUser(row) {
 function doctorName(u) {
   const first = u?.firstName || ''
   const last = u?.lastName || ''
-  const full = `${first} ${last}`.trim()
-  return full ? `Dr. ${full}` : 'Doctor'
+  const full = `${first} ${last}`.trim()  // ✅ CORRECT
+  return full ? `Dr. ${full}` : 'Doctor'   // ✅ CORRECT
 }
+
 
 export default function StaffPage() {
   const {
@@ -81,6 +92,17 @@ export default function StaffPage() {
   const [searching, setSearching] = useState(false)
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
   const [addStaffDialogOpen, setAddStaffDialogOpen] = useState(false)
+  const [editStaffDialogOpen, setEditStaffDialogOpen] = useState(false)
+
+  // Deaffiliation state
+  const [deaffiliateDialogOpen, setDeaffiliateDialogOpen] = useState(false)
+  const [doctorToDeaffiliate, setDoctorToDeaffiliate] = useState(null)
+  const [deaffiliating, setDeaffiliating] = useState(false)
+
+  // Staff deletion state
+  const [deleteStaffDialogOpen, setDeleteStaffDialogOpen] = useState(false)
+  const [staffToDelete, setStaffToDelete] = useState(null)
+  const [deletingStaff, setDeletingStaff] = useState(false)
 
   // schedule dialog
   const [scheduleOpen, setScheduleOpen] = useState(false)
@@ -92,12 +114,10 @@ export default function StaffPage() {
   const [weeklySchedule, setWeeklySchedule] = useState(buildEmptyWeekly())
   const [dateOverrides, setDateOverrides] = useState([])
 
-  // quick add slot state
   const [slotDay, setSlotDay] = useState('MON')
   const [slotStart, setSlotStart] = useState('10:00')
   const [slotEnd, setSlotEnd] = useState('13:00')
 
-  // add override state
   const [overrideDate, setOverrideDate] = useState('')
   const [overrideUnavailable, setOverrideUnavailable] = useState(false)
   const [overrideReason, setOverrideReason] = useState('')
@@ -112,22 +132,39 @@ export default function StaffPage() {
     salary: '',
   })
 
+  const [editingStaffId, setEditingStaffId] = useState(null)
+
   useEffect(() => {
     fetchDoctors()
     fetchStaff()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Doctors list might be either Users OR affiliations
   const doctorsNormalized = useMemo(() => {
     return (doctors || []).map((row) => ({
       raw: row,
       user: getDoctorUser(row),
-      affiliationId: row?.doctorId ? row?._id : null, // if row is affiliation, its _id is affiliationId
+      affiliationId: row?.doctorId ? row?._id : null,
     }))
   }, [doctors])
 
-  // Search for doctors
+  const existingDoctorIds = useMemo(() => {
+    const ids = new Set()
+    doctorsNormalized.forEach(({ user }) => {
+      if (user?._id) ids.add(user._id.toString())
+    })
+    pendingDoctorRequests?.forEach((req) => {
+      if (req.doctorId?._id) ids.add(req.doctorId._id.toString())
+    })
+    return ids
+  }, [doctorsNormalized, pendingDoctorRequests])
+
+  const doctorRequests = useMemo(() => {
+    return (pendingDoctorRequests || []).filter(
+      (req) => req.requestType === 'DOCTOR_TO_HOSPITAL'
+    )
+  }, [pendingDoctorRequests])
+
   const handleSearchDoctors = async () => {
     if (!searchQuery.trim()) {
       toast.error('Please enter a search query')
@@ -153,8 +190,16 @@ export default function StaffPage() {
     }
   }
 
-  // Send invite to doctor
+  const isDoctorAlreadyAffiliated = (doctorId) => {
+    return existingDoctorIds.has(doctorId.toString())
+  }
+
   const handleInviteDoctor = async (doctorId) => {
+    if (isDoctorAlreadyAffiliated(doctorId)) {
+      toast.error('This doctor is already affiliated or has a pending request')
+      return
+    }
+
     try {
       const res = await fetch('/api/hospital/doctors/invite', {
         method: 'POST',
@@ -179,13 +224,11 @@ export default function StaffPage() {
     }
   }
 
-  // Approve doctor request
   const handleApproveRequest = async (affiliationId) => {
     const result = await approveDoctorRequest(affiliationId)
     if (result.success) fetchDoctors()
   }
 
-  // Reject doctor request
   const handleRejectRequest = async (affiliationId) => {
     try {
       const res = await fetch('/api/hospital/doctors/reject', {
@@ -208,7 +251,41 @@ export default function StaffPage() {
     }
   }
 
-  // Add staff member
+  // Deaffiliate doctor
+  const openDeaffiliateDialog = (doctor) => {
+    setDoctorToDeaffiliate(doctor)
+    setDeaffiliateDialogOpen(true)
+  }
+
+  const handleDeaffiliateDoctor = async () => {
+    if (!doctorToDeaffiliate?.affiliationId) return
+
+    setDeaffiliating(true)
+    try {
+      const res = await fetch('/api/hospital/doctors/deaffiliate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ affiliationId: doctorToDeaffiliate.affiliationId }),
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        toast.success('Doctor deaffiliated successfully')
+        setDeaffiliateDialogOpen(false)
+        setDoctorToDeaffiliate(null)
+        fetchDoctors()
+      } else {
+        toast.error(data.error || 'Failed to deaffiliate doctor')
+      }
+    } catch (err) {
+      console.error('Deaffiliate error:', err)
+      toast.error('Failed to deaffiliate doctor')
+    } finally {
+      setDeaffiliating(false)
+    }
+  }
+
   const handleAddStaff = async (e) => {
     e.preventDefault()
 
@@ -242,9 +319,90 @@ export default function StaffPage() {
     }
   }
 
+  // Edit staff
+  const openEditStaffDialog = (member) => {
+    setEditingStaffId(member._id)
+    setStaffForm({
+      name: member.name || '',
+      email: member.email || '',
+      phone: member.phone || '',
+      role: member.role || '',
+      department: member.department || '',
+      salary: member.salary?.toString() || '',
+    })
+    setEditStaffDialogOpen(true)
+  }
+
+  const handleEditStaff = async (e) => {
+    e.preventDefault()
+
+    try {
+      const res = await fetch(`/api/hospital/staff/${editingStaffId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(staffForm),
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        toast.success('Staff member updated successfully')
+        setEditStaffDialogOpen(false)
+        setEditingStaffId(null)
+        setStaffForm({
+          name: '',
+          email: '',
+          phone: '',
+          role: '',
+          department: '',
+          salary: '',
+        })
+        fetchStaff()
+      } else {
+        toast.error(data.error || 'Failed to update staff member')
+      }
+    } catch (err) {
+      console.error('Edit staff error:', err)
+      toast.error('Failed to update staff member')
+    }
+  }
+
+  // Delete staff
+  const openDeleteStaffDialog = (member) => {
+    setStaffToDelete(member)
+    setDeleteStaffDialogOpen(true)
+  }
+
+  const handleDeleteStaff = async () => {
+    if (!staffToDelete?._id) return
+
+    setDeletingStaff(true)
+    try {
+      const res = await fetch(`/api/hospital/staff/${staffToDelete._id}`, {
+        method: 'DELETE',
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        toast.success('Staff member removed successfully')
+        setDeleteStaffDialogOpen(false)
+        setStaffToDelete(null)
+        fetchStaff()
+      } else {
+        toast.error(data.error || 'Failed to remove staff member')
+      }
+    } catch (err) {
+      console.error('Delete staff error:', err)
+      toast.error('Failed to remove staff member')
+    } finally {
+      setDeletingStaff(false)
+    }
+  }
+
   async function openScheduleEditor({ affiliationId, doctorUser }) {
     if (!affiliationId) {
-      toast.error('Missing affiliationId for this doctor (API should return affiliations for schedule editing)')
+      toast.error('Missing affiliationId for this doctor')
       return
     }
 
@@ -352,7 +510,6 @@ export default function StaffPage() {
         </div>
 
         <div className="flex gap-2">
-          {/* Find Doctors */}
           <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="gap-2">
@@ -364,13 +521,13 @@ export default function StaffPage() {
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Search & Invite Doctors</DialogTitle>
-                <DialogDescription>Search for doctors by name, specialization, or location</DialogDescription>
+                <DialogDescription>Search for doctors by name, specialization, or Doctor ID</DialogDescription>
               </DialogHeader>
 
               <div className="space-y-4">
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Search doctors..."
+                    placeholder="Search doctors (name, ID, specialization)..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearchDoctors()}
@@ -382,42 +539,59 @@ export default function StaffPage() {
 
                 {searchResults.length > 0 && (
                   <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {searchResults.map((doctor) => (
-                      <div
-                        key={doctor._id}
-                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarImage src={doctor.profileImage} />
-                            <AvatarFallback>
-                              {doctor.firstName?.[0]}
-                              {doctor.lastName?.[0]}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-semibold">
-                              Dr. {doctor.firstName} {doctor.lastName}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {doctor.doctorProfile?.specialization || 'General'}
-                            </p>
-                          </div>
-                        </div>
+                    {searchResults.map((doctor) => {
+                      const isAffiliated = isDoctorAlreadyAffiliated(doctor._id)
 
-                        <Button size="sm" onClick={() => handleInviteDoctor(doctor._id)}>
-                          <Send className="w-4 h-4 mr-2" />
-                          Invite
-                        </Button>
-                      </div>
-                    ))}
+                      return (
+                        <div
+                          key={doctor._id}
+                          className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarImage src={doctor.profileImage} />
+                              <AvatarFallback>
+                                {doctor.firstName?.[0]}
+                                {doctor.lastName?.[0]}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-semibold">
+                                Dr. {doctor.firstName} {doctor.lastName}
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm text-muted-foreground">
+                                  {doctor.doctorProfile?.specialization || 'General'}
+                                </p>
+                                {doctor.shortId && (
+                                  <Badge variant="secondary" className="text-xs font-mono">
+                                    {doctor.shortId}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {isAffiliated ? (
+                            <Badge variant="secondary" className="gap-1">
+                              <CheckCircle className="w-3 h-3" />
+                              Already Affiliated
+                            </Badge>
+                          ) : (
+                            <Button size="sm" onClick={() => handleInviteDoctor(doctor._id)}>
+                              <Send className="w-4 h-4 mr-2" />
+                              Invite
+                            </Button>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
             </DialogContent>
           </Dialog>
 
-          {/* Add Staff */}
           <Dialog open={addStaffDialogOpen} onOpenChange={setAddStaffDialogOpen}>
             <DialogTrigger asChild>
               <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700">
@@ -520,21 +694,22 @@ export default function StaffPage() {
       </div>
 
       {/* Pending Requests Alert */}
-      {pendingDoctorRequests?.length > 0 && (
+      {doctorRequests.length > 0 && (
         <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950">
           <CardContent className="p-4 flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-blue-600" />
             <div className="flex-1">
               <p className="font-semibold text-blue-900 dark:text-blue-100">
-                {pendingDoctorRequests.length} Pending Doctor Request{pendingDoctorRequests.length > 1 ? 's' : ''}
+                {doctorRequests.length} Pending Doctor Request{doctorRequests.length > 1 ? 's' : ''}
               </p>
-              <p className="text-sm text-blue-700 dark:text-blue-300">Review and approve doctor affiliation requests</p>
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                Doctors have requested to join your hospital
+              </p>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Tabs */}
       <Tabs defaultValue="doctors" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="doctors" className="gap-2">
@@ -543,7 +718,7 @@ export default function StaffPage() {
           </TabsTrigger>
           <TabsTrigger value="requests" className="gap-2">
             <Clock className="w-4 h-4" />
-            Requests ({pendingDoctorRequests?.length || 0})
+            Requests ({doctorRequests.length})
           </TabsTrigger>
           <TabsTrigger value="staff" className="gap-2">
             <Users className="w-4 h-4" />
@@ -608,7 +783,6 @@ export default function StaffPage() {
                           {user?.doctorProfile?.isAvailable ? 'Available' : 'Unavailable'}
                         </Badge>
 
-                        {/* ✅ schedule edit (needs affiliationId) */}
                         <Button
                           variant="outline"
                           size="sm"
@@ -619,8 +793,13 @@ export default function StaffPage() {
                           Schedule
                         </Button>
 
-                        <Button variant="ghost" size="sm">
-                          <Edit2 className="w-4 h-4" />
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => openDeaffiliateDialog({ user, affiliationId })}
+                        >
+                          <UserMinus className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
@@ -641,12 +820,18 @@ export default function StaffPage() {
         <TabsContent value="requests" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Pending Doctor Requests</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                Doctor Requests
+                <Badge variant="secondary" className="text-xs">
+                  <Info className="w-3 h-3 mr-1" />
+                  From Doctors Only
+                </Badge>
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              {pendingDoctorRequests?.length > 0 ? (
+              {doctorRequests.length > 0 ? (
                 <div className="space-y-3">
-                  {pendingDoctorRequests.map((request) => (
+                  {doctorRequests.map((request) => (
                     <div key={request._id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex items-center gap-4">
                         <Avatar className="w-12 h-12">
@@ -663,9 +848,21 @@ export default function StaffPage() {
                           <p className="text-sm text-muted-foreground">
                             {request.doctorId?.doctorProfile?.specialization || 'General Medicine'}
                           </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Requested on {new Date(request.requestedAt || request.createdAt).toLocaleDateString()}
-                          </p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <p className="text-xs text-muted-foreground">
+                              Requested on {new Date(request.requestedAt || request.createdAt).toLocaleDateString()}
+                            </p>
+                            {request.notes && (
+                              <Badge variant="outline" className="text-xs">
+                                Has message
+                              </Badge>
+                            )}
+                          </div>
+                          {request.notes && (
+                            <p className="text-xs text-muted-foreground mt-1 italic">
+                              "{request.notes}"
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -695,14 +892,16 @@ export default function StaffPage() {
                 <div className="text-center py-12">
                   <UserCheck className="w-16 h-16 mx-auto text-slate-300 mb-4" />
                   <p className="text-lg font-medium text-slate-600">No pending requests</p>
-                  <p className="text-sm text-muted-foreground mt-1">All doctor requests have been processed</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    No doctors have requested to join your hospital yet
+                  </p>
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Staff Tab (unchanged) */}
+        {/* Staff Tab */}
         <TabsContent value="staff" className="space-y-4">
           <Card>
             <CardHeader>
@@ -756,10 +955,19 @@ export default function StaffPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex justify-end gap-2">
-                              <Button variant="ghost" size="sm">
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => openEditStaffDialog(member)}
+                              >
                                 <Edit2 className="w-4 h-4" />
                               </Button>
-                              <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="text-red-600 hover:text-red-700"
+                                onClick={() => openDeleteStaffDialog(member)}
+                              >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                             </div>
@@ -781,7 +989,145 @@ export default function StaffPage() {
         </TabsContent>
       </Tabs>
 
-      {/* ✅ Schedule Editor Dialog */}
+      {/* Edit Staff Dialog */}
+      <Dialog open={editStaffDialogOpen} onOpenChange={setEditStaffDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Staff Member</DialogTitle>
+            <DialogDescription>Update staff member information</DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleEditStaff} className="space-y-4">
+            <div>
+              <Label htmlFor="edit-name">Full Name *</Label>
+              <Input
+                id="edit-name"
+                value={staffForm.name}
+                onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-email">Email</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={staffForm.email}
+                  onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-phone">Phone *</Label>
+                <Input
+                  id="edit-phone"
+                  value={staffForm.phone}
+                  onChange={(e) => setStaffForm({ ...staffForm, phone: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="edit-role">Role *</Label>
+              <Select value={staffForm.role} onValueChange={(value) => setStaffForm({ ...staffForm, role: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="nurse">Nurse</SelectItem>
+                  <SelectItem value="technician">Technician</SelectItem>
+                  <SelectItem value="pharmacist">Pharmacist</SelectItem>
+                  <SelectItem value="receptionist">Receptionist</SelectItem>
+                  <SelectItem value="lab_assistant">Lab Assistant</SelectItem>
+                  <SelectItem value="radiologist">Radiologist</SelectItem>
+                  <SelectItem value="cleaner">Cleaner</SelectItem>
+                  <SelectItem value="security">Security</SelectItem>
+                  <SelectItem value="admin">Admin Staff</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="edit-department">Department</Label>
+              <Input
+                id="edit-department"
+                value={staffForm.department}
+                onChange={(e) => setStaffForm({ ...staffForm, department: e.target.value })}
+                placeholder="e.g., Emergency, ICU, OPD"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-salary">Monthly Salary (₹)</Label>
+              <Input
+                id="edit-salary"
+                type="number"
+                value={staffForm.salary}
+                onChange={(e) => setStaffForm({ ...staffForm, salary: e.target.value })}
+                placeholder="25000"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-4">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setEditStaffDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="flex-1">
+                Update Staff
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deaffiliate Doctor Alert Dialog */}
+      <AlertDialog open={deaffiliateDialogOpen} onOpenChange={setDeaffiliateDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deaffiliate Doctor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to deaffiliate {doctorToDeaffiliate?.user ? doctorName(doctorToDeaffiliate.user) : 'this doctor'}? 
+              This will remove them from your hospital's doctor list and cancel all their upcoming appointments.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeaffiliateDoctor}
+              disabled={deaffiliating}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deaffiliating ? 'Deaffiliating...' : 'Deaffiliate'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Staff Alert Dialog */}
+      <AlertDialog open={deleteStaffDialogOpen} onOpenChange={setDeleteStaffDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Staff Member?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove {staffToDelete?.name}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteStaff}
+              disabled={deletingStaff}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deletingStaff ? 'Removing...' : 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Schedule Editor Dialog */}
       <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
@@ -850,7 +1196,7 @@ export default function StaffPage() {
                           <p className="text-sm text-muted-foreground">No slots</p>
                         ) : (
                           d.slots.map((s, idx) => (
-                            <div key={`${d.day}-${idx}`} className="flex items-center justify-between gap-2 border rounded-lg p-2">
+                            <div key={`\${d.day}-\${idx}`} className="flex items-center justify-between gap-2 border rounded-lg p-2">
                               <div className="text-sm">
                                 <span className="font-semibold">{s.start}</span> - <span className="font-semibold">{s.end}</span>
                               </div>
