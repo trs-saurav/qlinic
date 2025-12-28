@@ -39,65 +39,65 @@ export function DoctorProvider({ children }) {
   const [affiliations, setAffiliations] = useState([])
   const [affiliationsLoading, setAffiliationsLoading] = useState(false)
 
-  // ================= Schedule =================
-  const [schedule, setSchedule] = useState({
-    weekly: [],
-    exceptions: [],
-  })
-  const [scheduleLoading, setScheduleLoading] = useState(false)
-
   // ================= Notifications =================
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
 
   // ================= Fetchers =================
 
-const fetchDoctorProfile = useCallback(async () => {
-  console.log('🚀 fetchDoctorProfile called, user:', user?.id)
-  
-  if (!user) {
-    console.log('❌ No user, returning')
-    return
-  }
-
-  try {
-    setDoctorLoading(true)
-    setDoctorError(null)
-
-    console.log('📡 Fetching /api/doctor/profile...')
-    const res = await fetch('/api/doctor/profile', {
-      headers: { Accept: 'application/json' },
-    })
-    const data = await res.json()
-
-    console.log('📊 Profile response:', { status: res.status, data })
-
-    if (!res.ok) {
-      setDoctor(null)
-      setDoctorError(data?.error || 'Failed to load doctor profile')
+  const fetchDoctorProfile = useCallback(async () => {
+    console.log('🚀 fetchDoctorProfile called, user:', user?.id)
+    
+    if (!user) {
+      console.log('❌ No user, returning')
+      setDoctorLoading(false)
       return
     }
 
-    console.log('✅ Setting doctor:', data?.profile || data?.doctor) // ✅ Handle both keys
-    setDoctor(data?.profile || data?.doctor || null) // ✅ Try both 'profile' and 'doctor'
-  } catch (err) {
-    console.error('❌ fetchDoctorProfile:', err)
-    setDoctor(null)
-    setDoctorError('Failed to load doctor profile')
-    toast.error('Failed to load doctor profile')
-  } finally {
-    setDoctorLoading(false)
-  }
-}, [user])
+    try {
+      setDoctorLoading(true)
+      setDoctorError(null)
 
+      console.log('📡 Fetching /api/doctor/profile...')
+      const res = await fetch('/api/doctor/profile', {
+        headers: { Accept: 'application/json' },
+      })
+      const data = await res.json()
+
+      console.log('📊 Profile response:', { status: res.status, data })
+
+      if (!res.ok) {
+        setDoctor(null)
+        setDoctorError(data?.error || 'Failed to load doctor profile')
+        return
+      }
+
+      // ✅ Handle both 'profile' and 'doctor' keys
+      const doctorData = data?.profile || data?.doctor || null
+      console.log('✅ Setting doctor:', doctorData)
+      setDoctor(doctorData)
+    } catch (err) {
+      console.error('❌ fetchDoctorProfile:', err)
+      setDoctor(null)
+      setDoctorError('Failed to load doctor profile')
+      toast.error('Failed to load doctor profile')
+    } finally {
+      setDoctorLoading(false)
+    }
+  }, [user])
 
   const fetchDoctorDashboard = useCallback(async () => {
     if (!doctor?._id) return
     try {
       setDashboardLoading(true)
-      const res = await fetch('/api/doctor/dashboard', { headers: { Accept: 'application/json' } })
+      const res = await fetch('/api/doctor/dashboard', { 
+        headers: { Accept: 'application/json' } 
+      })
       const data = await res.json()
-      if (res.ok) setDashboard(data.dashboard || dashboard)
+      
+      if (res.ok) {
+        setDashboard(data.dashboard || dashboard)
+      }
     } catch (err) {
       console.error('❌ fetchDoctorDashboard:', err)
     } finally {
@@ -134,7 +134,13 @@ const fetchDoctorProfile = useCallback(async () => {
   )
 
   const fetchAffiliations = useCallback(async () => {
-    if (!doctor?._id) return
+    console.log('🔄 fetchAffiliations called, doctor:', doctor?._id)
+    
+    if (!doctor?._id) {
+      console.log('❌ No doctor ID, skipping affiliations fetch')
+      return
+    }
+    
     try {
       setAffiliationsLoading(true)
       const res = await fetch('/api/doctor/affiliations', {
@@ -142,42 +148,22 @@ const fetchDoctorProfile = useCallback(async () => {
       })
       const data = await res.json()
 
-      console.log('✅ Affiliations response:', { status: res.status, data }) // DEBUG
+      console.log('✅ Affiliations response:', { status: res.status, data })
 
       if (!res.ok) {
+        console.error('❌ Affiliations error:', data?.error)
         toast.error(data?.error || 'Failed to load affiliations')
+        setAffiliations([])
         return
       }
 
       setAffiliations(data.affiliations || [])
     } catch (err) {
-      console.error('❌ fetchAffiliations:', err)
+      console.error('❌ fetchAffiliations exception:', err)
       toast.error('Failed to load affiliations')
+      setAffiliations([])
     } finally {
       setAffiliationsLoading(false)
-    }
-  }, [doctor?._id])
-
-  const fetchSchedule = useCallback(async () => {
-    if (!doctor?._id) return
-    try {
-      setScheduleLoading(true)
-      const res = await fetch('/api/doctor/schedule', {
-        headers: { Accept: 'application/json' },
-      })
-      const data = await res.json()
-
-      if (!res.ok) {
-        toast.error(data?.error || 'Failed to load schedule')
-        return
-      }
-
-      setSchedule(data.schedule || { weekly: [], exceptions: [] })
-    } catch (err) {
-      console.error('❌ fetchSchedule:', err)
-      toast.error('Failed to load schedule')
-    } finally {
-      setScheduleLoading(false)
     }
   }, [doctor?._id])
 
@@ -200,12 +186,80 @@ const fetchDoctorProfile = useCallback(async () => {
 
   // ================= Actions =================
 
+  const updateDoctorProfile = useCallback(async (updates) => {
+    try {
+      const res = await fetch('/api/doctor/profile', {
+        method: 'PATCH',
+        headers: { 
+          'Content-Type': 'application/json',
+          Accept: 'application/json' 
+        },
+        body: JSON.stringify(updates),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        toast.error(data?.error || 'Failed to update profile')
+        return { success: false, error: data?.error }
+      }
+
+      setDoctor(data.doctor || data.profile)
+      toast.success('Profile updated successfully')
+      return { success: true, doctor: data.doctor || data.profile }
+    } catch (err) {
+      console.error('❌ updateDoctorProfile:', err)
+      toast.error('Failed to update profile')
+      return { success: false, error: err.message }
+    }
+  }, [])
+
+  const updateAppointmentStatus = useCallback(async (appointmentId, status, notes) => {
+    try {
+      const res = await fetch(`/api/doctor/appointments/${appointmentId}`, {
+        method: 'PATCH',
+        headers: { 
+          'Content-Type': 'application/json',
+          Accept: 'application/json' 
+        },
+        body: JSON.stringify({ status, notes }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        toast.error(data?.error || 'Failed to update appointment')
+        return { success: false }
+      }
+
+      // Update local state
+      setAppointments(prev => 
+        prev.map(apt => 
+          apt._id === appointmentId 
+            ? { ...apt, status, notes: notes || apt.notes }
+            : apt
+        )
+      )
+
+      toast.success('Appointment updated successfully')
+      return { success: true }
+    } catch (err) {
+      console.error('❌ updateAppointmentStatus:', err)
+      toast.error('Failed to update appointment')
+      return { success: false }
+    }
+  }, [])
+
   const markNotificationRead = useCallback(async (notificationId) => {
     try {
-      const res = await fetch(`/api/doctor/notifications/${notificationId}/read`, { method: 'PATCH' })
+      const res = await fetch(`/api/doctor/notifications/${notificationId}/read`, { 
+        method: 'PATCH' 
+      })
+      
       if (!res.ok) return
-      setNotifications((prev) => prev.map((n) => (n._id === notificationId ? { ...n, read: true } : n)))
-      setUnreadCount((prev) => Math.max(0, prev - 1))
+
+      setNotifications(prev => 
+        prev.map(n => n._id === notificationId ? { ...n, read: true } : n)
+      )
+      setUnreadCount(prev => Math.max(0, prev - 1))
     } catch (err) {
       console.error('❌ markNotificationRead:', err)
     }
@@ -213,11 +267,13 @@ const fetchDoctorProfile = useCallback(async () => {
 
   const refreshAll = useCallback(async () => {
     if (!doctor?._id) return
+    
+    console.log('🔄 Refreshing all doctor data...')
+    
     await Promise.all([
       fetchDoctorDashboard(),
       fetchAppointments(appointmentsFilter),
       fetchAffiliations(),
-      fetchSchedule(),
       fetchNotifications(),
     ])
   }, [
@@ -226,7 +282,6 @@ const fetchDoctorProfile = useCallback(async () => {
     fetchDoctorDashboard,
     fetchAppointments,
     fetchAffiliations,
-    fetchSchedule,
     fetchNotifications,
   ])
 
@@ -234,8 +289,18 @@ const fetchDoctorProfile = useCallback(async () => {
 
   // 1. Init once when Clerk is ready
   useEffect(() => {
-    if (!isLoaded || !user) return
+    if (!isLoaded) return
+    
+    if (!user) {
+      console.log('❌ No user loaded, resetting state')
+      setDoctor(null)
+      setDoctorLoading(false)
+      return
+    }
+    
     if (didInitRef.current) return
+    
+    console.log('🎯 Initializing doctor context for user:', user.id)
     didInitRef.current = true
     fetchDoctorProfile()
   }, [isLoaded, user, fetchDoctorProfile])
@@ -243,10 +308,32 @@ const fetchDoctorProfile = useCallback(async () => {
   // 2. After doctor is known, fetch baseline data once
   useEffect(() => {
     if (!doctor?._id) return
+    
+    console.log('📊 Doctor loaded, fetching initial data for:', doctor._id)
+    
     fetchDoctorDashboard()
-    fetchAffiliations()    // ✅ ADDED: Fetch affiliations on mount
+    fetchAffiliations()
     fetchNotifications()
   }, [doctor?._id, fetchDoctorDashboard, fetchAffiliations, fetchNotifications])
+
+  // 3. Reset when user logs out
+  useEffect(() => {
+    if (isLoaded && !user) {
+      console.log('👋 User logged out, resetting context')
+      didInitRef.current = false
+      setDoctor(null)
+      setDashboard({
+        todayAppointments: 0,
+        upcomingAppointments: 0,
+        completedThisWeek: 0,
+        pendingHospitalInvites: 0,
+      })
+      setAppointments([])
+      setAffiliations([])
+      setNotifications([])
+      setUnreadCount(0)
+    }
+  }, [isLoaded, user])
 
   const value = {
     // doctor
@@ -254,6 +341,7 @@ const fetchDoctorProfile = useCallback(async () => {
     doctorLoading,
     doctorError,
     fetchDoctorProfile,
+    updateDoctorProfile,
 
     // dashboard
     dashboard,
@@ -265,16 +353,12 @@ const fetchDoctorProfile = useCallback(async () => {
     appointmentsLoading,
     appointmentsFilter,
     fetchAppointments,
+    updateAppointmentStatus,
 
     // affiliations
     affiliations,
     affiliationsLoading,
     fetchAffiliations,
-
-    // schedule
-    schedule,
-    scheduleLoading,
-    fetchSchedule,
 
     // notifications
     notifications,

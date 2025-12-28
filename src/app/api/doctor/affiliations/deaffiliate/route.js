@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import  connectDB  from "@/config/db";
-import User from "@/models/uer";
+import User from "@/models/user";
 import HospitalAffiliation from "@/models/hospitalAffiliation";
 import Appointment from "@/models/appointment";
 
