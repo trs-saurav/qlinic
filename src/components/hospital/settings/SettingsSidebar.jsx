@@ -16,6 +16,7 @@ import {
   Info,
   ChevronRight,
   UserCog,
+  ImageIcon
 } from 'lucide-react'
 
 const SETTINGS_NAV = [
@@ -25,6 +26,14 @@ const SETTINGS_NAV = [
     href: '/hospital-admin/settings',
     icon: Building2,
   },
+  // In your settings navigation array
+{
+  label: 'Media & Gallery',
+  description: 'Profile photos & practice gallery',
+  href: '/hospital-admin/settings/media',
+  icon: ImageIcon, // or Camera, Images
+},
+
   {
     label: 'Language & Region',
     description: 'Language, timezone & preferences',

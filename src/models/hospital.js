@@ -1,4 +1,5 @@
-import mongoose from 'mongoose';
+// models/hospital.js - OPTIMIZED VERSION
+import mongoose from 'mongoose'
 
 const hospitalSchema = new mongoose.Schema(
   {
@@ -25,6 +26,7 @@ const hospitalSchema = new mongoose.Schema(
         'Super-Specialty',
       ],
       default: 'Private',
+      index: true, // Added index
     },
     established: {
       type: Date,
@@ -75,10 +77,42 @@ const hospitalSchema = new mongoose.Schema(
       },
       pincode: String,
       coordinates: {
-        latitude: Number,
-        longitude: Number,
+        latitude: {
+          type: Number,
+          min: -90,
+          max: 90
+        },
+        longitude: {
+          type: Number,
+          min: -180,
+          max: 180
+        }
       },
     },
+
+    // Media - FIXED: Removed duplicate logo field
+    logo: {
+      type: String,
+      default: null
+    },
+    
+    coverPhoto: {
+      type: String,
+      default: null
+    },
+    
+    facilityPhotos: {
+      type: [String],
+      default: [],
+      validate: {
+        validator: function(v) {
+          return v.length <= 6
+        },
+        message: 'Maximum 6 facility photos allowed'
+      }
+    },
+
+    // REMOVED: Duplicate images field (use facilityPhotos instead)
 
     // Operating Hours
     operatingHours: {
@@ -165,10 +199,23 @@ const hospitalSchema = new mongoose.Schema(
       },
     ],
     
-    specialties: [String],
-    facilities: [String],
-    amenities: [String],
-    accreditations: [String],
+    specialties: {
+      type: [String],
+      default: [],
+      index: true, // Added index for search
+    },
+    facilities: {
+      type: [String],
+      default: [],
+    },
+    amenities: {
+      type: [String],
+      default: [],
+    },
+    accreditations: {
+      type: [String],
+      default: [],
+    },
 
     emergencyServices: {
       type: Boolean,
@@ -183,10 +230,6 @@ const hospitalSchema = new mongoose.Schema(
       },
       providers: [String],
     },
-
-    // Images
-    logo: String,
-    images: [String],
 
     // Additional Info
     websiteUrl: String,
@@ -204,6 +247,12 @@ const hospitalSchema = new mongoose.Schema(
         ref: 'User',
       },
     ],
+
+    // Clerk ID for hospital admin
+    adminClerkId: {
+      type: String,
+      index: true,
+    },
 
     // Status
     isActive: {
@@ -227,6 +276,7 @@ const hospitalSchema = new mongoose.Schema(
         type: String,
         enum: ['none', 'pending', 'approved', 'rejected'],
         default: 'none',
+        index: true, // Added index
       },
       requestedAt: Date,
       reviewedAt: Date,
@@ -264,40 +314,53 @@ const hospitalSchema = new mongoose.Schema(
       ],
     },
 
-    // Ratings
+    // Ratings - FIXED: Use simple numbers for search compatibility
     rating: {
-      average: {
-        type: Number,
-        default: 0,
-        min: 0,
-        max: 5,
-      },
-      count: {
-        type: Number,
-        default: 0,
-      },
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
     },
+    totalReviews: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    
   },
   {
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
-);
+)
 
-// Indexes for better query performance
-hospitalSchema.index({ 'address.city': 1, 'address.state': 1 });
-hospitalSchema.index({ specialties: 1 });
-hospitalSchema.index({ facilities: 1 });
-hospitalSchema.index({ type: 1 });
-hospitalSchema.index({ isActive: 1, isVerified: 1 });
-hospitalSchema.index({ 'verificationRequest.status': 1 });
-hospitalSchema.index({ name: 'text', description: 'text' });
+// ✅ Indexes for better query performance
+hospitalSchema.index({ 'address.city': 1, 'address.state': 1 })
+hospitalSchema.index({ 'address.city': 1, isActive: 1 })
+hospitalSchema.index({ specialties: 1 })
+hospitalSchema.index({ facilities: 1 })
+hospitalSchema.index({ type: 1 })
+hospitalSchema.index({ isActive: 1, isVerified: 1 })
+hospitalSchema.index({ isActive: 1, rating: -1 }) // For sorting by rating
+hospitalSchema.index({ 'verificationRequest.status': 1 })
+
+// ✅ Text index for search
+hospitalSchema.index({ 
+  name: 'text', 
+  description: 'text',
+  'address.city': 'text',
+  'address.state': 'text',
+  specialties: 'text'
+})
+
+// ✅ Geospatial index for location-based search
+hospitalSchema.index({ 'address.coordinates': '2dsphere' })
 
 // ✅ Virtual: Short ID (last 8 chars of _id)
 hospitalSchema.virtual('shortId').get(function () {
   return this._id ? this._id.toString().slice(-8).toUpperCase() : null
-});
+})
 
 // ✅ Virtual: Full address
 hospitalSchema.virtual('fullAddress').get(function () {
@@ -314,12 +377,34 @@ hospitalSchema.virtual('fullAddress').get(function () {
   ].filter(Boolean)
   
   return parts.join(', ')
-});
+})
+
+// ✅ Virtual: Is currently open
+hospitalSchema.virtual('isCurrentlyOpen').get(function () {
+  if (this.operatingHours?.isOpen24x7) return true
+  
+  const now = new Date()
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  const today = dayNames[now.getDay()]
+  
+  const todayHours = this.operatingHours?.[today]
+  if (!todayHours || !todayHours.isOpen) return false
+  
+  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  
+  return currentTime >= todayHours.open && currentTime <= todayHours.close
+})
 
 // ✅ Virtual: Check if hospital can be edited
 hospitalSchema.virtual('canEditBasicInfo').get(function () {
-  return !this.isVerified && this.verificationRequest?.status !== 'pending';
-});
+  return !this.isVerified && this.verificationRequest?.status !== 'pending'
+})
+
+// ✅ Virtual: Available bed percentage
+hospitalSchema.virtual('bedAvailabilityPercentage').get(function () {
+  if (!this.totalBeds || this.totalBeds === 0) return 0
+  return Math.round((this.availableBeds / this.totalBeds) * 100)
+})
 
 // ✅ Method: Check profile completeness
 hospitalSchema.methods.checkProfileCompletion = function () {
@@ -336,16 +421,73 @@ hospitalSchema.methods.checkProfileCompletion = function () {
     this.totalBeds &&
     this.specialties?.length > 0 &&
     this.facilities?.length > 0
-  );
-  return this.isProfileComplete;
-};
+  )
+  return this.isProfileComplete
+}
+
+// ✅ Method: Update rating
+hospitalSchema.methods.updateRating = function (newRating) {
+  const currentTotal = this.rating * this.totalReviews
+  this.totalReviews += 1
+  this.rating = (currentTotal + newRating) / this.totalReviews
+  return this.save()
+}
+
+// ✅ Static: Find nearby hospitals
+hospitalSchema.statics.findNearby = function (latitude, longitude, maxDistance = 10000, filters = {}) {
+  return this.find({
+    'address.coordinates': {
+      $near: {
+        $geometry: {
+          type: 'Point',
+          coordinates: [longitude, latitude]
+        },
+        $maxDistance: maxDistance
+      }
+    },
+    isActive: true,
+    ...filters
+  }).limit(20)
+}
+
+// ✅ Static: Search hospitals
+hospitalSchema.statics.search = function (query, filters = {}) {
+  const searchQuery = {
+    isActive: true,
+    ...filters
+  }
+
+  if (query) {
+    searchQuery.$text = { $search: query }
+  }
+
+  return this.find(searchQuery)
+    .sort({ rating: -1, totalReviews: -1 })
+    .limit(20)
+}
 
 // ✅ Pre-save hook
-hospitalSchema.pre('save', function () {
-  this.checkProfileCompletion();
-});
+hospitalSchema.pre('save', function (next) {
+  // Check profile completion
+  this.checkProfileCompletion()
+  
+  // Ensure availableBeds doesn't exceed totalBeds
+  if (this.availableBeds > this.totalBeds) {
+    this.availableBeds = this.totalBeds
+  }
+  
+  // Validate coordinates if provided
+  if (this.address?.coordinates?.latitude && this.address?.coordinates?.longitude) {
+    const { latitude, longitude } = this.address.coordinates
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      this.address.coordinates = { latitude: null, longitude: null }
+    }
+  }
+  
+  next()
+})
 
 // ✅ Prevent OverwriteModelError in development
-const Hospital = mongoose.models.Hospital || mongoose.model('Hospital', hospitalSchema);
+const Hospital = mongoose.models.Hospital || mongoose.model('Hospital', hospitalSchema)
 
-export default Hospital;
+export default Hospital

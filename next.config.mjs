@@ -1,7 +1,28 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  /* config options here */
-  reactCompiler: true,
-};
 
-export default nextConfig;
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+
+const nextConfig = {
+  images: {
+    domains: ['res.cloudinary.com'],
+    formats: ['image/webp'],
+  },
+    reactCompiler: true,
+  turbopack: {
+    root: __dirname,
+  },
+  // Disable preload warnings
+  webpack: (config) => {
+    config.infrastructureLogging = {
+      level: 'error',
+    }
+    return config
+  }
+}
+
+export default nextConfig
