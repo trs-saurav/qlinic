@@ -169,22 +169,24 @@ const LocationSelector = ({
 
   return (
     <>
-      {/* Trigger button */}
-      <button
-        type="button"
-        onClick={() => setShowLocationModal(true)}
-        className={
-          buttonClassName ??
-          "flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-50/50 " +
-            "dark:bg-emerald-900/20 text-xs font-medium text-gray-700 " +
-            "dark:text-gray-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
-        }
-      >
-        <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-        <span className="truncate max-w-[80px]">
-          {locationName || "Location"}
-        </span>
-      </button>
+      {/* Trigger button - only render if showLocationModal is not controlled by parent */}
+      {showLocationModal === undefined && (
+        <button
+          type="button"
+          onClick={() => setShowLocationModal(true)}
+          className={
+            buttonClassName ??
+            "flex items-center gap-1.5 px-2 py-1 rounded-full bg-blue-50/50 " +
+              "dark:bg-blue-900/20 text-xs font-medium text-gray-700 " +
+              "dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+          }
+        >
+          <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+          <span className="truncate max-w-[80px]">
+            {locationName || "Location"}
+          </span>
+        </button>
+      )}
 
       {/* Modal */}
       <AnimatePresence>
@@ -201,7 +203,7 @@ const LocationSelector = ({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl border-2 border-emerald-200/50 dark:border-emerald-800/50 overflow-hidden shadow-2xl"
+              className="w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl border-2 border-blue-200/50 dark:border-blue-800/50 overflow-hidden shadow-2xl"
             >
               <div className="p-6 space-y-5">
                 <div className="flex items-center justify-between">
@@ -223,9 +225,9 @@ const LocationSelector = ({
                 <button
                   onClick={handleLocationRequest}
                   disabled={locationStatus === "loading"}
-                  className="w-full flex items-center gap-4 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 hover:from-emerald-100 hover:to-teal-100 dark:hover:from-emerald-900/30 dark:hover:to-teal-900/30 rounded-2xl border-2 border-emerald-200 dark:border-emerald-800 transition-all"
+                  className="w-full flex items-center gap-4 p-4 bg-gradient-to-r from-blue-50 to-teal-50 dark:from-blue-900/20 dark:to-teal-900/20 hover:from-blue-100 hover:to-teal-100 dark:hover:from-blue-900/30 dark:hover:to-teal-900/30 rounded-2xl border-2 border-blue-200 dark:border-blue-800 transition-all"
                 >
-                  <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
                     {locationStatus === "loading" ? (
                       <motion.div
                         animate={{ rotate: 360 }}
@@ -255,45 +257,45 @@ const LocationSelector = ({
 
                 {/* Divider text */}
                 <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-emerald-100 dark:bg-emerald-900/60" />
+                  <div className="h-px flex-1 bg-blue-100 dark:bg-blue-900/60" />
                   <span className="text-[11px] uppercase tracking-wide text-gray-400">
                     Or search anywhere
                   </span>
-                  <div className="h-px flex-1 bg-emerald-100 dark:bg-emerald-900/60" />
+                  <div className="h-px flex-1 bg-blue-100 dark:bg-blue-900/60" />
                 </div>
 
                 {/* Manual global search */}
                 <div ref={manualRef} className="space-y-2">
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500" />
                     <Input
                       type="text"
                       placeholder="Search any city, area or place in the world..."
                       value={manualQuery}
                       onChange={(e) => setManualQuery(e.target.value)}
                       onKeyDown={handleManualKeyDown}
-                      className="w-full pl-10 pr-20 h-10 rounded-2xl border-emerald-200/70 dark:border-emerald-800/70 focus:border-emerald-500 dark:focus:border-emerald-500 text-sm"
+                      className="w-full pl-10 pr-20 h-10 rounded-2xl border-blue-200/70 dark:border-blue-800/70 focus:border-blue-500 dark:focus:border-blue-500 text-sm"
                     />
                     <button
                       type="button"
                       onClick={searchManualLocations}
                       disabled={isSearching}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-60"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60"
                     >
                       {isSearching ? "Searching..." : "Search"}
                     </button>
                   </div>
 
                   {manualResults.length > 0 && (
-                    <div className="mt-1 max-h-52 overflow-auto rounded-2xl border border-emerald-100 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/40">
-                      <ul className="divide-y divide-emerald-100/70 dark:divide-emerald-900/70 text-sm">
+                    <div className="mt-1 max-h-52 overflow-auto rounded-2xl border border-blue-100 dark:border-blue-800 bg-blue-50/40 dark:bg-blue-950/40">
+                      <ul className="divide-y divide-blue-100/70 dark:divide-blue-900/70 text-sm">
                         {manualResults.map((place, idx) => (
                           <li
                             key={place.place_id}
                             onClick={() => handleSelectManual(place)}
-                            className={`px-3 py-2.5 cursor-pointer hover:bg-emerald-100/80 dark:hover:bg-emerald-900/50 ${
+                            className={`px-3 py-2.5 cursor-pointer hover:bg-blue-100/80 dark:hover:bg-blue-900/50 ${
                               idx === activeIndex
-                                ? "bg-emerald-100/80 dark:bg-emerald-900/60"
+                                ? "bg-blue-100/80 dark:bg-blue-900/60"
                                 : ""
                             }`}
                           >

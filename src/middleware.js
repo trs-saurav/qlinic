@@ -11,6 +11,7 @@ export async function middleware(req) {
     '/api/user/check',
     '/api/webhooks',
     '/api/inngest',
+    '/api/search',
   ]
 
   // Check if current path is a public API route
