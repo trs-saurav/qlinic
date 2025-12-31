@@ -1,4 +1,3 @@
-// models/hospital.js - OPTIMIZED VERSION
 import mongoose from 'mongoose'
 
 const hospitalSchema = new mongoose.Schema(
@@ -13,7 +12,8 @@ const hospitalSchema = new mongoose.Schema(
     registrationNumber: {
       type: String,
       trim: true,
-      index: true,
+      sparse: true,
+      unique: true,
     },
     type: {
       type: String,
@@ -26,7 +26,7 @@ const hospitalSchema = new mongoose.Schema(
         'Super-Specialty',
       ],
       default: 'Private',
-      index: true, // Added index
+      index: true,
     },
     established: {
       type: Date,
@@ -90,7 +90,7 @@ const hospitalSchema = new mongoose.Schema(
       },
     },
 
-    // Media - FIXED: Removed duplicate logo field
+    // Media
     logo: {
       type: String,
       default: null
@@ -101,18 +101,16 @@ const hospitalSchema = new mongoose.Schema(
       default: null
     },
     
-    facilityPhotos: {
+    images: {
       type: [String],
       default: [],
       validate: {
         validator: function(v) {
-          return v.length <= 6
+          return v.length <= 10
         },
-        message: 'Maximum 6 facility photos allowed'
+        message: 'Maximum 10 images allowed'
       }
     },
-
-    // REMOVED: Duplicate images field (use facilityPhotos instead)
 
     // Operating Hours
     operatingHours: {
@@ -178,11 +176,26 @@ const hospitalSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    
+    // ✅ FIX: consultationFee as object with nested fields
     consultationFee: {
-      type: Number,
-      default: 500,
-      min: 0,
+      general: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      specialist: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      emergency: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
     },
+    
     emergencyFee: {
       type: Number,
       default: 0,
@@ -196,31 +209,44 @@ const hospitalSchema = new mongoose.Schema(
         description: String,
         headOfDepartment: String,
         contactNumber: String,
+        floor: String,
       },
     ],
     
     specialties: {
       type: [String],
       default: [],
-      index: true, // Added index for search
+      index: true,
     },
+    
     facilities: {
       type: [String],
       default: [],
     },
+    
     amenities: {
       type: [String],
       default: [],
     },
+    
     accreditations: {
       type: [String],
       default: [],
     },
 
+    // ✅ FIX: emergencyServices as array of strings or objects
     emergencyServices: {
-      type: Boolean,
-      default: false,
+      type: [String],
+      default: [],
     },
+    
+    // OR if you need more detail:
+    // emergencyServices: [{
+    //   name: String,
+    //   available: { type: Boolean, default: true },
+    //   contact: String,
+    //   description: String,
+    // }],
 
     // Insurance
     insurance: {
@@ -228,7 +254,10 @@ const hospitalSchema = new mongoose.Schema(
         type: Boolean,
         default: false,
       },
-      providers: [String],
+      providers: {
+        type: [String],
+        default: [],
+      },
     },
 
     // Additional Info
@@ -239,6 +268,7 @@ const hospitalSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
+      index: true,
     },
     
     adminUsers: [
@@ -248,11 +278,7 @@ const hospitalSchema = new mongoose.Schema(
       },
     ],
 
-    // Clerk ID for hospital admin
-    adminClerkId: {
-      type: String,
-      index: true,
-    },
+    // ✅ REMOVED: adminClerkId (not needed with Auth.js)
 
     // Status
     isActive: {
@@ -270,13 +296,20 @@ const hospitalSchema = new mongoose.Schema(
       default: false,
     },
     
+    status: {
+      type: String,
+      enum: ['active', 'inactive', 'pending', 'suspended'],
+      default: 'active',
+      index: true,
+    },
+    
     // Verification System
     verificationRequest: {
       status: {
         type: String,
         enum: ['none', 'pending', 'approved', 'rejected'],
         default: 'none',
-        index: true, // Added index
+        index: true,
       },
       requestedAt: Date,
       reviewedAt: Date,
@@ -289,6 +322,7 @@ const hospitalSchema = new mongoose.Schema(
         {
           name: String,
           url: String,
+          type: String, // e.g., 'registration', 'license', 'tax'
           uploadedAt: {
             type: Date,
             default: Date.now,
@@ -297,24 +331,7 @@ const hospitalSchema = new mongoose.Schema(
       ],
     },
 
-    // Legacy verification (keep for backward compatibility)
-    verificationDetails: {
-      requestedAt: Date,
-      verifiedAt: Date,
-      verifiedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-      },
-      documents: [
-        {
-          name: String,
-          url: String,
-          uploadedAt: Date,
-        },
-      ],
-    },
-
-    // Ratings - FIXED: Use simple numbers for search compatibility
+    // Ratings
     rating: {
       type: Number,
       default: 0,
@@ -327,6 +344,13 @@ const hospitalSchema = new mongoose.Schema(
       min: 0,
     },
     
+    // Statistics
+    stats: {
+      totalDoctors: { type: Number, default: 0 },
+      totalStaff: { type: Number, default: 0 },
+      totalAppointments: { type: Number, default: 0 },
+      totalPatients: { type: Number, default: 0 },
+    },
   },
   {
     timestamps: true,
@@ -336,28 +360,19 @@ const hospitalSchema = new mongoose.Schema(
 )
 
 // ✅ Indexes for better query performance
+hospitalSchema.index({ name: 'text', description: 'text', specialties: 'text' })
 hospitalSchema.index({ 'address.city': 1, 'address.state': 1 })
-hospitalSchema.index({ 'address.city': 1, isActive: 1 })
-hospitalSchema.index({ specialties: 1 })
-hospitalSchema.index({ facilities: 1 })
-hospitalSchema.index({ type: 1 })
-hospitalSchema.index({ isActive: 1, isVerified: 1 })
-hospitalSchema.index({ isActive: 1, rating: -1 }) // For sorting by rating
+hospitalSchema.index({ 'address.city': 1, isActive: 1, isVerified: 1 })
+hospitalSchema.index({ type: 1, isActive: 1 })
+hospitalSchema.index({ isActive: 1, rating: -1 })
 hospitalSchema.index({ 'verificationRequest.status': 1 })
-
-// ✅ Text index for search
-hospitalSchema.index({ 
-  name: 'text', 
-  description: 'text',
-  'address.city': 'text',
-  'address.state': 'text',
-  specialties: 'text'
-})
+hospitalSchema.index({ createdBy: 1 })
+hospitalSchema.index({ adminUsers: 1 })
 
 // ✅ Geospatial index for location-based search
 hospitalSchema.index({ 'address.coordinates': '2dsphere' })
 
-// ✅ Virtual: Short ID (last 8 chars of _id)
+// ✅ Virtual: Short ID
 hospitalSchema.virtual('shortId').get(function () {
   return this._id ? this._id.toString().slice(-8).toUpperCase() : null
 })
@@ -408,34 +423,87 @@ hospitalSchema.virtual('bedAvailabilityPercentage').get(function () {
 
 // ✅ Method: Check profile completeness
 hospitalSchema.methods.checkProfileCompletion = function () {
-  this.isProfileComplete = !!(
-    this.name &&
-    this.registrationNumber &&
-    this.contactDetails?.phone &&
-    this.contactDetails?.email &&
-    this.address?.street &&
-    this.address?.city &&
-    this.address?.state &&
-    this.address?.pincode &&
-    this.type &&
-    this.totalBeds &&
-    this.specialties?.length > 0 &&
-    this.facilities?.length > 0
-  )
-  return this.isProfileComplete
+  const requiredFields = [
+    this.name,
+    this.registrationNumber,
+    this.contactDetails?.phone,
+    this.contactDetails?.email,
+    this.address?.street,
+    this.address?.city,
+    this.address?.state,
+    this.address?.pincode,
+    this.type,
+    this.totalBeds > 0,
+    this.specialties?.length > 0,
+    this.facilities?.length > 0,
+  ]
+
+  const filledFields = requiredFields.filter(Boolean).length
+  const completionPercentage = (filledFields / requiredFields.length) * 100
+  
+  this.isProfileComplete = completionPercentage >= 80
+
+  return {
+    isComplete: this.isProfileComplete,
+    percentage: Math.round(completionPercentage),
+    filledFields,
+    totalFields: requiredFields.length,
+    missingFields: requiredFields.reduce((acc, field, index) => {
+      const fieldNames = [
+        'name', 'registrationNumber', 'phone', 'email', 
+        'street', 'city', 'state', 'pincode', 'type',
+        'totalBeds', 'specialties', 'facilities'
+      ]
+      if (!field) acc.push(fieldNames[index])
+      return acc
+    }, [])
+  }
 }
 
 // ✅ Method: Update rating
-hospitalSchema.methods.updateRating = function (newRating) {
+hospitalSchema.methods.updateRating = async function (newRating) {
+  if (newRating < 0 || newRating > 5) {
+    throw new Error('Rating must be between 0 and 5')
+  }
+  
   const currentTotal = this.rating * this.totalReviews
   this.totalReviews += 1
-  this.rating = (currentTotal + newRating) / this.totalReviews
-  return this.save()
+  this.rating = Number(((currentTotal + newRating) / this.totalReviews).toFixed(2))
+  
+  return await this.save()
+}
+
+// ✅ Method: Update statistics
+hospitalSchema.methods.updateStats = async function () {
+  const User = mongoose.model('User')
+  const Appointment = mongoose.model('Appointment')
+
+  try {
+    const [doctors, appointments, patients] = await Promise.all([
+      User.countDocuments({ 
+        'doctorProfile.affiliatedHospitals': this._id,
+        role: 'doctor',
+        isActive: true
+      }),
+      Appointment.countDocuments({ hospitalId: this._id }),
+      Appointment.distinct('patientId', { hospitalId: this._id })
+    ])
+
+    this.stats.totalDoctors = doctors
+    this.stats.totalAppointments = appointments
+    this.stats.totalPatients = patients.length
+
+    await this.save()
+    return this.stats
+  } catch (error) {
+    console.error('Error updating hospital stats:', error)
+    throw error
+  }
 }
 
 // ✅ Static: Find nearby hospitals
 hospitalSchema.statics.findNearby = function (latitude, longitude, maxDistance = 10000, filters = {}) {
-  return this.find({
+  const query = {
     'address.coordinates': {
       $near: {
         $geometry: {
@@ -447,11 +515,13 @@ hospitalSchema.statics.findNearby = function (latitude, longitude, maxDistance =
     },
     isActive: true,
     ...filters
-  }).limit(20)
+  }
+  
+  return this.find(query).limit(20)
 }
 
 // ✅ Static: Search hospitals
-hospitalSchema.statics.search = function (query, filters = {}) {
+hospitalSchema.statics.searchHospitals = function (query, filters = {}) {
   const searchQuery = {
     isActive: true,
     ...filters
@@ -462,32 +532,84 @@ hospitalSchema.statics.search = function (query, filters = {}) {
   }
 
   return this.find(searchQuery)
-    .sort({ rating: -1, totalReviews: -1 })
-    .limit(20)
+    .select('-verificationRequest.documents -stats')
+    .sort({ isVerified: -1, rating: -1, totalReviews: -1 })
+    .limit(filters.limit || 20)
+    .skip(filters.skip || 0)
+}
+
+// ✅ Static: Find by city
+hospitalSchema.statics.findByCity = function (city, options = {}) {
+  const query = {
+    'address.city': new RegExp(city, 'i'),
+    isActive: true,
+  }
+
+  if (options.isVerified !== undefined) {
+    query.isVerified = options.isVerified
+  }
+
+  return this.find(query)
+    .sort({ rating: -1 })
+    .limit(options.limit || 20)
+}
+
+// ✅ Static: Get hospital statistics
+hospitalSchema.statics.getHospitalStats = async function (filters = {}) {
+  const query = { isActive: true, ...filters }
+  
+  return await this.aggregate([
+    { $match: query },
+    {
+      $group: {
+        _id: '$type',
+        count: { $sum: 1 },
+        avgRating: { $avg: '$rating' },
+        totalBeds: { $sum: '$totalBeds' },
+        verified: {
+          $sum: { $cond: ['$isVerified', 1, 0] }
+        }
+      }
+    },
+    { $sort: { count: -1 } }
+  ])
 }
 
 // ✅ Pre-save hook
-hospitalSchema.pre('save', function (next) {
-  // Check profile completion
-  this.checkProfileCompletion()
-  
-  // Ensure availableBeds doesn't exceed totalBeds
-  if (this.availableBeds > this.totalBeds) {
-    this.availableBeds = this.totalBeds
-  }
-  
-  // Validate coordinates if provided
-  if (this.address?.coordinates?.latitude && this.address?.coordinates?.longitude) {
-    const { latitude, longitude } = this.address.coordinates
-    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
-      this.address.coordinates = { latitude: null, longitude: null }
+hospitalSchema.pre('save', function () {
+  try {
+    // Check profile completion
+    this.checkProfileCompletion()
+    
+    // Ensure availableBeds doesn't exceed totalBeds
+    if (this.availableBeds > this.totalBeds) {
+      this.availableBeds = this.totalBeds
     }
+    
+    // Ensure ICU and emergency beds don't exceed total
+    if (this.icuBeds + this.emergencyBeds > this.totalBeds) {
+      this.icuBeds = 0
+      this.emergencyBeds = 0
+    }
+    
+    // Validate coordinates if provided
+    if (this.address?.coordinates?.latitude && this.address?.coordinates?.longitude) {
+      const { latitude, longitude } = this.address.coordinates
+      if (
+        latitude < -90 || latitude > 90 || 
+        longitude < -180 || longitude > 180 ||
+        isNaN(latitude) || isNaN(longitude)
+      ) {
+        this.address.coordinates = { latitude: null, longitude: null }
+      }
+    }
+    
+  } catch (error) {
+    next(error)
   }
-  
-  next()
 })
 
-// ✅ Prevent OverwriteModelError in development
+// ✅ Prevent OverwriteModelError
 const Hospital = mongoose.models.Hospital || mongoose.model('Hospital', hospitalSchema)
 
 export default Hospital

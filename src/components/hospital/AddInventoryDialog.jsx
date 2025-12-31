@@ -1,4 +1,3 @@
-// src/components/hospital/AddInventoryDialog.jsx
 'use client'
 import { useState, useEffect } from 'react'
 import {
@@ -21,12 +20,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useHospitalAdmin } from '@/context/HospitalAdminContext'
-import { useUser } from '@clerk/nextjs'
+import { useSession } from 'next-auth/react'
 import toast from 'react-hot-toast'
 
 export default function AddInventoryDialog({ open, onOpenChange }) {
   const { addInventoryItem, hospital } = useHospitalAdmin()
-  const { user } = useUser()
+  const { data: session } = useSession()
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     itemName: '',
@@ -50,9 +49,9 @@ export default function AddInventoryDialog({ open, onOpenChange }) {
   // Debug logging
   useEffect(() => {
     if (open) {
-      console.log('🏥 Hospital ID:', hospital?._id || user?.publicMetadata?.hospitalId)
+      console.log('🏥 Hospital ID:', hospital?._id || session?.user?.hospitalId)
     }
-  }, [open, hospital, user])
+  }, [open, hospital, session])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

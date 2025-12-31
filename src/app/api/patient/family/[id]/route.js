@@ -1,5 +1,4 @@
-// app/api/patient/family/[id]/route.js
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import connectDB from '@/config/db';
 import User from '@/models/user';
@@ -7,14 +6,14 @@ import FamilyMember from '@/models/familyMember';
 
 export async function PATCH(req, { params }) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await auth();
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     await connectDB();
 
-    const user = await User.findOne({ clerkId: userId });
+    const user = await User.findOne({ email: session.user.email });
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
@@ -25,7 +24,7 @@ export async function PATCH(req, { params }) {
     const familyMember = await FamilyMember.findOneAndUpdate(
       { _id: id, userId: user._id },
       body,
-      { new: true }
+      { new: true, runValidators: true }
     );
 
     if (!familyMember) {
@@ -41,24 +40,29 @@ export async function PATCH(req, { params }) {
 
 export async function DELETE(req, { params }) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await auth();
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     await connectDB();
 
-    const user = await User.findOne({ clerkId: userId });
+    const user = await User.findOne({ email: session.user.email });
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     const { id } = await params;
 
-    await FamilyMember.findOneAndUpdate(
+    const familyMember = await FamilyMember.findOneAndUpdate(
       { _id: id, userId: user._id },
-      { isActive: false }
+      { isActive: false },
+      { new: true }
     );
+
+    if (!familyMember) {
+      return NextResponse.json({ error: 'Family member not found' }, { status: 404 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -9,7 +9,12 @@ const __dirname = dirname(__filename);
 
 const nextConfig = {
   images: {
-    domains: ['res.cloudinary.com'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
+      },
+    ],
     formats: ['image/webp'],
   },
     reactCompiler: true,

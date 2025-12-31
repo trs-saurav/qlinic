@@ -1,6 +1,6 @@
 // src/app/api/admin/stats/route.js
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/auth'
 import connectDB from '@/config/db'
 import User from '@/models/user'
 import Hospital from '@/models/hospital'
@@ -8,7 +8,8 @@ import Appointment from '@/models/appointment'
 
 export async function GET(request) {
   try {
-    const { userId } = await auth()
+    const session = await auth()
+    const userId = session?.user?.id
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

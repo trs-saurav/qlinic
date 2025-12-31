@@ -1,35 +1,27 @@
-// app/api/doctor/profile/route.js
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/auth'
 import connectDB from '@/config/db'
+import cloudinary from '@/lib/cloudinary'
 import User from '@/models/user'
-import { v2 as cloudinary } from 'cloudinary'
 import { NextResponse } from 'next/server'
-
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-})
 
 // GET - Fetch doctor profile
 export async function GET(req) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
+    const session = await auth()
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     await connectDB()
 
-    const doctor = await User.findOne({ clerkId: userId, role: 'doctor' })
+    const doctor = await User.findOne({ email: session.user.email, role: 'doctor' })
     if (!doctor) {
       return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
     }
 
-    console.log('✅ Doctor profile loaded:', doctor._id, doctor.email) // DEBUG
+    console.log('✅ Doctor profile loaded:', doctor._id, doctor.email)
 
-    return NextResponse.json({ success: true, doctor: doctor }) // ✅ CHANGED from 'profile' to 'doctor'
+    return NextResponse.json({ success: true, doctor: doctor })
   } catch (error) {
     console.error('Error fetching doctor profile:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -39,8 +31,8 @@ export async function GET(req) {
 // POST - Update doctor profile
 export async function POST(req) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
+    const session = await auth()
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -73,30 +65,60 @@ export async function POST(req) {
       languages: languagesArray
     }
 
-    // Handle profile photo upload
-    const profilePhoto = formData.get('profilePhoto')
-    if (profilePhoto && profilePhoto.size > 0) {
-      const bytes = await profilePhoto.arrayBuffer()
-      const buffer = Buffer.from(bytes)
-
-      // Upload to Cloudinary
-      const uploadResponse = await new Promise((resolve, reject) => {
-        cloudinary.uploader.upload_stream(
-          { folder: 'doctor_profiles', resource_type: 'image' },
-          (error, result) => {
-            if (error) reject(error)
-            else resolve(result)
-          }
-        ).end(buffer)
-      })
-
-      profileData.profileImage = uploadResponse.secure_url
-    }
-
-    // Get existing doctor to merge data
-    const existingDoctor = await User.findOne({ clerkId: userId, role: 'doctor' })
+    // Get existing doctor first
+    const existingDoctor = await User.findOne({ email: session.user.email, role: 'doctor' })
     if (!existingDoctor) {
       return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
+    }
+
+    // Handle profile photo upload
+    const profilePhoto = formData.get('profilePhoto')
+    if (profilePhoto && profilePhoto instanceof File && profilePhoto.size > 0) {
+      console.log('📸 Uploading profile photo:', profilePhoto.name, profilePhoto.size, 'bytes')
+
+      try {
+        const bytes = await profilePhoto.arrayBuffer()
+        const buffer = Buffer.from(bytes)
+
+        // ✅ Get cloudinary instance (already configured via @/lib/cloudinary)
+        const cloudinaryInstance = cloudinary
+
+        // ✅ Upload to Cloudinary
+        const uploadResponse = await new Promise((resolve, reject) => {
+          const uploadStream = cloudinaryInstance.uploader.upload_stream(
+            {
+              folder: 'qlinic/doctor_profiles',
+              resource_type: 'image',
+              public_id: `doctor_${existingDoctor._id}_${Date.now()}`,
+              overwrite: true,
+              transformation: [
+                { width: 500, height: 500, crop: 'fill', gravity: 'face' },
+                { quality: 'auto:good' }
+              ]
+            },
+            (error, result) => {
+              if (error) {
+                console.error('❌ Cloudinary upload error:', error)
+                reject(error)
+              } else {
+                console.log('✅ Cloudinary upload success:', result.secure_url)
+                resolve(result)
+              }
+            }
+          )
+
+          uploadStream.end(buffer)
+        })
+
+        profileData.profileImage = uploadResponse.secure_url
+        console.log('✅ Profile image uploaded:', uploadResponse.secure_url)
+
+      } catch (uploadError) {
+        console.error('❌ Image upload failed:', uploadError)
+        return NextResponse.json({ 
+          error: 'Failed to upload profile photo: ' + uploadError.message 
+        }, { status: 500 })
+      }
     }
 
     // Merge existing doctorProfile with new data
@@ -107,7 +129,7 @@ export async function POST(req) {
 
     // Update the doctor profile
     const doctor = await User.findOneAndUpdate(
-      { clerkId: userId, role: 'doctor' },
+      { email: session.user.email, role: 'doctor' },
       { 
         $set: {
           ...profileData,
@@ -121,11 +143,13 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
     }
 
-    console.log('✅ Doctor profile updated:', doctor._id) // DEBUG
+    console.log('✅ Doctor profile updated:', doctor._id)
 
-    return NextResponse.json({ success: true, doctor: doctor }) // ✅ CHANGED from 'profile' to 'doctor'
+    return NextResponse.json({ success: true, doctor: doctor })
   } catch (error) {
     console.error('Error updating doctor profile:', error)
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ 
+      error: error.message || 'Internal server error' 
+    }, { status: 500 })
   }
 }

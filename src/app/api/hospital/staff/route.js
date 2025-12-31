@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/auth";
 import connectDB from "@/config/db";
 import User from "@/models/user";
 import Staff from "@/models/staff";
@@ -7,15 +7,15 @@ import { NextResponse } from "next/server";
 // GET - Fetch all staff
 export async function GET(req) {
   try {
-    const { userId } = await auth();
+    const session = await auth();
 
-    if (!userId) {
+    if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     await connectDB();
 
-    const admin = await User.findOne({ clerkId: userId });
+    const admin = await User.findOne({ email: session.user.email });
 
     if (!admin || admin.role !== "hospital_admin") {
       return NextResponse.json(
@@ -56,15 +56,15 @@ export async function GET(req) {
 // POST - Add new staff member
 export async function POST(req) {
   try {
-    const { userId } = await auth();
+    const session = await auth();
 
-    if (!userId) {
+    if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     await connectDB();
 
-    const admin = await User.findOne({ clerkId: userId });
+    const admin = await User.findOne({ email: session.user.email });
 
     if (!admin || admin.role !== "hospital_admin") {
       return NextResponse.json(

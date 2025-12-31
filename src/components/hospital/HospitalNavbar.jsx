@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { UserButton, useUser } from "@clerk/nextjs";
+import { usePathname, useRouter } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 import { useHospitalAdmin } from "@/context/HospitalAdminContext";
 import Image from "next/image";
 import {
@@ -19,7 +19,6 @@ import {
   X,
   BarChart3,
   ClipboardList,
-  Loader2,
   MapPin,
   CheckCircle,
   Hash,
@@ -30,6 +29,10 @@ import {
   ChevronRight,
   Building2,
   Phone,
+  Sparkles,
+  Zap,
+  LogOut,
+  UserCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,9 +41,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import toast from "react-hot-toast";
@@ -102,7 +107,8 @@ export default function HospitalNavbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [idCopied, setIdCopied] = useState(false);
   const pathname = usePathname();
-  const { user } = useUser();
+  const router = useRouter();
+  const { data: session } = useSession();
 
   const {
     hospital,
@@ -115,6 +121,7 @@ export default function HospitalNavbar() {
     fetchNotifications,
   } = useHospitalAdmin();
 
+  const user = session?.user;
   const shortId = hospital?._id?.toString().slice(-8).toUpperCase();
 
   useEffect(() => {
@@ -134,37 +141,66 @@ export default function HospitalNavbar() {
     try {
       await navigator.clipboard.writeText(shortId);
       setIdCopied(true);
-      toast.success("Hospital ID copied");
+      toast.success("Hospital ID copied", { icon: "📋", duration: 2000 });
       setTimeout(() => setIdCopied(false), 2000);
     } catch (err) {
       toast.error("Failed to copy ID");
     }
   };
 
+  const handleSignOut = async () => {
+    const loadingToast = toast.loading("Signing out...");
+    try {
+      await signOut({ redirect: false });
+      toast.dismiss(loadingToast);
+      toast.success("Signed out successfully", { icon: "👋" });
+      router.push("/");
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      toast.error("Failed to sign out");
+    }
+  };
+
+  // Get user initials for avatar fallback
+  const getUserInitials = () => {
+    if (!user?.name) return "HA";
+    const names = user.name.split(" ");
+    return names.length > 1
+      ? `${names[0][0]}${names[1][0]}`.toUpperCase()
+      : names[0].slice(0, 2).toUpperCase();
+  };
+
   return (
     <>
       {/* ========== TIER 1: QLINIC BRANDING BAR ========== */}
-      <div className="sticky top-0 z-50 bg-gradient-to-r from-blue-600 via-blue-700 to-blue-800 border-b border-blue-900/50 shadow-lg">
+      <div className="sticky top-0 z-50 backdrop-blur-xl bg-gradient-to-r from-blue-600/95 via-blue-700/95 to-blue-800/95 border-b border-blue-900/30 shadow-xl">
         <div className="px-4 lg:px-6">
-          <div className="flex items-center justify-between h-14">
+          <div className="flex items-center justify-between h-16">
             {/* Left: Qlinic Logo & Brand */}
             <Link href="/" className="flex items-center gap-3 group">
-              {/* WHITE BACKGROUND FOR LOGO VISIBILITY */}
-              <div className="w-9 h-9 rounded-lg bg-white flex items-center justify-center shadow-md group-hover:shadow-lg transition-all group-hover:scale-105">
-                <Image
-                  src="/LOGO.png"
-                  alt="Qlinic"
-                  width={32}
-                  height={32}
-                  className="object-contain p-0.5"
-                  priority
-                />
-              </div>
+              <motion.div
+                whileHover={{ scale: 1.05, rotate: 5 }}
+                className="relative"
+              >
+                <div className="absolute inset-0 bg-white rounded-xl blur-md opacity-50 group-hover:opacity-75 transition-opacity" />
+                <div className="relative w-11 h-11 rounded-xl bg-white flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all">
+                  <Image
+                    src="/logo.png"
+                    alt="Qlinic"
+                    width={36}
+                    height={36}
+                    className="object-contain p-0.5"
+                    priority
+                  />
+                </div>
+              </motion.div>
               <div>
-                <h1 className="text-xl font-bold text-white tracking-tight">
-                  Qlinic
+                <h1 className="text-xl font-black text-white tracking-tight flex items-center gap-1.5">
+                  QLINIC
+                  <Sparkles className="w-4 h-4 text-blue-200 group-hover:rotate-12 transition-transform" />
                 </h1>
-                <p className="text-[10px] text-blue-100 -mt-0.5 font-medium">
+                <p className="text-[10px] text-blue-100/90 -mt-0.5 font-medium flex items-center gap-1">
+                  <Zap className="w-2.5 h-2.5" />
                   Healthcare Platform
                 </p>
               </div>
@@ -175,19 +211,26 @@ export default function HospitalNavbar() {
               {/* Mobile Menu Toggle */}
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="lg:hidden p-2 rounded-lg hover:bg-white/10 transition-colors text-white"
+                className="lg:hidden p-2.5 rounded-xl hover:bg-white/10 backdrop-blur-sm transition-all text-white"
                 aria-label="Toggle menu"
               >
-                {mobileMenuOpen ? (
-                  <X className="w-5 h-5" />
-                ) : (
-                  <Menu className="w-5 h-5" />
-                )}
+                <motion.div
+                  animate={{ rotate: mobileMenuOpen ? 90 : 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {mobileMenuOpen ? (
+                    <X className="w-5 h-5" />
+                  ) : (
+                    <Menu className="w-5 h-5" />
+                  )}
+                </motion.div>
               </button>
 
               {/* Theme Toggle */}
               <div className="hidden md:block">
-                <ModeToggle />
+                <div className="p-1 rounded-lg bg-white/10 backdrop-blur-sm border border-white/20">
+                  <ModeToggle />
+                </div>
               </div>
 
               {/* Notifications */}
@@ -196,7 +239,7 @@ export default function HospitalNavbar() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="relative hover:bg-white/10 text-white"
+                    className="relative h-10 w-10 rounded-xl hover:bg-white/10 backdrop-blur-sm text-white border border-white/20 hover:border-white/30 transition-all"
                   >
                     <Bell className="w-5 h-5" />
                     {totalAlerts > 0 && (
@@ -205,19 +248,25 @@ export default function HospitalNavbar() {
                         animate={{ scale: 1 }}
                         className="absolute -top-1 -right-1"
                       >
-                        <Badge className="h-5 min-w-[20px] px-1 flex items-center justify-center text-[10px] bg-red-500 hover:bg-red-600 border-2 border-blue-700">
+                        <Badge className="h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px] font-bold bg-red-500 hover:bg-red-600 border-2 border-blue-700 shadow-lg">
                           {totalAlerts > 9 ? "9+" : totalAlerts}
                         </Badge>
                       </motion.div>
                     )}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[380px]">
-                  <div className="p-3 border-b">
+                <DropdownMenuContent
+                  align="end"
+                  className="w-[380px] backdrop-blur-xl bg-white/95 dark:bg-slate-950/95 border-2 shadow-2xl"
+                >
+                  <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-sm">Notifications</h3>
+                      <h3 className="font-bold text-base flex items-center gap-2">
+                        <Bell className="w-4 h-4" />
+                        Notifications
+                      </h3>
                       {totalAlerts > 0 && (
-                        <Badge variant="secondary" className="text-xs">
+                        <Badge variant="secondary" className="text-xs font-semibold">
                           {totalAlerts} new
                         </Badge>
                       )}
@@ -225,7 +274,7 @@ export default function HospitalNavbar() {
                   </div>
 
                   <ScrollArea className="max-h-[400px]">
-                    {/* Alerts */}
+                    {/* System Alerts */}
                     {(lowStockItems?.length > 0 ||
                       pendingDoctorRequests?.length > 0) && (
                       <div className="p-2 space-y-1">
@@ -279,7 +328,7 @@ export default function HospitalNavbar() {
                       pendingDoctorRequests?.length > 0) &&
                       notifications?.length > 0 && <DropdownMenuSeparator />}
 
-                    {/* Notifications */}
+                    {/* Recent Notifications */}
                     {notifications?.length > 0 ? (
                       <div className="p-2 space-y-1">
                         <p className="text-xs font-medium text-muted-foreground px-2 py-1">
@@ -353,29 +402,78 @@ export default function HospitalNavbar() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* User Info */}
+              {/* User Info - Desktop */}
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-white/10 backdrop-blur-sm rounded-lg border border-white/20">
                 <span className="text-sm font-medium text-white">
-                  {user?.firstName || "Admin"}
+                  {user?.name || "Admin"}
                 </span>
               </div>
 
-              {/* User Button */}
-              <UserButton
-                afterSignOutUrl="/"
-                appearance={{
-                  elements: {
-                    avatarBox: "w-9 h-9 ring-2 ring-white/30",
-                  },
-                }}
-              />
+              {/* User Menu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="relative h-10 w-10 rounded-xl p-0 hover:bg-white/10 border border-white/20"
+                  >
+                    <Avatar className="h-9 w-9 ring-2 ring-white/30">
+                      <AvatarImage src={user?.image} alt={user?.name} />
+                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-violet-600 text-white font-semibold text-sm">
+                        {getUserInitials()}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-56 backdrop-blur-xl bg-white/95 dark:bg-slate-950/95 border-2 shadow-xl"
+                >
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-semibold leading-none">
+                        {user?.name || "Admin"}
+                      </p>
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {user?.email}
+                      </p>
+                      <Badge
+                        variant="outline"
+                        className="w-fit mt-1 text-[10px] border-blue-200 dark:border-blue-800"
+                      >
+                        Hospital Admin
+                      </Badge>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <Link href="/hospital-admin/profile">
+                    <DropdownMenuItem className="cursor-pointer">
+                      <UserCircle className="mr-2 h-4 w-4" />
+                      <span>Profile</span>
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href="/hospital-admin/settings">
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>Settings</span>
+                    </DropdownMenuItem>
+                  </Link>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="cursor-pointer text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
+                    onClick={handleSignOut}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Sign out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
       </div>
 
       {/* ========== TIER 2: HOSPITAL PROFILE BAR ========== */}
-      <div className="sticky top-14 z-40 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="sticky top-16 z-40 backdrop-blur-xl bg-white/80 dark:bg-slate-950/80 border-b border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="px-4 lg:px-6">
           <div className="flex items-center justify-between py-3">
             {/* Hospital Profile */}
@@ -445,10 +543,7 @@ export default function HospitalNavbar() {
                               )}
                             </div>
                           </button>
-                          <Separator
-                            orientation="vertical"
-                            className="h-3"
-                          />
+                          <Separator orientation="vertical" className="h-3" />
                         </>
                       )}
                       {hospital?.address?.city && (
@@ -461,10 +556,7 @@ export default function HospitalNavbar() {
                       )}
                       {hospital?.contactDetails?.phone && (
                         <>
-                          <Separator
-                            orientation="vertical"
-                            className="h-3"
-                          />
+                          <Separator orientation="vertical" className="h-3" />
                           <div className="flex items-center gap-1.5">
                             <Phone className="w-3.5 h-3.5" />
                             <span>{hospital.contactDetails.phone}</span>
@@ -615,6 +707,26 @@ export default function HospitalNavbar() {
                     </button>
                   </div>
 
+                  {/* User Info - Mobile */}
+                  <div className="sm:hidden mb-6 pb-6 border-b">
+                    <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl">
+                      <Avatar className="h-10 w-10 ring-2 ring-slate-200 dark:ring-slate-700">
+                        <AvatarImage src={user?.image} alt={user?.name} />
+                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-violet-600 text-white font-semibold">
+                          {getUserInitials()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {user?.name || "Admin"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {user?.email}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Alerts */}
                   {(lowStockItems?.length > 0 ||
                     pendingDoctorRequests?.length > 0) && (
@@ -709,12 +821,20 @@ export default function HospitalNavbar() {
                     })}
                   </nav>
 
-                  {/* Theme Toggle */}
-                  <div className="mt-6 pt-6 border-t">
+                  {/* Theme Toggle & Sign Out */}
+                  <div className="mt-6 pt-6 border-t space-y-2">
                     <div className="flex items-center justify-between px-4 py-2">
                       <span className="text-sm font-medium">Theme</span>
                       <ModeToggle />
                     </div>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 border-red-200 dark:border-red-900"
+                      onClick={handleSignOut}
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sign out
+                    </Button>
                   </div>
                 </div>
               </ScrollArea>

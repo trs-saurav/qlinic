@@ -1,21 +1,21 @@
 import { NextResponse } from 'next/server'
 import connectDB from '@/config/db'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/auth'
 import User from '@/models/user'
 import Hospital from '@/models/hospital'
 import HospitalAffiliation from '@/models/hospitalAffiliation'
 
 export async function POST(req) {
-  const { userId } = await auth()
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthenticated (no Clerk session)' }, { status: 401 })
+  const session = await auth()
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Unauthenticated (no session)' }, { status: 401 })
   }
 
   await connectDB()
 
-  const me = await User.findOne({ clerkId: userId }).select('_id role')
+  const me = await User.findOne({ email: session.user.email }).select('_id role')
   if (!me) {
-    return NextResponse.json({ error: 'Mongo user not found for this Clerk user' }, { status: 404 })
+    return NextResponse.json({ error: 'User not found in database' }, { status: 404 })
   }
 
   if (me.role !== 'hospital_admin') {

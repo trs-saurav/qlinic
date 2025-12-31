@@ -1,5 +1,5 @@
 // app/api/appointments/[id]/route.js
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/auth'
 import { NextResponse } from 'next/server'
 import connectDB from '@/config/db'
 import Appointment from '@/models/appointment'
@@ -7,14 +7,14 @@ import User from '@/models/user'
 
 export async function GET(req, { params }) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
+    const session = await auth()
+    if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     await connectDB()
 
-    const user = await User.findOne({ clerkId: userId })
+    const user = await User.findOne({ email: session.user.email })
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
@@ -49,14 +49,14 @@ export async function GET(req, { params }) {
 
 export async function PATCH(req, { params }) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
+    const session = await auth()
+    if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     await connectDB()
 
-    const user = await User.findOne({ clerkId: userId })
+    const user = await User.findOne({ email: session.user.email })
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
@@ -139,14 +139,14 @@ export async function PATCH(req, { params }) {
 
 export async function DELETE(req, { params }) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
+    const session = await auth()
+    if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     await connectDB()
 
-    const user = await User.findOne({ clerkId: userId })
+    const user = await User.findOne({ email: session.user.email })
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }

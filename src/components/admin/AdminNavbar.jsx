@@ -1,8 +1,8 @@
-// src/components/admin/AdminNavbar.jsx
 'use client'
-import { UserButton } from '@clerk/nextjs'
+import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { 
   LayoutDashboard, 
@@ -12,12 +12,22 @@ import {
   TrendingUp, 
   Settings,
   Menu,
-  X
+  X,
+  LogOut,
+  User as UserIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { ModeToggle } from '@/components/extra/ModeToggle'
 import { useState } from 'react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
@@ -30,7 +40,12 @@ const navItems = [
 
 export default function AdminNavbar() {
   const pathname = usePathname()
+  const { data: session } = useSession()
   const [open, setOpen] = useState(false)
+
+  const handleSignOut = async () => {
+    await signOut({ callbackUrl: '/' })
+  }
 
   const NavLinks = ({ mobile = false }) => (
     <>
@@ -85,14 +100,61 @@ export default function AdminNavbar() {
           {/* Right Section */}
           <div className="flex items-center gap-3">
             <ModeToggle />
-            <UserButton 
-              afterSignOutUrl="/"
-              appearance={{
-                elements: {
-                  avatarBox: 'w-9 h-9'
-                }
-              }}
-            />
+            
+            {/* ✅ Auth.js User Menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="rounded-full w-9 h-9 relative"
+                >
+                  {session?.user?.image ? (
+                    <Image
+                      src={session.user.image}
+                      alt={session.user.name || 'Admin'}
+                      width={36}
+                      height={36}
+                      className="rounded-full"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center">
+                      <UserIcon className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {session?.user?.name || 'Admin'}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {session?.user?.email}
+                    </p>
+                    <p className="text-xs leading-none text-emerald-600 font-semibold mt-1">
+                      Admin Account
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/admin/settings" className="cursor-pointer">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleSignOut}
+                  className="cursor-pointer text-red-600 focus:text-red-600"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             {/* Mobile Menu */}
             <Sheet open={open} onOpenChange={setOpen}>
@@ -112,6 +174,18 @@ export default function AdminNavbar() {
                     </p>
                   </div>
                   <NavLinks mobile />
+                  
+                  {/* Mobile Sign Out */}
+                  <div className="px-4 pt-4 border-t mt-auto">
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                      onClick={handleSignOut}
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Sign Out
+                    </Button>
+                  </div>
                 </div>
               </SheetContent>
             </Sheet>

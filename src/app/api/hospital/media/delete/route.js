@@ -1,32 +1,26 @@
-// app/api/hospital/media/delete/route.js
-import { auth } from '@clerk/nextjs/server'
+import { NextResponse } from 'next/server'
 import connectDB from '@/config/db'
 import Hospital from '@/models/hospital'
-import User from '@/models/user'
-import { NextResponse } from 'next/server'
+import { verifyHospitalAdmin } from '@/lib/hospitalAuth'
 import cloudinary from '@/lib/cloudinary'
 
 export async function DELETE(req) {
   try {
-    const { userId } = await auth()
+    const authResult = await verifyHospitalAdmin()
     
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!authResult.success) {
+      return NextResponse.json(
+        { error: authResult.error },
+        { status: authResult.status }
+      )
     }
+
+    const { hospitalId } = authResult
 
     await connectDB()
 
-    const user = await User.findOne({ clerkId: userId })
-    if (!user || user.role !== 'hospital_admin') {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
-    }
-
-    const hospitalId = user.hospitalAdminProfile?.hospitalId
-    if (!hospitalId) {
-      return NextResponse.json({ error: 'Hospital ID not found' }, { status: 404 })
-    }
-
     const hospital = await Hospital.findById(hospitalId)
+    
     if (!hospital) {
       return NextResponse.json({ error: 'Hospital not found' }, { status: 404 })
     }
@@ -62,37 +56,37 @@ export async function DELETE(req) {
 
     } else if (type === 'facilityPhoto') {
       const photoIndex = parseInt(index)
-      if (isNaN(photoIndex) || photoIndex < 0 || photoIndex >= 6) {
+      if (isNaN(photoIndex) || photoIndex < 0 || photoIndex >= 10) {
         return NextResponse.json({ error: 'Invalid index' }, { status: 400 })
       }
 
       // Initialize array if needed
-      if (!hospital.facilityPhotos) {
-        hospital.facilityPhotos = []
+      if (!hospital.images) {
+        hospital.images = []
       }
 
-      // **FIX: Create array with 6 slots, keeping positions**
-      // First, ensure array has 6 slots
-      while (hospital.facilityPhotos.length < 6) {
-        hospital.facilityPhotos.push(null)
+      // Ensure array has enough slots
+      while (hospital.images.length <= photoIndex) {
+        hospital.images.push(null)
       }
 
       // Delete from Cloudinary if photo exists at this index
-      if (hospital.facilityPhotos[photoIndex]) {
-        await deleteFromCloudinary(hospital.facilityPhotos[photoIndex])
-        hospital.facilityPhotos[photoIndex] = null
+      if (hospital.images[photoIndex]) {
+        await deleteFromCloudinary(hospital.images[photoIndex])
+        hospital.images[photoIndex] = null
         console.log('✅ Facility photo deleted at index', photoIndex)
       } else {
         console.log('⚠️ No photo at index', photoIndex)
       }
 
       // Clean up trailing nulls to keep array compact
-      while (hospital.facilityPhotos.length > 0 && 
-             hospital.facilityPhotos[hospital.facilityPhotos.length - 1] === null) {
-        hospital.facilityPhotos.pop()
+      while (hospital.images.length > 0 && 
+             hospital.images[hospital.images.length - 1] === null) {
+        hospital.images.pop()
       }
       
-      hospital.markModified('facilityPhotos')
+      hospital.markModified('images')
+      
     } else {
       return NextResponse.json({ error: 'Invalid type' }, { status: 400 })
     }
@@ -106,7 +100,7 @@ export async function DELETE(req) {
       media: {
         logo: hospital.logo || null,
         coverPhoto: hospital.coverPhoto || null,
-        facilityPhotos: hospital.facilityPhotos || []
+        facilityPhotos: hospital.images || []
       }
     }, { status: 200 })
 

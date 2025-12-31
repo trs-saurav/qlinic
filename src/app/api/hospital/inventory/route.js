@@ -1,15 +1,15 @@
-// src/app/api/hospital/inventory/route.js
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/auth'
 import connectDB from '@/config/db'
 import Inventory from '@/models/Inventory'
 import InventoryLog from '@/models/inventoryLog'
+import { verifyHospitalAdmin } from '@/lib/hospitalAuth'
 
 // GET - Fetch all inventory items for a hospital
 export async function GET(request) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
+    const session = await auth()
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -56,12 +56,14 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     console.log('🔐 Starting POST /api/hospital/inventory...')
-    const { userId } = await auth()
+    const session = await auth()
     
-    if (!userId) {
-      console.error('❌ No userId from auth')
+    if (!session?.user) {
+      console.error('❌ No session from auth')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    
+    const userId = session.user.id
     console.log('✅ User authenticated:', userId)
 
     console.log('📦 Parsing request body...')

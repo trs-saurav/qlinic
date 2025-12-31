@@ -1,21 +1,32 @@
-// src/components/patient/PatientNavbar.jsx
 'use client'
+
 import { useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
-import { UserButton } from '@clerk/nextjs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ModeToggle } from '@/components/extra/ModeToggle'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { 
   Home, Hospital, Calendar, Users, FileText,
-  Menu, X, Bell, Search
+  Menu, X, Bell, Search, LogOut, Settings, User
 } from 'lucide-react'
 
 export default function PatientNavbar() {
   const router = useRouter()
   const pathname = usePathname()
+  const { data: session } = useSession()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const navItems = [
@@ -42,6 +53,23 @@ export default function PatientNavbar() {
 
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen)
+  }
+
+  const handleSignOut = async () => {
+    await signOut({ callbackUrl: '/' })
+  }
+
+  // Get user initials for avatar fallback
+  const getInitials = () => {
+    if (session?.user?.name) {
+      return session.user.name
+        .split(' ')
+        .map(n => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2)
+    }
+    return session?.user?.email?.charAt(0).toUpperCase() || 'U'
   }
 
   return (
@@ -107,7 +135,7 @@ export default function PatientNavbar() {
           {/* Right Section */}
           <div className="flex items-center gap-2 lg:gap-3">
             
-            {/* Search Button - FIXED */}
+            {/* Search Button */}
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button
                 variant="ghost"
@@ -130,7 +158,7 @@ export default function PatientNavbar() {
               </Button>
             </motion.div>
 
-            {/* Mode Toggle - ADDED */}
+            {/* Mode Toggle */}
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -140,15 +168,54 @@ export default function PatientNavbar() {
               <ModeToggle />
             </motion.div>
 
-            {/* User Button */}
-            <UserButton 
-              afterSignOutUrl="/sign-in"
-              appearance={{
-                elements: {
-                  avatarBox: "w-9 h-9 rounded-full border-2 border-border hover:border-primary transition-colors"
-                }
-              }}
-            />
+            {/* User Menu Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="relative h-9 w-9 rounded-full p-0 hover:ring-2 hover:ring-primary/50 transition-all"
+                >
+                  <Avatar className="h-9 w-9 border-2 border-border">
+                    <AvatarImage 
+                      src={session?.user?.image || ''} 
+                      alt={session?.user?.name || 'User'}
+                    />
+                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-500 text-white font-semibold">
+                      {getInitials()}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {session?.user?.name || 'Patient'}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {session?.user?.email}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => router.push('/patient/profile')}>
+                  <User className="mr-2 h-4 w-4" />
+                  <span>Profile</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push('/patient/settings')}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Settings</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={handleSignOut}
+                  className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Sign Out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             {/* Mobile Menu */}
             <motion.button
@@ -225,6 +292,16 @@ export default function PatientNavbar() {
                 <span className="text-sm font-medium text-foreground/80">Theme</span>
                 <ModeToggle />
               </div>
+
+              {/* Mobile Sign Out */}
+              <Button
+                variant="ghost"
+                className="w-full justify-start h-12 px-4 text-left font-medium text-sm rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20"
+                onClick={handleSignOut}
+              >
+                <LogOut className="w-5 h-5 mr-3" />
+                <span>Sign Out</span>
+              </Button>
             </div>
           </motion.div>
         )}

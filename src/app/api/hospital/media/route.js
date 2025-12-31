@@ -1,34 +1,27 @@
-// app/api/hospital/media/route.js
-import { auth } from '@clerk/nextjs/server'
+import { NextResponse } from 'next/server'
 import connectDB from '@/config/db'
 import Hospital from '@/models/hospital'
-import User from '@/models/user'
-import { NextResponse } from 'next/server'
+import { verifyHospitalAdmin, getHospitalAdmin } from '@/lib/hospitalAuth'
 import cloudinary from '@/lib/cloudinary'
 
 // GET - Fetch hospital's media
 export async function GET() {
   try {
-    const { userId } = await auth()
+    const authResult = await verifyHospitalAdmin()
     
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!authResult.success) {
+      return NextResponse.json(
+        { error: authResult.error },
+        { status: authResult.status }
+      )
     }
+
+    const { hospitalId } = authResult
 
     await connectDB()
 
-    const user = await User.findOne({ clerkId: userId })
-    if (!user || user.role !== 'hospital_admin') {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
-    }
-
-    const hospitalId = user.hospitalAdminProfile?.hospitalId
-    if (!hospitalId) {
-      return NextResponse.json({ error: 'Hospital ID not found' }, { status: 404 })
-    }
-
     const hospital = await Hospital.findById(hospitalId).select(
-      '_id name logo coverPhoto facilityPhotos'
+      '_id name logo coverPhoto images'
     )
 
     if (!hospital) {
@@ -39,7 +32,7 @@ export async function GET() {
       media: {
         logo: hospital.logo || null,
         coverPhoto: hospital.coverPhoto || null,
-        facilityPhotos: hospital.facilityPhotos || []
+        facilityPhotos: hospital.images || []
       },
       hospitalId: hospital._id.toString(),
       hospitalName: hospital.name
@@ -54,31 +47,25 @@ export async function GET() {
   }
 }
 
-// PATCH - Update hospital's media (SIMPLIFIED VERSION)
+// PATCH - Update hospital's media
 export async function PATCH(req) {
   try {
-    const { userId } = await auth()
+    const authResult = await getHospitalAdmin()
     
-    if (!userId) {
-      console.error('❌ No userId')
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!authResult.success) {
+      console.error('❌ Auth failed:', authResult.error)
+      return NextResponse.json(
+        { error: authResult.error },
+        { status: authResult.status }
+      )
     }
+
+    const { hospitalId } = authResult
 
     await connectDB()
 
-    const user = await User.findOne({ clerkId: userId })
-    if (!user || user.role !== 'hospital_admin') {
-      console.error('❌ User not authorized:', { userId, role: user?.role })
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
-    }
-
-    const hospitalId = user.hospitalAdminProfile?.hospitalId
-    if (!hospitalId) {
-      console.error('❌ No hospital ID for user:', userId)
-      return NextResponse.json({ error: 'Hospital ID not found' }, { status: 404 })
-    }
-
     const hospital = await Hospital.findById(hospitalId)
+    
     if (!hospital) {
       console.error('❌ Hospital not found:', hospitalId)
       return NextResponse.json({ error: 'Hospital not found' }, { status: 404 })
@@ -110,7 +97,7 @@ export async function PATCH(req) {
       }
     }
 
-    // **SIMPLIFIED: Just store URLs directly in schema**
+    // Update media based on type
     if (type === 'logo') {
       await deleteFromCloudinary(hospital.logo)
       hospital.logo = url
@@ -122,28 +109,28 @@ export async function PATCH(req) {
       console.log('✅ Cover photo updated')
 
     } else if (type === 'facilityPhoto') {
-      if (index === undefined || index < 0 || index >= 6) {
+      if (index === undefined || index < 0 || index >= 10) {
         console.error('❌ Invalid index:', index)
         return NextResponse.json({ 
-          error: 'Invalid index. Must be 0-5' 
+          error: 'Invalid index. Must be 0-9' 
         }, { status: 400 })
       }
 
       // Initialize array if needed
-      if (!hospital.facilityPhotos) {
-        hospital.facilityPhotos = []
+      if (!hospital.images) {
+        hospital.images = []
       }
 
       // Delete old photo at this index if exists
-      if (hospital.facilityPhotos[index]) {
-        await deleteFromCloudinary(hospital.facilityPhotos[index])
+      if (hospital.images[index]) {
+        await deleteFromCloudinary(hospital.images[index])
       }
 
       // Set new photo URL
-      hospital.facilityPhotos[index] = url
+      hospital.images[index] = url
       
       // Mark as modified for Mongoose
-      hospital.markModified('facilityPhotos')
+      hospital.markModified('images')
       
       console.log('✅ Facility photo updated at index', index)
 
@@ -166,7 +153,7 @@ export async function PATCH(req) {
       media: {
         logo: hospital.logo || null,
         coverPhoto: hospital.coverPhoto || null,
-        facilityPhotos: hospital.facilityPhotos || []
+        facilityPhotos: hospital.images || []
       }
     }
     

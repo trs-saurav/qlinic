@@ -1,5 +1,4 @@
-// app/api/patient/records/[id]/route.js
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import connectDB from '@/config/db';
 import User from '@/models/user';
@@ -7,19 +6,19 @@ import MedicalRecord from '@/models/medicalRecord';
 
 export async function DELETE(req, { params }) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await auth();
+    if (!session?.user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     await connectDB();
 
-    const user = await User.findOne({ clerkId: userId });
+    const user = await User.findOne({ email: session.user.email });
     if (!user) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    // ✅ FIXED: Await params (Next.js 15+ requirement)
+    // ✅ Await params (Next.js 15+ requirement)
     const { id } = await params;
     
     const record = await MedicalRecord.findOneAndUpdate(

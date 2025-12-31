@@ -1,19 +1,18 @@
-// app/api/doctors/route.js
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import connectDB from '@/config/db';
 import User from '@/models/user';
 
 export async function GET(req) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await auth();
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     await connectDB();
 
-    const user = await User.findOne({ clerkId: userId });
+    const user = await User.findOne({ email: session.user.email });
     if (!user || user.role !== 'hospital_admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -33,8 +32,8 @@ export async function GET(req) {
 
 export async function PATCH(req) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await auth();
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

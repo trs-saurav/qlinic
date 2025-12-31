@@ -1,6 +1,5 @@
-// src/app/admin/page.jsx
 'use client'
-import { useUser } from '@clerk/nextjs'
+import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,20 +21,31 @@ import AdminNavbar from '@/components/admin/AdminNavbar'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function AdminDashboard() {
-  const { user, isLoaded } = useUser()
+  const { data: session, status } = useSession()
   const router = useRouter()
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  // ✅ Redirect non-admin users
   useEffect(() => {
-    if (isLoaded && user?.publicMetadata?.role !== 'admin') {
+    if (status === 'loading') return
+
+    if (status === 'unauthenticated') {
+      router.push('/sign-in')
+      return
+    }
+
+    // ✅ Check if user has admin role
+    if (session?.user?.role !== 'admin') {
       router.push('/')
     }
-  }, [isLoaded, user, router])
+  }, [status, session, router])
 
   useEffect(() => {
-    fetchStats()
-  }, [])
+    if (status === 'authenticated' && session?.user?.role === 'admin') {
+      fetchStats()
+    }
+  }, [status, session])
 
   const fetchStats = async () => {
     try {
@@ -51,7 +61,8 @@ export default function AdminDashboard() {
     }
   }
 
-  if (!isLoaded || loading) {
+  // ✅ Show loading state
+  if (status === 'loading' || loading) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
         <AdminNavbar />
@@ -65,6 +76,11 @@ export default function AdminDashboard() {
         </div>
       </div>
     )
+  }
+
+  // ✅ Don't render if not admin
+  if (session?.user?.role !== 'admin') {
+    return null
   }
 
   return (

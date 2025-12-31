@@ -1,23 +1,21 @@
-// app/api/patient/records/route.js
-import { auth } from '@clerk/nextjs/server'; // ✅ Using Clerk's built-in auth
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import connectDB from '@/config/db';
 import User from '@/models/user';
 import MedicalRecord from '@/models/medicalRecord';
 import FamilyMember from '@/models/familyMember';
 import cloudinary from '@/lib/cloudinary';
-import { v2 as cloudinaryV2 } from 'cloudinary';
 
 export async function GET(req) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await auth();
+    if (!session?.user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     await connectDB();
 
-    const user = await User.findOne({ clerkId: userId });
+    const user = await User.findOne({ email: session.user.email });
     if (!user) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
@@ -38,14 +36,14 @@ export async function GET(req) {
 
 export async function POST(req) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await auth();
+    if (!session?.user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     await connectDB();
 
-    const user = await User.findOne({ clerkId: userId });
+    const user = await User.findOne({ email: session.user.email });
     if (!user) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
@@ -75,7 +73,7 @@ export async function POST(req) {
     // VALIDATE FAMILY MEMBER BELONGS TO USER
     const familyMember = await FamilyMember.findOne({
       _id: familyMemberId,
-      userId: user._id  // ✅ Matches your FamilyMember schema
+      userId: user._id
     });
     if (!familyMember) {
       return NextResponse.json({ success: false, error: 'Invalid family member' }, { status: 400 });
@@ -90,9 +88,12 @@ export async function POST(req) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
+    // ✅ Get cloudinary instance
+    const cloudinaryInstance = cloudinary;
+
     // CLOUDINARY UPLOAD
     const uploadResult = await new Promise((resolve, reject) => {
-      const uploadStream = cloudinaryV2.uploader.upload_stream(
+      const uploadStream = cloudinaryInstance.uploader.upload_stream(
         {
           folder: 'qlinic/medical-records',
           resource_type: 'auto',

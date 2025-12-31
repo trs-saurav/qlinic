@@ -1,5 +1,5 @@
 // app/api/patient/appointments/[id]/route.js
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 import connectDB from '@/config/db';
 import User from '@/models/user';
@@ -7,7 +7,8 @@ import Appointment from '@/models/appointment';
 
 export async function GET(req, { params }) {
   try {
-    const { userId } = await auth();
+    const session = await auth();
+    const userId = session?.user?.id;
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

@@ -2,7 +2,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppContextProvider } from '@/context/AppContext'
 import { Toaster } from 'react-hot-toast'
-import { ClerkProvider } from '@clerk/nextjs'
+import { SessionProvider } from 'next-auth/react'
 import { ThemeProvider } from '@/components/theme-provider'
 
 const geistSans = Geist({
@@ -22,22 +22,35 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <ClerkProvider>
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ThemeProvider
+        <SessionProvider>
+          <ThemeProvider
             attribute="class"
             defaultTheme="system"
             enableSystem
             disableTransitionOnChange
           >
-            <Toaster toastOptions={{ className: 'bg-background text-foreground border border-border' }} />
-            <AppContextProvider>{children}</AppContextProvider>
+            <Toaster 
+              position="top-center"
+              toastOptions={{ 
+                className: 'bg-background text-foreground border border-border',
+                duration: 4000,
+                style: {
+                  background: 'var(--background)',
+                  color: 'var(--foreground)',
+                  border: '1px solid var(--border)',
+                }
+              }} 
+            />
+            <AppContextProvider>
+              {children}
+            </AppContextProvider>
           </ThemeProvider>
+        </SessionProvider>
       </body>
     </html>
-    </ClerkProvider>
   );
 }

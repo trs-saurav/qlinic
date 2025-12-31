@@ -147,8 +147,10 @@ export default function HospitalProfileSettings() {
     totalBeds: "",
     icuBeds: "",
     emergencyBeds: "",
-    consultationFee: "",
-    emergencyFee: "",
+    // ✅ UPDATED: Three separate consultation fee fields
+    consultationFeeGeneral: "",
+    consultationFeeSpecialist: "",
+    consultationFeeEmergency: "",
     isOpen24x7: false,
     operatingHours: {
       Monday: { open: "09:00", close: "18:00" },
@@ -175,10 +177,14 @@ export default function HospitalProfileSettings() {
       const res = await fetch("/api/hospital/profile", {
         headers: { Accept: "application/json" },
       });
+      
       if (!res.ok) {
-        toast.error("Failed to load hospital profile");
+        const errorData = await res.json();
+        console.error('❌ Failed to fetch profile:', errorData);
+        toast.error(errorData.error || "Failed to load hospital profile");
         return;
       }
+      
       const data = await res.json();
       const h = data.hospital || {};
       setHospital(h);
@@ -204,8 +210,12 @@ export default function HospitalProfileSettings() {
         totalBeds: h.totalBeds || "",
         icuBeds: h.icuBeds || "",
         emergencyBeds: h.emergencyBeds || "",
-        consultationFee: h.consultationFee || "",
-        emergencyFee: h.emergencyFee || "",
+        
+        // ✅ UPDATED: Parse consultationFee object
+        consultationFeeGeneral: h.consultationFee?.general || "",
+        consultationFeeSpecialist: h.consultationFee?.specialist || "",
+        consultationFeeEmergency: h.consultationFee?.emergency || "",
+        
         isOpen24x7: h.operatingHours?.isOpen24x7 || false,
         operatingHours: h.operatingHours || {
           Monday: { open: "09:00", close: "18:00" },
@@ -222,6 +232,7 @@ export default function HospitalProfileSettings() {
         accreditations: h.accreditations || [],
       });
     } catch (err) {
+      console.error('❌ Fetch error:', err);
       toast.error("Failed to load hospital profile");
     } finally {
       setLoading(false);
@@ -275,7 +286,6 @@ export default function HospitalProfileSettings() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     setSaving(true);
 
     try {
@@ -300,13 +310,20 @@ export default function HospitalProfileSettings() {
             country: form.country,
           },
           established: form.established || null,
-          consultationFee: parseInt(form.consultationFee) || 500,
-          emergencyFee: parseInt(form.emergencyFee) || 0,
+          
+          // ✅ UPDATED: Send consultationFee as object with 3 fields
+          consultationFee: {
+            general: parseInt(form.consultationFeeGeneral) || 0,
+            specialist: parseInt(form.consultationFeeSpecialist) || 0,
+            emergency: parseInt(form.consultationFeeEmergency) || 0,
+          },
+          
           specialties: form.specialties,
           facilities: form.facilities,
           amenities: form.amenities,
           accreditations: form.accreditations,
         }),
+        
         // Always editable fields
         totalBeds: parseInt(form.totalBeds) || 0,
         icuBeds: parseInt(form.icuBeds) || 0,
@@ -317,6 +334,8 @@ export default function HospitalProfileSettings() {
         },
       };
 
+      console.log('📤 Submitting payload:', payload);
+
       const res = await fetch("/api/hospital/profile", {
         method: "PUT",
         headers: {
@@ -326,14 +345,19 @@ export default function HospitalProfileSettings() {
         body: JSON.stringify(payload),
       });
 
+      const responseData = await res.json();
+
       if (!res.ok) {
-        toast.error("Failed to update profile");
+        console.error('❌ Update failed:', responseData);
+        toast.error(responseData.error || "Failed to update profile");
         return;
       }
 
+      console.log('✅ Update successful:', responseData);
       toast.success("Hospital profile updated successfully");
       await fetchHospitalProfile();
     } catch (err) {
+      console.error('❌ Submit error:', err);
       toast.error("Failed to update profile");
     } finally {
       setSaving(false);
@@ -729,10 +753,11 @@ export default function HospitalProfileSettings() {
               </Badge>
             </CardTitle>
             <CardDescription className="text-xs">
-              Bed capacity can be updated anytime
+              Bed capacity and consultation fees can be updated anytime
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Bed Counts */}
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
                 <Label className="text-xs">Total Beds</Label>
@@ -741,6 +766,7 @@ export default function HospitalProfileSettings() {
                   value={form.totalBeds}
                   onChange={handleChange("totalBeds")}
                   className="mt-1 h-9"
+                  min="0"
                 />
               </div>
               <div>
@@ -750,6 +776,7 @@ export default function HospitalProfileSettings() {
                   value={form.icuBeds}
                   onChange={handleChange("icuBeds")}
                   className="mt-1 h-9"
+                  min="0"
                 />
               </div>
               <div>
@@ -759,29 +786,51 @@ export default function HospitalProfileSettings() {
                   value={form.emergencyBeds}
                   onChange={handleChange("emergencyBeds")}
                   className="mt-1 h-9"
+                  min="0"
                 />
               </div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label className="text-xs">Consultation Fee (₹)</Label>
-                <Input
-                  type="number"
-                  value={form.consultationFee}
-                  onChange={handleChange("consultationFee")}
-                  className="mt-1 h-9"
-                  disabled={!canEditBasicInfo}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Emergency Fee (₹)</Label>
-                <Input
-                  type="number"
-                  value={form.emergencyFee}
-                  onChange={handleChange("emergencyFee")}
-                  className="mt-1 h-9"
-                  disabled={!canEditBasicInfo}
-                />
+            
+            {/* ✅ UPDATED: Three separate consultation fee inputs */}
+            <div>
+              <Label className="text-sm font-medium mb-3 block">Consultation Fees</Label>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">General Doctor (₹)</Label>
+                  <Input
+                    type="number"
+                    value={form.consultationFeeGeneral}
+                    onChange={handleChange("consultationFeeGeneral")}
+                    className="mt-1 h-9"
+                    placeholder="500"
+                    min="0"
+                    disabled={!canEditBasicInfo}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Specialist Doctor (₹)</Label>
+                  <Input
+                    type="number"
+                    value={form.consultationFeeSpecialist}
+                    onChange={handleChange("consultationFeeSpecialist")}
+                    className="mt-1 h-9"
+                    placeholder="1000"
+                    min="0"
+                    disabled={!canEditBasicInfo}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Emergency (₹)</Label>
+                  <Input
+                    type="number"
+                    value={form.consultationFeeEmergency}
+                    onChange={handleChange("consultationFeeEmergency")}
+                    className="mt-1 h-9"
+                    placeholder="1500"
+                    min="0"
+                    disabled={!canEditBasicInfo}
+                  />
+                </div>
               </div>
             </div>
           </CardContent>

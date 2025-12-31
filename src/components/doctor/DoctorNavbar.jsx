@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { UserButton } from '@clerk/nextjs'
+import { useSession, signOut } from 'next-auth/react'
+import Image from 'next/image'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -22,7 +23,18 @@ import {
   Menu,
   X,
   Stethoscope,
+  LogOut,
+  User,
 } from 'lucide-react'
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 const NAV = [
   { href: '/doctor', label: 'Dashboard', icon: LayoutDashboard },
@@ -40,6 +52,7 @@ function isActivePath(pathname, href) {
 export default function DoctorNavbar() {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { data: session } = useSession()
 
   const { unreadCount, dashboard } = useDoctor()
 
@@ -47,6 +60,10 @@ export default function DoctorNavbar() {
     () => NAV.map((i) => ({ ...i, active: isActivePath(pathname, i.href) })),
     [pathname]
   )
+
+  const handleSignOut = async () => {
+    await signOut({ callbackUrl: '/sign-in' })
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-xl">
@@ -99,7 +116,7 @@ export default function DoctorNavbar() {
             })}
           </nav>
 
-          {/* Right actions (required on top) */}
+          {/* Right actions */}
           <div className="flex items-center gap-2">
             {/* Notifications */}
             <Button variant="ghost" size="icon" className="relative">
@@ -117,9 +134,55 @@ export default function DoctorNavbar() {
               <ModeToggle />
             </div>
 
-            <UserButton afterSignOutUrl="/sign-in" />
+            {/* ✅ Auth.js User Menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full">
+                  {session?.user?.image ? (
+                    <Image
+                      src={session.user.image}
+                      alt={session.user.name || 'User'}
+                      width={32}
+                      height={32}
+                      className="rounded-full"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center">
+                      <User className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {session?.user?.name || 'Doctor'}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {session?.user?.email}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/doctor/settings" className="cursor-pointer">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleSignOut}
+                  className="cursor-pointer text-red-600 focus:text-red-600"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-            {/* Mobile menu */}
+            {/* Mobile menu toggle */}
             <button
               className="lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-xl hover:bg-accent"
               onClick={() => setMobileOpen((v) => !v)}
@@ -167,6 +230,15 @@ export default function DoctorNavbar() {
                 <span className="text-sm font-semibold">Theme</span>
                 <ModeToggle />
               </div>
+
+              {/* Mobile sign out */}
+              <button
+                onClick={handleSignOut}
+                className="w-full flex items-center gap-3 rounded-xl px-4 py-3 font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+              >
+                <LogOut className="w-5 h-5" />
+                Sign Out
+              </button>
             </div>
           </motion.div>
         )}

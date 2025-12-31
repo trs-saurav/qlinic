@@ -1,6 +1,5 @@
-// src/app/api/hospital/inventory/[id]/route.js
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/auth'
 import connectDB from '@/config/db'
 import Inventory from '@/models/Inventory'
 import InventoryLog from '@/models/inventoryLog'
@@ -8,8 +7,8 @@ import InventoryLog from '@/models/inventoryLog'
 // GET - Fetch single inventory item
 export async function GET(request, { params }) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
+    const session = await auth()
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -37,10 +36,12 @@ export async function GET(request, { params }) {
 export async function PUT(request, { params }) {
   try {
     console.log('🔄 Starting PUT request...')
-    const { userId } = await auth()
-    if (!userId) {
+    const session = await auth()
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    
+    const userId = session.user.id
 
     // FIX: Await params in Next.js 15
     const { id } = await params
@@ -110,10 +111,12 @@ export async function PUT(request, { params }) {
 export async function DELETE(request, { params }) {
   try {
     console.log('🗑️ Starting DELETE request...')
-    const { userId } = await auth()
-    if (!userId) {
+    const session = await auth()
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    
+    const userId = session.user.id
 
     // FIX: Await params in Next.js 15
     const { id } = await params

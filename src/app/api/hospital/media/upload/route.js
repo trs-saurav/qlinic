@@ -1,13 +1,12 @@
-// app/api/hospital/media/upload/route.js
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/auth'
 import cloudinary from '@/lib/cloudinary'
 
 export async function POST(req) {
   try {
-    const { userId } = await auth()
+    const session = await auth()
     
-    if (!userId) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

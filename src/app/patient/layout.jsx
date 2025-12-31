@@ -1,6 +1,4 @@
-// app/patient/layout.jsx
 import PatientNavbar from '@/components/patient/PatientNavbar1'
-import { Protect } from '@clerk/nextjs'
 import ProtectedRoute from '@/components/ProtectedRoute'
 
 export const metadata = {
@@ -10,14 +8,13 @@ export const metadata = {
 
 export default function PatientLayout({ children }) {
   return (
-
-    <ProtectedRoute requiredRole='patient'>
-    <div className="min-h-screen bg-slate-50">
-      <PatientNavbar />
-      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        {children}
-      </main>
-    </div>
+    <ProtectedRoute requiredRole="patient">
+      <div className="min-h-screen bg-slate-50">
+        <PatientNavbar />
+        <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+          {children}
+        </main>
+      </div>
     </ProtectedRoute>
   )
 }

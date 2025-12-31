@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { useUser } from '@clerk/nextjs'
+import { useSession } from 'next-auth/react'
 import toast from 'react-hot-toast'
 
 const DoctorContext = createContext(undefined)
@@ -13,7 +13,7 @@ export const useDoctor = () => {
 }
 
 export function DoctorProvider({ children }) {
-  const { user, isLoaded } = useUser()
+  const { data: session, status } = useSession()
   const didInitRef = useRef(false)
 
   // ================= Core Doctor =================
@@ -46,10 +46,10 @@ export function DoctorProvider({ children }) {
   // ================= Fetchers =================
 
   const fetchDoctorProfile = useCallback(async () => {
-    console.log('🚀 fetchDoctorProfile called, user:', user?.id)
+    console.log('🚀 fetchDoctorProfile called, session:', session?.user?.email)
     
-    if (!user) {
-      console.log('❌ No user, returning')
+    if (!session?.user) {
+      console.log('❌ No session, returning')
       setDoctorLoading(false)
       return
     }
@@ -84,7 +84,7 @@ export function DoctorProvider({ children }) {
     } finally {
       setDoctorLoading(false)
     }
-  }, [user])
+  }, [session])
 
   const fetchDoctorDashboard = useCallback(async () => {
     if (!doctor?._id) return
@@ -287,12 +287,13 @@ export function DoctorProvider({ children }) {
 
   // ================= Effects =================
 
-  // 1. Init once when Clerk is ready
+  // 1. Init once when Auth.js session is ready
   useEffect(() => {
-    if (!isLoaded) return
+    // ✅ Wait for session to load
+    if (status === 'loading') return
     
-    if (!user) {
-      console.log('❌ No user loaded, resetting state')
+    if (status === 'unauthenticated' || !session?.user) {
+      console.log('❌ No session loaded, resetting state')
       setDoctor(null)
       setDoctorLoading(false)
       return
@@ -300,10 +301,10 @@ export function DoctorProvider({ children }) {
     
     if (didInitRef.current) return
     
-    console.log('🎯 Initializing doctor context for user:', user.id)
+    console.log('🎯 Initializing doctor context for user:', session.user.email)
     didInitRef.current = true
     fetchDoctorProfile()
-  }, [isLoaded, user, fetchDoctorProfile])
+  }, [status, session, fetchDoctorProfile])
 
   // 2. After doctor is known, fetch baseline data once
   useEffect(() => {
@@ -318,7 +319,7 @@ export function DoctorProvider({ children }) {
 
   // 3. Reset when user logs out
   useEffect(() => {
-    if (isLoaded && !user) {
+    if (status === 'unauthenticated') {
       console.log('👋 User logged out, resetting context')
       didInitRef.current = false
       setDoctor(null)
@@ -333,7 +334,7 @@ export function DoctorProvider({ children }) {
       setNotifications([])
       setUnreadCount(0)
     }
-  }, [isLoaded, user])
+  }, [status])
 
   const value = {
     // doctor

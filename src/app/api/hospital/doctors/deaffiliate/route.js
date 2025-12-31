@@ -1,20 +1,20 @@
-import { auth } from "@clerk/nextjs/server";
-import  connectDB  from "@/config/db";
+import { auth } from "@/auth";
+import connectDB from "@/config/db";
 import User from "@/models/user";
 import HospitalAffiliation from "@/models/hospitalAffiliation";
 import Appointment from "@/models/appointment";
 
 export async function POST(req) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const session = await auth();
+    if (!session?.user) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     await connectDB();
 
     // Verify hospital admin
-    const user = await User.findOne({ clerkId: userId });
+    const user = await User.findOne({ email: session.user.email });
     if (!user?.hospitalAdminProfile?.hospitalId) {
       return Response.json({ error: "Not a hospital admin" }, { status: 403 });
     }

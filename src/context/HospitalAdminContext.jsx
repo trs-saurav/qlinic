@@ -9,7 +9,7 @@ import React, {
   useRef,
   useState,
 } from 'react'
-import { useUser } from '@clerk/nextjs'
+import { useSession } from 'next-auth/react'
 import { useRouter, usePathname } from 'next/navigation'
 import toast from 'react-hot-toast'
 
@@ -24,7 +24,12 @@ export const useHospitalAdmin = () => {
 export const HospitalAdminProvider = ({ children }) => {
   const router = useRouter()
   const pathname = usePathname()
-  const { user, isLoaded, isSignedIn } = useUser()
+  const { data: session, status } = useSession()
+
+  // Auth state derived from session
+  const isLoaded = status !== 'loading'
+  const isSignedIn = status === 'authenticated'
+  const user = session?.user
 
   // ===== State =====
   const [hospital, setHospital] = useState(null)
@@ -113,14 +118,17 @@ export const HospitalAdminProvider = ({ children }) => {
   }, [])
 
   const handleErrorToast = useCallback((res, data, fallbackMsg) => {
-    if (res.status === 401) return
+    if (res.status === 401) {
+      console.log('🔒 Unauthorized - session expired or invalid')
+      return
+    }
     toast.error(data?.error || fallbackMsg)
   }, [])
 
   // ===== Fetchers =====
   const fetchHospital = useCallback(async () => {
     if (!isLoaded) {
-      console.log('⏳ Clerk not loaded yet')
+      console.log('⏳ Session not loaded yet')
       return
     }
     if (!isSignedIn) {
@@ -130,11 +138,20 @@ export const HospitalAdminProvider = ({ children }) => {
       return
     }
 
+    // Check if user has hospital_admin role
+    if (user?.role !== 'hospital_admin') {
+      console.log('❌ User is not a hospital admin:', user?.role)
+      setHospital(null)
+      setHospitalLoading(false)
+      setHospitalError('Access denied: Hospital admin role required')
+      return
+    }
+
     try {
       setHospitalLoading(true)
       setHospitalError(null)
 
-      console.log('🔍 Fetching hospital profile...')
+      console.log('🔍 Fetching hospital profile for user:', user?.email)
       
       const { res, data } = await apiFetch('/api/hospital/profile')
       
@@ -142,7 +159,8 @@ export const HospitalAdminProvider = ({ children }) => {
         status: res.status,
         ok: res.ok,
         hasData: !!data,
-        success: data?.success
+        success: data?.success,
+        hospitalName: data?.hospital?.name
       })
 
       if (!res.ok) {
@@ -164,7 +182,7 @@ export const HospitalAdminProvider = ({ children }) => {
     } finally {
       setHospitalLoading(false)
     }
-  }, [apiFetch, isLoaded, isSignedIn])
+  }, [apiFetch, isLoaded, isSignedIn, user])
 
   const fetchStats = useCallback(async () => {
     if (!hospital?._id) return
@@ -440,6 +458,7 @@ export const HospitalAdminProvider = ({ children }) => {
 
   const refreshAll = useCallback(async () => {
     if (!hospital?._id) return
+    console.log('🔄 Refreshing all hospital data...')
     await Promise.all([
       fetchStats(),
       fetchAppointments(appointmentsFilter),
@@ -466,6 +485,8 @@ export const HospitalAdminProvider = ({ children }) => {
     if (!isLoaded) return
     if (!isSignedIn) return
     if (didInitRef.current) return
+    
+    console.log('🚀 Initializing hospital context...')
     didInitRef.current = true
     fetchHospital()
   }, [isLoaded, isSignedIn, fetchHospital])
@@ -473,6 +494,7 @@ export const HospitalAdminProvider = ({ children }) => {
   // 2) Once hospital known, load lightweight global info
   useEffect(() => {
     if (!hospital?._id) return
+    console.log('📊 Loading hospital data for:', hospital.name)
     fetchStats()
     fetchInventoryStats()
     fetchNotifications()
@@ -485,44 +507,68 @@ export const HospitalAdminProvider = ({ children }) => {
     if (hospitalLoading) return
     if (pathname?.includes('/hospital-admin/setup')) return
 
-    if (!hospital && !hospitalError) {
+    // Only redirect if user has hospital_admin role but no hospital profile
+    if (user?.role === 'hospital_admin' && !hospital && !hospitalError) {
       console.log('➡️ No hospital found, redirecting to setup...')
       router.push('/hospital-admin/setup')
     }
-  }, [isLoaded, isSignedIn, hospitalLoading, hospital, hospitalError, router, pathname])
+  }, [isLoaded, isSignedIn, hospitalLoading, hospital, hospitalError, router, pathname, user])
+
+  // 4) Handle session expiration
+  useEffect(() => {
+    if (isLoaded && !isSignedIn && didInitRef.current) {
+      console.log('🔒 Session expired, clearing hospital data')
+      setHospital(null)
+      setAdminInfo(null)
+      setHospitalError('Session expired')
+      didInitRef.current = false
+    }
+  }, [isLoaded, isSignedIn])
 
   const value = useMemo(
     () => ({
+      // Auth info
+      user,
+      isLoaded,
+      isSignedIn,
+
+      // Hospital
       hospital,
       hospitalLoading,
       hospitalError,
       adminInfo,
       fetchHospital,
 
+      // Stats
       stats,
       statsLoading,
       fetchStats,
 
+      // Appointments
       appointments,
       appointmentsLoading,
       appointmentsFilter,
       fetchAppointments,
 
+      // Doctors
       doctors,
       doctorsLoading,
       pendingDoctorRequests,
       fetchDoctors,
       approveDoctorRequest,
 
+      // Patients
       patients,
       patientsLoading,
       todayPatients,
       fetchPatients,
 
+      // Staff
       staff,
       staffLoading,
       fetchStaff,
 
+      // Inventory
       inventory,
       inventoryLoading,
       inventoryStats,
@@ -534,17 +580,23 @@ export const HospitalAdminProvider = ({ children }) => {
       updateInventoryItem,
       deleteInventoryItem,
 
+      // Notifications
       notifications,
       unreadCount,
       fetchNotifications,
       markNotificationRead,
 
+      // Settings
       settings,
       setSettings,
 
+      // Utilities
       refreshAll,
     }),
     [
+      user,
+      isLoaded,
+      isSignedIn,
       hospital,
       hospitalLoading,
       hospitalError,

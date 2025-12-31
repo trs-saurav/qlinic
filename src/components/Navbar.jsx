@@ -4,8 +4,8 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAppContext } from "@/context/AppContext";
+import { useSession, signOut } from "next-auth/react";
 import Image from "next/image";
-import { UserButton } from "@clerk/nextjs";
 import { ModeToggle } from "./extra/ModeToggle";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -31,15 +31,28 @@ import {
   Briefcase,
   Shield,
   FileText,
+  LogOut,
+  Settings,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import toast from "react-hot-toast";
 
 import LocationSelector from "@/components/location/LocationSelector";
 import SearchBar from "@/components/location/SearchBar";
 
 const Navbar = () => {
-  const { router, user, userRole } = useAppContext();
+  const { router, userRole } = useAppContext();
+  const { data: session, status } = useSession();
+  const user = session?.user;
   const pathname = usePathname();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -140,7 +153,7 @@ const Navbar = () => {
       {
         title: "Company",
         items: [
-          { label: "About us", href: "/about", icon: Info },
+          { label: "About us", href: "/aboutus", icon: Info },
           { label: "Our offerings", href: "/services", icon: Award },
           { label: "How QLINIC works", href: "/how-it-works", icon: Target },
           { label: "Sustainability", href: "/sustainability", icon: Globe },
@@ -201,8 +214,7 @@ const Navbar = () => {
   };
 
   const getDashboardUrl = () => {
-    const role =
-      user?.publicMetadata?.role || user?.unsafeMetadata?.role || userRole;
+    const role = userRole || user?.role;
     switch (role) {
       case "patient":
         return "/patient";
@@ -212,9 +224,27 @@ const Navbar = () => {
         return "/hospital-admin";
       case "admin":
         return "/admin";
+      case "sub_admin":
+        return "/sub-admin";
       default:
         return "/";
     }
+  };
+
+  const getUserInitials = () => {
+    if (!user) return "U";
+    const name = user.name || user.email;
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const handleSignOut = async () => {
+    await signOut({ callbackUrl: "/" });
+    toast.success("Signed out successfully");
   };
 
   return (
@@ -358,22 +388,59 @@ const Navbar = () => {
                   {/* Auth desktop */}
                   <div className="hidden md:flex items-center gap-2">
                     {user ? (
-                      <UserButton
-                        appearance={{
-                          elements: {
-                            avatarBox:
-                              "w-9 h-9 rounded-full border-2 border-emerald-200 dark:border-emerald-800 hover:border-emerald-500 dark:hover:border-emerald-500 transition-colors",
-                          },
-                        }}
-                      >
-                        <UserButton.MenuItems>
-                          <UserButton.Action
-                            label="Dashboard"
-                            labelIcon={<LayoutDashboard className="w-4 h-4" />}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="relative w-9 h-9 rounded-full border-2 border-emerald-200 dark:border-emerald-800 hover:border-emerald-500 dark:hover:border-emerald-500 transition-colors overflow-hidden focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900">
+                            <Avatar className="w-full h-full">
+                              <AvatarImage src={user.image} alt={user.name} />
+                              <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-xs font-semibold">
+                                {getUserInitials()}
+                              </AvatarFallback>
+                            </Avatar>
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          className="w-56 rounded-2xl border-2 border-emerald-200/50 dark:border-emerald-800/50 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl shadow-2xl"
+                        >
+                          <DropdownMenuLabel className="font-normal">
+                            <div className="flex flex-col space-y-1">
+                              <p className="text-sm font-semibold leading-none">
+                                {user.name || "User"}
+                              </p>
+                              <p className="text-xs leading-none text-muted-foreground">
+                                {user.email}
+                              </p>
+                              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1">
+                                {userRole?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                              </p>
+                            </div>
+                          </DropdownMenuLabel>
+                          <DropdownMenuSeparator className="bg-emerald-200/50 dark:bg-emerald-800/50" />
+                          <DropdownMenuItem
                             onClick={() => router.push(getDashboardUrl())}
-                          />
-                        </UserButton.MenuItems>
-                      </UserButton>
+                            className="cursor-pointer focus:bg-emerald-50 dark:focus:bg-emerald-900/20"
+                          >
+                            <LayoutDashboard className="mr-2 h-4 w-4" />
+                            <span>Dashboard</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => router.push('/settings')}
+                            className="cursor-pointer focus:bg-emerald-50 dark:focus:bg-emerald-900/20"
+                          >
+                            <Settings className="mr-2 h-4 w-4" />
+                            <span>Settings</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator className="bg-emerald-200/50 dark:bg-emerald-800/50" />
+                          <DropdownMenuItem
+                            onClick={handleSignOut}
+                            className="cursor-pointer text-red-600 dark:text-red-400 focus:bg-red-50 dark:focus:bg-red-900/20 focus:text-red-700 dark:focus:text-red-300"
+                          >
+                            <LogOut className="mr-2 h-4 w-4" />
+                            <span>Sign out</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     ) : (
                       <>
                         <div className="relative" ref={loginMenuRef}>
@@ -470,6 +537,26 @@ const Navbar = () => {
                 className="mt-2 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-2 border-emerald-200/70 dark:border-emerald-800/50 rounded-3xl shadow-2xl overflow-hidden"
               >
                 <div className="p-4 space-y-3">
+                  {/* Mobile user info */}
+                  {user && (
+                    <div className="flex items-center gap-3 p-3 bg-emerald-50/50 dark:bg-emerald-900/20 rounded-xl">
+                      <Avatar className="w-10 h-10">
+                        <AvatarImage src={user.image} alt={user.name} />
+                        <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-sm font-semibold">
+                          {getUserInitials()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                          {user.name || "User"}
+                        </p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                          {user.email}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Mobile location */}
                   <button
                     onClick={() => {
@@ -484,7 +571,7 @@ const Navbar = () => {
                     </span>
                   </button>
 
-                  {/* Mobile search simple input */}
+                  {/* Mobile search */}
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <Input
@@ -515,6 +602,17 @@ const Navbar = () => {
                     Home
                   </Link>
 
+                  {user && (
+                    <Link
+                      href={getDashboardUrl()}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-emerald-50/50 dark:hover:bg-emerald-900/20 text-gray-700 dark:text-gray-300 transition-all"
+                    >
+                      <LayoutDashboard className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-sm font-medium">Dashboard</span>
+                    </Link>
+                  )}
+
                   <div className="space-y-2">
                     <p className="px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                       About
@@ -538,7 +636,18 @@ const Navbar = () => {
                     ))}
                   </div>
 
-                  {!user && (
+                  {user ? (
+                    <button
+                      onClick={() => {
+                        handleSignOut();
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-red-200 dark:border-red-800 hover:bg-red-50/50 dark:hover:bg-red-900/20 rounded-xl font-semibold text-red-600 dark:text-red-400 transition-all"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign out
+                    </button>
+                  ) : (
                     <div className="pt-3 border-t border-emerald-200/50 dark:border-emerald-800/50 space-y-2">
                       <Link
                         href="/sign-in"
@@ -565,7 +674,7 @@ const Navbar = () => {
         </nav>
       </motion.div>
 
-      {/* Hidden LocationSelector instance to keep modal always mounted */}
+      {/* Hidden LocationSelector */}
       <LocationSelector
         locationName={locationName}
         setLocationName={setLocationName}
