@@ -40,8 +40,8 @@ export async function POST(request) {
     }
 
     // Validate role
-    const validRoles = ['patient', 'doctor', 'hospital_admin', 'admin', 'sub_admin']
-    const userRole = role || 'patient'
+    const validRoles = ['user', 'doctor', 'hospital_admin', 'admin', 'sub_admin']
+    const userRole = role || 'user'
     
     if (!validRoles.includes(userRole)) {
       console.log('❌ Invalid role:', userRole)

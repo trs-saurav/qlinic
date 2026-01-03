@@ -11,7 +11,7 @@ export async function POST(req) {
     const { role } = await req.json()
 
     // Validate role
-    const validRoles = ['patient', 'doctor', 'hospital_admin', 'admin', 'sub_admin']
+    const validRoles = ['user', 'doctor', 'hospital_admin', 'admin', 'sub_admin']
     if (!validRoles.includes(role)) {
       return NextResponse.json(
         { error: 'Invalid role specified' },

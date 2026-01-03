@@ -67,8 +67,8 @@ const signUpSchema = z.object({
 
 const roles = [
   {
-    value: 'patient',
-    label: 'Patient',
+    value: 'user',
+    label: 'user',
     description: 'Book appointments & manage health',
     icon: Users,
     gradient: 'from-blue-500 via-blue-600 to-violet-600',
@@ -96,7 +96,7 @@ const roles = [
 ]
 
 export default function SignUpPage() {
-  const [selectedRole, setSelectedRole] = useState('patient')
+  const [selectedRole, setSelectedRole] = useState('user')
   const [loading, setLoading] = useState(false)
   const [socialLoading, setSocialLoading] = useState(null)
   const [showPassword, setShowPassword] = useState(false)
@@ -165,7 +165,7 @@ export default function SignUpPage() {
 
       if (signInResult?.ok) {
         const roleRoutes = {
-          patient: '/patient',
+          user: '/user',
           doctor: '/doctor',
           hospital_admin: '/hospital-admin',
         }
@@ -187,7 +187,7 @@ export default function SignUpPage() {
     toast.loading(`Connecting to ${providerNames[provider]}...`, { id: 'social-signup' })
     
     await signIn(provider, { 
-      callbackUrl: `/patient`,
+      callbackUrl: `/user`,
       redirect: true 
     })
   }

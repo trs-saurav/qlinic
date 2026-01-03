@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useLayoutEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import Image from 'next/image'
@@ -18,6 +18,7 @@ import toast from 'react-hot-toast'
 
 const HomePage = () => {
   const router = useRouter()
+  const [hydrated, setHydrated] = useState(false)
   const [stats, setStats] = useState(null)
   const [topDoctors, setTopDoctors] = useState([])
   const [featuredHospitals, setFeaturedHospitals] = useState([])
@@ -32,6 +33,10 @@ const HomePage = () => {
   useEffect(() => {
     fetchHomeData()
     loadSavedLocation()
+  }, [])
+
+  useLayoutEffect(() => {
+    setHydrated(true)
   }, [])
 
 
@@ -149,7 +154,7 @@ const HomePage = () => {
 
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-950">
+    <div className="min-h-screen bg-white dark:bg-gray-950" suppressHydrationWarning>
 
       {/* Hero Section */}
       <section className="relative bg-gradient-to-br from-blue-50 via-white to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 pt-24 sm:pt-32 pb-16 sm:pb-20 overflow-hidden">
@@ -354,8 +359,8 @@ const HomePage = () => {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             {[
-              { icon: '🩺', title: 'Find Doctors', subtitle: '500+ specialists', color: 'from-blue-500 to-blue-600', link: '/patient/doctors' },
-              { icon: '🏥', title: 'Hospitals', subtitle: 'Verified centers', color: 'from-violet-500 to-violet-600', link: '/patient/hospitals' },
+              { icon: '🩺', title: 'Find Doctors', subtitle: '500+ specialists', color: 'from-blue-500 to-blue-600', link: '/user/doctors' },
+              { icon: '🏥', title: 'Hospitals', subtitle: 'Verified centers', color: 'from-violet-500 to-violet-600', link: '/user/hospitals' },
               { icon: '💊', title: 'Medicines', subtitle: 'Order online', color: 'from-blue-500 to-blue-600', link: '/medicines' },
               { icon: '🩹', title: 'Lab Tests', subtitle: 'At home', color: 'from-orange-500 to-orange-600', link: '/lab-tests' }
             ].map((service, idx) => (
@@ -419,7 +424,7 @@ const HomePage = () => {
                 </Button>
               ) : nearbyHospitals.length > 0 && (
                 <button 
-                  onClick={() => router.push('/patient/hospitals')}
+                  onClick={() => router.push('/user/hospitals')}
                   className="text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-2 hover:gap-3 transition-all"
                 >
                   View All
@@ -559,7 +564,7 @@ const HomePage = () => {
                         <div className="flex gap-2">
                           <Button 
                             className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                            onClick={() => router.push(`/patient/hospitals/${hospital.id || hospital._id}`)}
+                            onClick={() => router.push(`/user/hospitals/${hospital.id || hospital._id}`)}
                           >
                             View Details
                             <ArrowRight className="w-4 h-4 ml-2" />
@@ -593,7 +598,7 @@ const HomePage = () => {
                 Try expanding your search radius or check back later
               </p>
               <Button 
-                onClick={() => router.push('/patient/hospitals')}
+                onClick={() => router.push('/user/hospitals')}
                 variant="outline"
                 className="border-blue-600 text-blue-600 hover:bg-blue-50"
               >
@@ -614,7 +619,7 @@ const HomePage = () => {
                 Top Rated Doctors
               </h2>
               <button 
-                onClick={() => router.push('/patient/doctors')}
+                onClick={() => router.push('/user/doctors')}
                 className="text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-2 hover:gap-3 transition-all text-sm sm:text-base"
               >
                 View All
@@ -675,7 +680,7 @@ const HomePage = () => {
                         <Button 
                           size="sm" 
                           className="bg-blue-600 hover:bg-blue-700"
-                          onClick={() => router.push(`/patient/doctors/${doctor._id}`)}
+                          onClick={() => router.push(`/user/doctors/${doctor._id}`)}
                         >
                           Book Now
                         </Button>

@@ -136,7 +136,7 @@ export async function POST(req) {
       fileSize: file.size,
       date: recordDate,
       notes,
-      uploadedBy: 'Patient',
+      uploadedBy: 'user',
       isActive: true
     });
 

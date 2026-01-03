@@ -1,5 +1,5 @@
 // app/patient/page.jsx
-import DashboardOverview from '@/components/patient/DashboardOverview'
+import DashboardOverview from '@/components/user/DashboardOverview'
 
 export default function PatientDashboard() {
   return (

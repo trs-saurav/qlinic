@@ -10,7 +10,7 @@ import AppointmentsList from './AppointmentsList'
 import FamilyMembers from './FamilyMembers'
 import MedicalRecords from './MedicalRecords'
 
-export default function PatientDashboard() {
+export default function userDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isSyncing, setIsSyncing] = useState(false)
 

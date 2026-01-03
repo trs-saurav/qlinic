@@ -251,7 +251,7 @@ const Navbar = () => {
   };
 
   const handleHospitalClick = (hospitalId) => {
-    router.push(`/patient/hospitals/${hospitalId}`);
+    router.push(`/user/hospitals/${hospitalId}`);
     setSearchExpanded(false);
   };
 
@@ -302,9 +302,9 @@ const Navbar = () => {
 
   const loginOptions = [
     {
-      label: "Patient",
+      label: "user",
       icon: UserIcon,
-      href: "/sign-in?role=patient",
+      href: "/sign-in?role=user",
       description: "Book appointments & manage health",
       gradient: "from-blue-500 to-teal-500",
     },
@@ -338,8 +338,8 @@ const Navbar = () => {
   const getDashboardUrl = () => {
     const role = userRole || user?.role;
     switch (role) {
-      case "patient":
-        return "/patient";
+      case "user":
+        return "/user";
       case "doctor":
         return "/doctor";
       case "hospital_admin":
@@ -390,7 +390,7 @@ const Navbar = () => {
             <div className="px-3 sm:px-4 lg:px-8">
               <div className="flex items-center justify-between h-16 sm:h-14 lg:h-16">
                 {/* Logo */}
-                <Link href="/" className="relative flex items-center group flex-shrink-0">
+                <Link href="/" className="relative flex items-center group patientshrink-0">
                   <motion.div
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
@@ -841,7 +841,7 @@ const Navbar = () => {
                       <div className="mt-4 text-center">
                         <button
                           onClick={() => {
-                            router.push("/patient/hospitals");
+                            router.push("/user/hospitals");
                             setSearchExpanded(false);
                           }}
                           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-all"

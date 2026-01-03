@@ -49,7 +49,7 @@ export default function SignInPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { data: session, status } = useSession()
-  const roleFromUrl = searchParams.get('role') || 'patient'
+  const roleFromUrl = searchParams.get('role') || 'user'
   const redirectTo = searchParams.get('redirect')
   
   const [loading, setLoading] = useState(false)
@@ -62,12 +62,12 @@ export default function SignInPage() {
   })
 
   const roles = {
-    patient: {
-      label: 'Patient',
+    user: {
+      label: 'user',
       description: 'Book appointments, access records, and manage health',
       icon: Users,
       gradient: 'from-blue-500 via-blue-600 to-violet-600',
-      redirectUrl: '/patient',
+      redirectUrl: '/user',
       features: ['Instant booking', 'Medical records', 'Family profiles'],
       bgGradient: 'from-blue-500/20 via-violet-500/20 to-purple-500/20'
     },
@@ -100,14 +100,14 @@ export default function SignInPage() {
     }
   }
 
-  const currentRole = roles[roleFromUrl] || roles.patient
+  const currentRole = roles[roleFromUrl] || roles.user
   const IconComponent = currentRole.icon
 
   useEffect(() => {
     if (status === 'authenticated' && session?.user) {
       const userRole = session.user.role
       const roleRoutes = {
-        patient: '/patient',
+        user: '/user',
         doctor: '/doctor',
         hospital_admin: '/hospital-admin',
         admin: '/admin',

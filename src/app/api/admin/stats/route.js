@@ -14,11 +14,6 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Check if user is admin
-    const user = await User.findOne({ clerkId: userId })
-    if (user?.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
-    }
 
     await connectDB()
 

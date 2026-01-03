@@ -72,11 +72,11 @@ export async function middleware(req) {
   const isAdminRoute = nextUrl.pathname.startsWith('/admin')
   const isSubAdminRoute = nextUrl.pathname.startsWith('/sub-admin')
   const isDoctorRoute = nextUrl.pathname.startsWith('/doctor')
-  const isPatientRoute = nextUrl.pathname.startsWith('/patient')
+  const isuserRoute = nextUrl.pathname.startsWith('/user')
   const isHospitalAdminRoute = nextUrl.pathname.startsWith('/hospital-admin')
 
   // Redirect to sign-in if not logged in
-  if (!isLoggedIn && (isAdminRoute || isSubAdminRoute || isDoctorRoute || isPatientRoute || isHospitalAdminRoute)) {
+  if (!isLoggedIn && (isAdminRoute || isSubAdminRoute || isDoctorRoute || isuserRoute || isHospitalAdminRoute)) {
     const signInUrl = new URL('/sign-in', nextUrl.origin)
     signInUrl.searchParams.set('redirect', nextUrl.pathname)
     return NextResponse.redirect(signInUrl)
@@ -96,7 +96,7 @@ export async function middleware(req) {
       return NextResponse.redirect(new URL('/unauthorized', nextUrl))
     }
 
-    if (isPatientRoute && role !== 'patient') {
+    if (isuserRoute && role !== 'user') {
       return NextResponse.redirect(new URL('/unauthorized', nextUrl))
     }
 

@@ -39,10 +39,10 @@ export const authConfig = {
       const isAdminRoute = nextUrl.pathname.startsWith('/admin')
       const isSubAdminRoute = nextUrl.pathname.startsWith('/sub-admin')
       const isDoctorRoute = nextUrl.pathname.startsWith('/doctor')
-      const isPatientRoute = nextUrl.pathname.startsWith('/patient')
+      const isuserRoute = nextUrl.pathname.startsWith('/user')
       const isHospitalAdminRoute = nextUrl.pathname.startsWith('/hospital-admin')
       
-      if (isAdminRoute || isSubAdminRoute || isDoctorRoute || isPatientRoute || isHospitalAdminRoute) {
+      if (isAdminRoute || isSubAdminRoute || isDoctorRoute || isuserRoute || isHospitalAdminRoute) {
         if (!isLoggedIn) return false
         
         // Admin routes
@@ -54,8 +54,8 @@ export const authConfig = {
         // Doctor routes
         if (isDoctorRoute && role !== 'doctor') return false
         
-        // Patient routes
-        if (isPatientRoute && role !== 'patient') return false
+        // user routes
+        if (isuserRoute && role !== 'user') return false
         
         // Hospital admin routes
         if (isHospitalAdminRoute && role !== 'hospital_admin') return false

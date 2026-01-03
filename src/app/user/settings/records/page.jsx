@@ -1,5 +1,5 @@
 
-import MedicalRecords from '@/components/patient/MedicalRecords' // Your fixed component
+import MedicalRecords from '@/components/user/MedicalRecords' // Your fixed component
 
 export default function RecordsPage() {
   return (
