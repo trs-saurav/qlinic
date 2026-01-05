@@ -365,8 +365,6 @@ hospitalSchema.index({ 'address.city': 1, 'address.state': 1 })
 hospitalSchema.index({ 'address.city': 1, isActive: 1, isVerified: 1 })
 hospitalSchema.index({ type: 1, isActive: 1 })
 hospitalSchema.index({ isActive: 1, rating: -1 })
-hospitalSchema.index({ 'verificationRequest.status': 1 })
-hospitalSchema.index({ createdBy: 1 })
 hospitalSchema.index({ adminUsers: 1 })
 
 // ✅ Geospatial index for location-based search

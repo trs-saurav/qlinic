@@ -6,6 +6,7 @@ import MedicalRecord from '@/models/medicalRecord';
 import FamilyMember from '@/models/familyMember';
 import cloudinary from '@/lib/cloudinary';
 
+// GET: Fetch all active records for the logged-in user
 export async function GET(req) {
   try {
     const session = await auth();
@@ -34,6 +35,7 @@ export async function GET(req) {
   }
 }
 
+// POST: Upload a new record (With Limit Check)
 export async function POST(req) {
   try {
     const session = await auth();
@@ -48,6 +50,19 @@ export async function POST(req) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
+    // 🛑 LIMIT CHECK: Count active records
+    const recordCount = await MedicalRecord.countDocuments({ 
+      userId: user._id, 
+      isActive: true 
+    });
+
+    if (recordCount >= 4) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Limit reached. You can only upload up to 4 medical records.' 
+      }, { status: 403 });
+    }
+
     const formData = await req.formData();
     const file = formData.get('file');
     const title = formData.get('title')?.trim();
@@ -57,20 +72,12 @@ export async function POST(req) {
     const notes = formData.get('notes');
 
     // VALIDATION
-    if (!file) {
-      return NextResponse.json({ success: false, error: 'No file provided' }, { status: 400 });
-    }
-    if (!title) {
-      return NextResponse.json({ success: false, error: 'Title is required' }, { status: 400 });
-    }
-    if (!type) {
-      return NextResponse.json({ success: false, error: 'Type is required' }, { status: 400 });
-    }
-    if (!familyMemberId) {
-      return NextResponse.json({ success: false, error: 'Family member is required' }, { status: 400 });
-    }
+    if (!file) return NextResponse.json({ success: false, error: 'No file provided' }, { status: 400 });
+    if (!title) return NextResponse.json({ success: false, error: 'Title is required' }, { status: 400 });
+    if (!type) return NextResponse.json({ success: false, error: 'Type is required' }, { status: 400 });
+    if (!familyMemberId) return NextResponse.json({ success: false, error: 'Family member is required' }, { status: 400 });
 
-    // VALIDATE FAMILY MEMBER BELONGS TO USER
+    // Validate Family Member ownership
     const familyMember = await FamilyMember.findOne({
       _id: familyMemberId,
       userId: user._id
@@ -79,21 +86,18 @@ export async function POST(req) {
       return NextResponse.json({ success: false, error: 'Invalid family member' }, { status: 400 });
     }
 
-    // FILE SIZE VALIDATION (10MB)
+    // File Size Validation (10MB)
     if (file.size > 10 * 1024 * 1024) {
       return NextResponse.json({ success: false, error: 'File size must be less than 10MB' }, { status: 400 });
     }
 
-    // Convert file to buffer
+    // Convert file for Cloudinary
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // ✅ Get cloudinary instance
-    const cloudinaryInstance = cloudinary;
-
-    // CLOUDINARY UPLOAD
+    // Upload to Cloudinary
     const uploadResult = await new Promise((resolve, reject) => {
-      const uploadStream = cloudinaryInstance.uploader.upload_stream(
+      const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: 'qlinic/medical-records',
           resource_type: 'auto',
@@ -119,13 +123,7 @@ export async function POST(req) {
       return NextResponse.json({ success: false, error: 'File upload to storage failed' }, { status: 500 });
     }
 
-    // DATE VALIDATION
-    const recordDate = new Date(date);
-    if (isNaN(recordDate.getTime())) {
-      return NextResponse.json({ success: false, error: 'Invalid date format' }, { status: 400 });
-    }
-
-    // CREATE RECORD
+    // Create Record in DB
     const record = await MedicalRecord.create({
       userId: user._id,
       familyMemberId,
@@ -134,13 +132,13 @@ export async function POST(req) {
       fileUrl: uploadResult.secure_url,
       fileType: file.type || 'application/octet-stream',
       fileSize: file.size,
-      date: recordDate,
+      date: new Date(date),
       notes,
       uploadedBy: 'user',
       isActive: true
     });
 
-    // POPULATE FOR FRONTEND
+    // Populate return data
     const populatedRecord = await MedicalRecord.findById(record._id)
       .populate('familyMemberId', 'firstName lastName relationship');
 

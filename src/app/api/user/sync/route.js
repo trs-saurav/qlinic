@@ -16,7 +16,7 @@ export async function GET() {
 
     await connectDB()
     
-    const user = await User.findByEmail(session.user.email)
+    const user = await User.findOne({ email: session.user.email } )
     
     if (!user) {
       return NextResponse.json(

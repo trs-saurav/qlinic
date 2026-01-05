@@ -1,132 +1,55 @@
-// src/components/patient/FamilyMembers.jsx
 'use client'
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+
+import { useState } from 'react'
+import { useUser } from '@/context/UserContext'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { 
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger 
+} from '@/components/ui/dialog'
+import { 
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
+} from '@/components/ui/select'
 import toast from 'react-hot-toast'
 import { 
-  Users, UserPlus, Edit, Trash2, Heart, Phone, Calendar, AlertCircle 
+  Users, UserPlus, Edit, Trash2, Heart, Phone, Calendar, AlertCircle, Loader2, User 
 } from 'lucide-react'
 
 export default function FamilyMembers() {
-  const [familyMembers, setFamilyMembers] = useState([])
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [editingMember, setEditingMember] = useState(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const { familyMembers, addFamilyMember, updateFamilyMember, deleteFamilyMember } = useUser()
+  
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    relationship: 'Self',
-    dateOfBirth: '',
-    gender: 'male',
-    bloodGroup: null,
-    phoneNumber: '',
-    email: '',
-    address: '',
-    emergencyContact: '',
-    allergies: '',
-    currentMedications: '',
-    medicalHistory: ''
+    firstName: '', lastName: '', relationship: 'Self', gender: 'male', dateOfBirth: '',
+    bloodGroup: '', phoneNumber: '', email: '', address: '', emergencyContact: '',
+    allergies: '', currentMedications: '', medicalHistory: ''
   })
 
-  useEffect(() => {
-    fetchFamilyMembers()
-  }, [])
+  // --- Handlers ---
 
-  const fetchFamilyMembers = async () => {
-    try {
-      const response = await fetch('/api/patient/family')
-      const data = await response.json()
-
-      if (data.familyMembers) {
-        setFamilyMembers(data.familyMembers)
-      }
-    } catch (error) {
-      console.error('Error fetching family members:', error)
-      toast.error('Failed to load family members')
-    } finally {
-      setIsLoading(false)
-    }
+  const resetForm = () => {
+    setFormData({
+      firstName: '', lastName: '', relationship: 'Self', gender: 'male', dateOfBirth: '',
+      bloodGroup: '', phoneNumber: '', email: '', address: '', emergencyContact: '',
+      allergies: '', currentMedications: '', medicalHistory: ''
+    })
+    setEditingId(null)
   }
 
-  const validateForm = () => {
-    if (!formData.firstName.trim()) return 'First name is required'
-    if (!formData.lastName.trim()) return 'Last name is required'
-    if (!formData.relationship) return 'Relationship is required'
-    if (!formData.gender) return 'Gender is required'
-    return null
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    
-    const validationError = validateForm()
-    if (validationError) {
-      toast.error(validationError)
-      return
-    }
-    
-    const loadingToast = toast.loading(editingMember ? 'Updating...' : 'Adding member...')
-
-    try {
-      setIsSubmitting(true)
-      const url = editingMember 
-        ? `/api/patient/family/${editingMember._id}` 
-        : '/api/patient/family'
-      
-      const method = editingMember ? 'PATCH' : 'POST'
-
-      const processedData = {
-        ...formData,
-        bloodGroup: formData.bloodGroup === '' ? null : formData.bloodGroup,
-        allergies: formData.allergies ? formData.allergies.split(',').map(s => s.trim()).filter(Boolean) : [],
-        currentMedications: formData.currentMedications ? formData.currentMedications.split(',').map(s => s.trim()).filter(Boolean) : [],
-        medicalHistory: formData.medicalHistory ? formData.medicalHistory.split(',').map(s => s.trim()).filter(Boolean) : []
-      }
-
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(processedData)
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        toast.success(
-          editingMember ? '✅ Member updated successfully' : '✅ Member added successfully',
-          { id: loadingToast }
-        )
-        setIsAddModalOpen(false)
-        setEditingMember(null)
-        resetForm()
-        fetchFamilyMembers()
-      } else {
-        toast.error(data.error || 'Operation failed', { id: loadingToast })
-      }
-    } catch (error) {
-      console.error('Error saving family member:', error)
-      toast.error('Something went wrong', { id: loadingToast })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  const handleEdit = (member) => {
-    setEditingMember(member)
+  const handleEditClick = (member) => {
+    setEditingId(member._id)
     setFormData({
       firstName: member.firstName || '',
       lastName: member.lastName || '',
       relationship: member.relationship || 'Self',
-      dateOfBirth: member.dateOfBirth ? new Date(member.dateOfBirth).toISOString().split('T')[0] : '',
       gender: member.gender || 'male',
+      dateOfBirth: member.dateOfBirth ? new Date(member.dateOfBirth).toISOString().split('T')[0] : '',
       bloodGroup: member.bloodGroup || '',
       phoneNumber: member.phoneNumber || '',
       email: member.email || '',
@@ -136,161 +59,115 @@ export default function FamilyMembers() {
       currentMedications: Array.isArray(member.currentMedications) ? member.currentMedications.join(', ') : '',
       medicalHistory: Array.isArray(member.medicalHistory) ? member.medicalHistory.join(', ') : ''
     })
-    setIsAddModalOpen(true)
+    setIsModalOpen(true)
   }
 
-  const handleDelete = async (memberId) => {
-    if (!confirm('Are you sure you want to remove this family member?')) return
+  const handleDeleteClick = async (id) => {
+    if (!confirm('Are you sure you want to delete this member?')) return
+    await deleteFamilyMember(id)
+  }
 
-    const loadingToast = toast.loading('Removing member...')
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!formData.firstName || !formData.lastName) {
+      toast.error('Name fields are required')
+      return
+    }
 
-    try {
-      const response = await fetch(`/api/patient/family/${memberId}`, {
-        method: 'DELETE'
-      })
+    setIsSubmitting(true)
 
-      if (response.ok) {
-        toast.success('Member removed successfully', { id: loadingToast })
-        fetchFamilyMembers()
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || 'Failed to remove member', { id: loadingToast })
-      }
-    } catch (error) {
-      console.error('Error deleting family member:', error)
-      toast.error('Something went wrong', { id: loadingToast })
+    const payload = {
+      ...formData,
+      allergies: formData.allergies ? String(formData.allergies).split(',').map(s=>s.trim()).filter(Boolean) : [],
+      currentMedications: formData.currentMedications ? String(formData.currentMedications).split(',').map(s=>s.trim()).filter(Boolean) : [],
+      medicalHistory: formData.medicalHistory ? String(formData.medicalHistory).split(',').map(s=>s.trim()).filter(Boolean) : [],
+      bloodGroup: formData.bloodGroup || null
+    }
+
+    let result
+    if (editingId) {
+      result = await updateFamilyMember(editingId, payload)
+    } else {
+      result = await addFamilyMember(payload)
+    }
+
+    setIsSubmitting(false)
+    if (result.success) {
+      setIsModalOpen(false)
+      resetForm()
     }
   }
 
-  const resetForm = () => {
-    setFormData({
-      firstName: '',
-      lastName: '',
-      relationship: 'Self',
-      dateOfBirth: '',
-      gender: 'male',
-      bloodGroup: null,
-      phoneNumber: '',
-      email: '',
-      address: '',
-      emergencyContact: '',
-      allergies: '',
-      currentMedications: '',
-      medicalHistory: ''
-    })
-    setEditingMember(null)
+  // --- Helpers ---
+
+  const getAge = (dob) => {
+    if (!dob) return null
+    const diff = Date.now() - new Date(dob).getTime()
+    return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25))
   }
 
-  const getRelationshipColor = (relationship) => {
-    const colors = {
-      'Self': 'bg-blue-100 text-blue-700',
-      'Spouse': 'bg-pink-100 text-pink-700',
-      'Child': 'bg-purple-100 text-purple-700',
-      'Parent': 'bg-green-100 text-green-700',
-      'Sibling': 'bg-yellow-100 text-yellow-700',
-      'Grandparent': 'bg-orange-100 text-orange-700',
-      'Other': 'bg-slate-100 text-slate-700'
+  const getRelColor = (rel) => {
+    const map = {
+      'Self': 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200 border-blue-200 dark:border-blue-800',
+      'Spouse': 'bg-pink-100 text-pink-800 dark:bg-pink-900/50 dark:text-pink-200 border-pink-200 dark:border-pink-800',
+      'Child': 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200 border-purple-200 dark:border-purple-800',
+      'Parent': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800',
     }
-    return colors[relationship] || colors['Other']
-  }
-
-  const calculateAge = (dateOfBirth) => {
-    if (!dateOfBirth) return null
-    const today = new Date()
-    const birthDate = new Date(dateOfBirth)
-    let age = today.getFullYear() - birthDate.getFullYear()
-    const monthDiff = today.getMonth() - birthDate.getMonth()
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--
-    }
-    return age
-  }
-
-  if (isLoading && familyMembers.length === 0) {
-    return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    )
+    return map[rel] || 'bg-secondary text-secondary-foreground border-border'
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-8 p-1">
+      
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900">Family Members</h2>
-          <p className="text-slate-500 mt-1">Manage health records for your family</p>
+          <h2 className="text-3xl font-bold tracking-tight">Family Members</h2>
+          <p className="text-muted-foreground mt-1">Manage health profiles for your family</p>
         </div>
 
-        <Dialog open={isAddModalOpen} onOpenChange={(open) => {
-          setIsAddModalOpen(open)
-          if (!open) resetForm()
-        }}>
+        <Dialog open={isModalOpen} onOpenChange={(open) => { setIsModalOpen(open); if(!open) resetForm() }}>
           <DialogTrigger asChild>
-            <Button size="lg" className="gap-2">
-              <UserPlus className="w-5 h-5" />
-              Add Family Member
+            <Button size="lg" className="shadow-sm">
+              <UserPlus className="w-5 h-5 mr-2" /> Add Member
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>
-                {editingMember ? 'Edit Family Member' : 'Add Family Member'}
-              </DialogTitle>
+              <DialogTitle>{editingId ? 'Edit Member' : 'Add New Member'}</DialogTitle>
             </DialogHeader>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Personal Information */}
+            <form onSubmit={handleSubmit} className="space-y-6 mt-4">
+              
+              {/* Personal Details Group */}
               <div className="space-y-4">
-                <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-                  <Users className="w-5 h-5" />
-                  Personal Information
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                  Personal Details
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="firstName">First Name <span className="text-red-500">*</span></Label>
-                    <Input
-                      id="firstName"
-                      required
-                      value={formData.firstName}
-                      onChange={e => setFormData({...formData, firstName: e.target.value})}
-                      placeholder="John"
-                    />
+                  <div className="space-y-2">
+                    <Label>First Name <span className="text-destructive">*</span></Label>
+                    <Input required value={formData.firstName} onChange={e=>setFormData({...formData, firstName: e.target.value})} placeholder="John" />
                   </div>
-                  <div>
-                    <Label htmlFor="lastName">Last Name <span className="text-red-500">*</span></Label>
-                    <Input
-                      id="lastName"
-                      required
-                      value={formData.lastName}
-                      onChange={e => setFormData({...formData, lastName: e.target.value})}
-                      placeholder="Doe"
-                    />
+                  <div className="space-y-2">
+                    <Label>Last Name <span className="text-destructive">*</span></Label>
+                    <Input required value={formData.lastName} onChange={e=>setFormData({...formData, lastName: e.target.value})} placeholder="Doe" />
                   </div>
-                  <div>
-                    <Label htmlFor="relationship">Relationship <span className="text-red-500">*</span></Label>
-                    <Select value={formData.relationship} onValueChange={v => setFormData({...formData, relationship: v})}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
+                  <div className="space-y-2">
+                    <Label>Relationship <span className="text-destructive">*</span></Label>
+                    <Select value={formData.relationship} onValueChange={v=>setFormData({...formData, relationship: v})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Self">Self</SelectItem>
-                        <SelectItem value="Spouse">Spouse</SelectItem>
-                        <SelectItem value="Child">Child</SelectItem>
-                        <SelectItem value="Parent">Parent</SelectItem>
-                        <SelectItem value="Sibling">Sibling</SelectItem>
-                        <SelectItem value="Grandparent">Grandparent</SelectItem>
-                        <SelectItem value="Other">Other</SelectItem>
+                        {['Self','Spouse','Child','Parent','Sibling','Grandparent','Other'].map(r => (
+                          <SelectItem key={r} value={r}>{r}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label htmlFor="gender">Gender <span className="text-red-500">*</span></Label>
-                    <Select value={formData.gender} onValueChange={v => setFormData({...formData, gender: v})}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
+                  <div className="space-y-2">
+                    <Label>Gender</Label>
+                    <Select value={formData.gender} onValueChange={v=>setFormData({...formData, gender: v})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="male">Male</SelectItem>
                         <SelectItem value="female">Female</SelectItem>
@@ -298,259 +175,182 @@ export default function FamilyMembers() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label htmlFor="dob">Date of Birth</Label>
-                    <Input
-                      id="dob"
-                      type="date"
-                      value={formData.dateOfBirth}
-                      onChange={e => setFormData({...formData, dateOfBirth: e.target.value})}
-                    />
+                  <div className="space-y-2">
+                    <Label>Date of Birth</Label>
+                    <Input type="date" value={formData.dateOfBirth} onChange={e=>setFormData({...formData, dateOfBirth: e.target.value})} />
                   </div>
-                  <div>
-                    <Label htmlFor="bloodGroup">Blood Group</Label>
-                    <Select value={formData.bloodGroup || ''} onValueChange={v => setFormData({...formData, bloodGroup: v || null})}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select blood group (optional)" />
-                      </SelectTrigger>
+                  <div className="space-y-2">
+                    <Label>Blood Group</Label>
+                    <Select value={formData.bloodGroup} onValueChange={v=>setFormData({...formData, bloodGroup: v})}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                       <SelectContent>
-                        {/* ✅ FIXED: Removed empty value="" SelectItem */}
-                        <SelectItem value="A+">A+</SelectItem>
-                        <SelectItem value="A-">A-</SelectItem>
-                        <SelectItem value="B+">B+</SelectItem>
-                        <SelectItem value="B-">B-</SelectItem>
-                        <SelectItem value="O+">O+</SelectItem>
-                        <SelectItem value="O-">O-</SelectItem>
-                        <SelectItem value="AB+">AB+</SelectItem>
-                        <SelectItem value="AB-">AB-</SelectItem>
+                        {['A+','A-','B+','B-','O+','O-','AB+','AB-'].map(bg => (
+                          <SelectItem key={bg} value={bg}>{bg}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
               </div>
 
-              {/* Contact Information */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-                  <Phone className="w-5 h-5" />
-                  Contact Information
+              {/* Contact Info Group */}
+              <div className="space-y-4 pt-4 border-t">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                  Contact Info
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="phone">Phone Number</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      value={formData.phoneNumber}
-                      onChange={e => setFormData({...formData, phoneNumber: e.target.value})}
-                      placeholder="+91 9876543210"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={e => setFormData({...formData, email: e.target.value})}
-                      placeholder="john@example.com"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <Label htmlFor="address">Address</Label>
-                    <Input
-                      id="address"
-                      value={formData.address}
-                      onChange={e => setFormData({...formData, address: e.target.value})}
-                      placeholder="Street, City, State, Pincode"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <Label htmlFor="emergency">Emergency Contact</Label>
-                    <Input
-                      id="emergency"
-                      type="tel"
-                      value={formData.emergencyContact}
-                      onChange={e => setFormData({...formData, emergencyContact: e.target.value})}
-                      placeholder="+91 9876543210"
-                    />
-                  </div>
+                   <div className="space-y-2">
+                    <Label>Phone</Label>
+                    <Input type="tel" value={formData.phoneNumber} onChange={e=>setFormData({...formData, phoneNumber: e.target.value})} />
+                   </div>
+                   <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input type="email" value={formData.email} onChange={e=>setFormData({...formData, email: e.target.value})} />
+                   </div>
                 </div>
               </div>
 
-              {/* Medical Information */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-                  <Heart className="w-5 h-5" />
-                  Medical Information
+              {/* Medical Group */}
+              <div className="space-y-4 pt-4 border-t">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                  Medical Profile
                 </h3>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="allergies">Allergies (comma separated)</Label>
-                    <Input
-                      id="allergies"
-                      value={formData.allergies}
-                      onChange={e => setFormData({...formData, allergies: e.target.value})}
-                      placeholder="Penicillin, Peanuts, Dust"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="medications">Current Medications (comma separated)</Label>
-                    <Input
-                      id="medications"
-                      value={formData.currentMedications}
-                      onChange={e => setFormData({...formData, currentMedications: e.target.value})}
-                      placeholder="Aspirin, Insulin"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="history">Medical History (comma separated)</Label>
-                    <Input
-                      id="history"
-                      value={formData.medicalHistory}
-                      onChange={e => setFormData({...formData, medicalHistory: e.target.value})}
-                      placeholder="Diabetes, Hypertension"
-                    />
-                  </div>
+                <div className="space-y-3">
+                   <div className="space-y-2">
+                    <Label>Allergies (comma separated)</Label>
+                    <Input value={formData.allergies} onChange={e=>setFormData({...formData, allergies: e.target.value})} placeholder="Peanuts, Penicillin..." />
+                   </div>
+                   <div className="space-y-2">
+                    <Label>Current Medications</Label>
+                    <Input value={formData.currentMedications} onChange={e=>setFormData({...formData, currentMedications: e.target.value})} />
+                   </div>
+                   <div className="space-y-2">
+                    <Label>Medical History</Label>
+                    <Input value={formData.medicalHistory} onChange={e=>setFormData({...formData, medicalHistory: e.target.value})} />
+                   </div>
                 </div>
               </div>
 
-              {/* Submit Buttons */}
-              <div className="flex gap-3">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={resetForm}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
+              <div className="flex gap-3 pt-6 border-t">
+                <Button type="button" variant="outline" className="flex-1" onClick={()=>setIsModalOpen(false)}>Cancel</Button>
                 <Button type="submit" className="flex-1" disabled={isSubmitting}>
-                  {isSubmitting ? 'Saving...' : editingMember ? 'Update Member' : 'Add Member'}
+                  {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {editingId ? 'Save Changes' : 'Add Member'}
                 </Button>
               </div>
+
             </form>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Family Members Grid */}
-      {familyMembers.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {familyMembers.map((member) => {
-            const age = calculateAge(member.dateOfBirth)
-            return (
-              <Card key={member._id} className="hover:shadow-lg transition-all">
-                <CardContent className="pt-6">
-                  <div className="space-y-4">
-                    {/* Avatar & Name */}
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-white font-bold text-xl">
-                          {member.firstName?.[0]}{member.lastName?.[0]}
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-slate-900">
-                            {member.firstName} {member.lastName}
-                          </h3>
-                          <Badge className={getRelationshipColor(member.relationship)}>
-                            {member.relationship}
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Basic Info */}
-                    <div className="space-y-2 text-sm">
-                      {age && (
-                        <p className="text-slate-600 flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-slate-400" />
-                          {age} years old
-                        </p>
-                      )}
-                      <p className="text-slate-600 capitalize">
-                        Gender: {member.gender || 'Not specified'}
-                      </p>
-                      {member.bloodGroup && (
-                        <p className="text-slate-600 flex items-center gap-2">
-                          <Heart className="w-4 h-4 text-red-500" />
-                          Blood Group: <span className="font-semibold">{member.bloodGroup}</span>
-                        </p>
-                      )}
-                      {member.phoneNumber && (
-                        <p className="text-slate-600 flex items-center gap-2">
-                          <Phone className="w-4 h-4 text-slate-400" />
-                          {member.phoneNumber}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Medical Info */}
-                    {(member.allergies?.length > 0 || member.currentMedications?.length > 0) && (
-                      <div className="pt-3 border-t space-y-2">
-                        {member.allergies?.length > 0 && (
-                          <div className="flex items-start gap-2">
-                            <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
-                            <div className="text-xs text-slate-600">
-                              <span className="font-semibold">Allergies:</span>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {member.allergies.slice(0, 3).map((allergy, idx) => (
-                                  <Badge key={idx} variant="secondary" className="text-[10px] bg-amber-50 text-amber-700">
-                                    {allergy}
-                                  </Badge>
-                                ))}
-                                {member.allergies.length > 3 && (
-                                  <Badge variant="secondary" className="text-[10px]">
-                                    +{member.allergies.length - 3}
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    <div className="flex gap-2 pt-3 border-t">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="flex-1"
-                        onClick={() => handleEdit(member)}
-                      >
-                        <Edit className="w-4 h-4 mr-1" />
-                        Edit
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => handleDelete(member._id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="py-12">
-            <div className="text-center text-slate-400">
-              <Users className="w-16 h-16 mx-auto mb-4 opacity-20" />
-              <p className="text-lg font-medium">No family members added yet</p>
-              <p className="text-sm mt-2">Add yourself and your family members to book appointments</p>
-              <Button className="mt-4" onClick={() => setIsAddModalOpen(true)}>
-                <UserPlus className="w-4 h-4 mr-2" />
-                Add Your First Member
-              </Button>
+      {/* Grid Display */}
+      {familyMembers.length === 0 ? (
+        <Card className="border-dashed bg-muted/30">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                <Users className="w-8 h-8 text-muted-foreground/50" />
             </div>
+            <h3 className="text-lg font-medium">No members found</h3>
+            <p className="text-muted-foreground max-w-sm mt-2">
+              Add family members to simplify appointment booking and health tracking.
+            </p>
           </CardContent>
         </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {familyMembers.map((m) => (
+            <Card key={m._id} className="group overflow-hidden transition-all hover:shadow-md border-border bg-card text-card-foreground">
+              <CardContent className="p-0">
+                
+                {/* 1. Header Area with Full Width Name */}
+                <div className="p-6 pb-4 flex items-start gap-4">
+                  <div className="flex-shrink-0">
+                    <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-xl font-bold text-primary">
+                      {m.firstName?.[0]}{m.lastName?.[0]}
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0 pt-1">
+                    <h3 className="text-lg font-bold leading-tight truncate">
+                        {m.firstName} {m.lastName}
+                    </h3>
+                    <div className="mt-1.5 flex items-center gap-2">
+                        <Badge variant="outline" className={`${getRelColor(m.relationship)} border font-medium`}>
+                            {m.relationship}
+                        </Badge>
+                        {m.gender && (
+                             <span className="text-xs text-muted-foreground capitalize flex items-center gap-1">
+                                <User className="w-3 h-3" /> {m.gender}
+                             </span>
+                        )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Info Grid Section */}
+                <div className="px-6 py-4 bg-muted/40 border-t border-b grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
+                   {/* Age */}
+                   <div className="col-span-1">
+                      <span className="text-muted-foreground text-xs uppercase tracking-wide block mb-0.5">Age</span>
+                      <span className="font-medium flex items-center gap-1.5">
+                         <Calendar className="w-3.5 h-3.5 opacity-70" />
+                         {m.dateOfBirth ? `${getAge(m.dateOfBirth)} years` : '-'}
+                      </span>
+                   </div>
+
+                   {/* Blood Group */}
+                   <div className="col-span-1">
+                      <span className="text-muted-foreground text-xs uppercase tracking-wide block mb-0.5">Blood</span>
+                      <span className="font-medium flex items-center gap-1.5">
+                         <Heart className="w-3.5 h-3.5 text-red-500" />
+                         {m.bloodGroup || '-'}
+                      </span>
+                   </div>
+
+                   {/* Phone */}
+                   <div className="col-span-2">
+                      <span className="text-muted-foreground text-xs uppercase tracking-wide block mb-0.5">Contact</span>
+                      <span className="font-medium flex items-center gap-1.5">
+                         <Phone className="w-3.5 h-3.5 opacity-70" />
+                         {m.phoneNumber || 'No number added'}
+                      </span>
+                   </div>
+                </div>
+
+                {/* 3. Alerts Section (Bottom) */}
+                {m.allergies && m.allergies.length > 0 && (
+                   <div className="px-6 py-3 border-b flex items-center gap-2 overflow-hidden">
+                      <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                      <div className="flex gap-1 overflow-x-auto no-scrollbar">
+                          {m.allergies.slice(0,3).map((a,i) => (
+                             <span key={i} className="text-xs bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded-full whitespace-nowrap border border-amber-200 dark:border-amber-800">
+                                {a}
+                             </span>
+                          ))}
+                      </div>
+                   </div>
+                )}
+
+                {/* 4. Action Footer (Full Width) */}
+                <div className="flex divide-x border-t">
+                  <button 
+                    onClick={()=>handleEditClick(m)}
+                    className="flex-1 py-3 text-sm font-medium text-muted-foreground hover:text-primary hover:bg-muted/50 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Edit className="w-4 h-4" /> Edit Profile
+                  </button>
+                  <button 
+                    onClick={()=>handleDeleteClick(m._id)}
+                    className="flex-1 py-3 text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" /> Remove
+                  </button>
+                </div>
+
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
     </div>
   )

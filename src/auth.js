@@ -41,7 +41,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         try {
           await connectDB()
           
-          const user = await User.findByEmail(credentials.email)
+          // Select password explicitly since it's select: false in the schema
+          const user = await User.findOne({ email: credentials.email }).select('+password')
           if (!user) {
             console.log('❌ User not found:', credentials.email)
             return null
@@ -53,7 +54,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             return null
           }
           
-          await user.updateLastLogin()
+          // Update last login if you have this method, else do a direct update
+          if (typeof user.updateLastLogin === 'function') {
+            await user.updateLastLogin()
+          } else {
+            user.lastLogin = new Date()
+            await user.save()
+          }
           
           console.log('✅ Login successful:', user.email)
           
@@ -77,20 +84,57 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       try {
         if (account?.provider !== 'credentials') {
           await connectDB()
-          
-          const dbUser = await User.findOrCreateOAuthUser(
-            { 
-              id: account.providerAccountId, 
+
+          // Try to find user by linked OAuth provider first
+          let dbUser = await User.findOne({
+            oauthProviders: {
+              $elemMatch: { provider: account.provider, providerId: account.providerAccountId }
+            }
+          })
+
+          // Fallback: find by email
+          if (!dbUser && user?.email) {
+            dbUser = await User.findOne({ email: user.email })
+          }
+
+          // Create if not exists
+          if (!dbUser) {
+            const [given, family] = [profile?.given_name, profile?.family_name]
+            dbUser = new User({
               email: user.email,
-              name: user.name,
-              picture: user.image,
-              given_name: profile?.given_name,
-              family_name: profile?.family_name,
-            },
-            account.provider
-          )
-          
-          await dbUser.updateLastLogin()
+              firstName: given || user.name?.split(' ')?.[0] || '',
+              lastName: family || user.name?.split(' ')?.slice(1).join(' ') || '',
+              profileImage: user.image || '',
+              role: 'user', // default base role
+              oauthProviders: [
+                { provider: account.provider, providerId: account.providerAccountId }
+              ],
+            })
+            await dbUser.save()
+          } else {
+            // Ensure the current provider is linked
+            const exists = dbUser.oauthProviders?.some(p => p.provider === account.provider && p.providerId === account.providerAccountId)
+            if (!exists) {
+              dbUser.oauthProviders = dbUser.oauthProviders || []
+              dbUser.oauthProviders.push({ provider: account.provider, providerId: account.providerAccountId })
+            }
+            // Update basic profile info
+            if (user.image && dbUser.profileImage !== user.image) dbUser.profileImage = user.image
+            if (user.name) {
+              const [first, ...rest] = user.name.split(' ')
+              if (first && !dbUser.firstName) dbUser.firstName = first
+              if (rest.length && !dbUser.lastName) dbUser.lastName = rest.join(' ')
+            }
+            await dbUser.save()
+          }
+
+          // Update last login
+          if (typeof dbUser.updateLastLogin === 'function') {
+            await dbUser.updateLastLogin()
+          } else {
+            dbUser.lastLogin = new Date()
+            await dbUser.save()
+          }
         }
         return true
       } catch (error) {
@@ -103,7 +147,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       try {
         if (user) {
           await connectDB()
-          const dbUser = await User.findByEmail(user.email)
+          const dbUser = await User.findOne({ email: user.email })
           
           if (dbUser) {
             token.id = dbUser._id.toString()

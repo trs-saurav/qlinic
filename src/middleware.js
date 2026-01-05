@@ -20,7 +20,7 @@ export async function middleware(req) {
   )
 
   if (isPublicApi) {
-    console.log('✅ Public API route allowed:', nextUrl.pathname)
+   
     return NextResponse.next()
   }
 

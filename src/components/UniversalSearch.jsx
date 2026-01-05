@@ -198,9 +198,10 @@ export default function UniversalSearch({
     try {
       abortControllerRef.current = new AbortController()
 
+      const typeParam = searchType === 'all' ? 'all' : (searchType.endsWith('s') ? searchType.slice(0, -1) : searchType)
       const params = new URLSearchParams({
         q: searchQuery,
-        type: searchType,
+        type: typeParam,
         limit: '10'
       })
 
@@ -217,7 +218,37 @@ export default function UniversalSearch({
       const data = await response.json()
 
       if (data.success) {
-        setResults(data.results)
+        const norm = {
+          doctors: (data.results?.doctors || data.results?.doctor || []).map((d) => ({
+            ...d,
+            id: d.id || d._id,
+            firstName: d.firstName || (d.name ? d.name.split(' ')[0] : ''),
+            lastName: d.lastName || (d.name ? d.name.split(' ').slice(1).join(' ') : ''),
+            profileImage: d.profileImage || d.image || '',
+            specialization: d.specialization || d.doctorProfile?.specialization || 'General Physician',
+            rating: typeof d.rating === 'number' ? d.rating : (d.rating?.value || 0),
+            experience: d.experience || d.doctorProfile?.experience || 0,
+            distance: typeof d.distance === 'number' ? d.distance : undefined,
+            hospitalName: d.hospitalName || d.doctorProfile?.primaryHospitalName,
+            type: 'doctor',
+          })),
+          hospitals: (data.results?.hospitals || data.results?.hospital || []).map((h) => ({
+            ...h,
+            id: h.id || h._id,
+            name: h.name,
+            city: h.city || h.address?.city || '',
+            state: h.state || h.address?.state || '',
+            logo: h.logo || h.image || '',
+            rating: typeof h.rating === 'number' ? h.rating : 0,
+            totalReviews: h.totalReviews || 0,
+            specialties: h.specialties || [],
+            phone: h.phone || h.contactDetails?.phone || '',
+            email: h.email || h.contactDetails?.email || '',
+            distance: typeof h.distance === 'number' ? h.distance : undefined,
+            type: 'hospital',
+          })),
+        }
+        setResults(norm)
       } else {
         console.error('Search failed:', data.error)
         setResults({ doctors: [], hospitals: [] })
@@ -256,9 +287,9 @@ export default function UniversalSearch({
 
   const handleResultClick = (result) => {
     if (result.type === 'doctor') {
-      router.push(`/patient/doctors/${result.id}`)
+      router.push(`/doctor/${result.id}`)
     } else if (result.type === 'hospital') {
-      router.push(`/patient/hospitals/${result.id}`)
+      router.push(`/user/hospitals/${result.id}`)
     }
     setShowResults(false)
     setQuery('')
@@ -413,7 +444,7 @@ export default function UniversalSearch({
             <FilterButton
               active={searchType === 'hospitals'}
               onClick={() => setSearchType('hospitals')}
-              icon={Hospital}
+              icon={HospitalIcon}
               label="Hospitals"
             />
           </motion.div>

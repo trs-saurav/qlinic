@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import {
   User,
@@ -15,7 +14,8 @@ import {
   CreditCard,
   FileText,
   ChevronRight,
-  Smartphone
+  Smartphone,
+  Group
 } from 'lucide-react'
 
 const SETTINGS_GROUPS = [
@@ -33,6 +33,12 @@ const SETTINGS_GROUPS = [
         href: '/user/settings/security',
         icon: Shield,
         description: 'Password & 2FA'
+      },
+      {
+        label: 'Family Members',
+        href: '/user/settings/family',
+        icon: Group,
+        description: 'Manage family members'
       },
       {
         label: 'Medical Records',

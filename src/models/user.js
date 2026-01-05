@@ -59,8 +59,8 @@ const userSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: ['patient', 'doctor', 'hospital_admin', 'admin', 'sub_admin'],
-      default: 'patient',
+      enum: ['user', 'doctor', 'hospital_admin', 'admin', 'sub_admin'],
+      default: 'user',
       required: true,
     },
 
@@ -188,7 +188,7 @@ userSchema.index({ 'hospitalAdminProfile.hospitalId': 1 })
 userSchema.index({ deletedAt: 1 })
 
 // ✅ Pre-save hook: Hash password & clean location
-userSchema.pre('save', async function (next) { // Added 'next' parameter
+userSchema.pre('save', async function () { 
   try {
     // Hash password if modified
     if (this.isModified('password') && this.password) {
@@ -226,9 +226,9 @@ userSchema.pre('save', async function (next) { // Added 'next' parameter
         this.doctorProfile.location = undefined
       }
     }
-    next();
+   
   } catch (error) {
-    next(error)
+    console.error('Error in pre-save hook:', error)
   }
 })
 

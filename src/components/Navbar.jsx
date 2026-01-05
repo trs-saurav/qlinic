@@ -69,6 +69,8 @@ const Navbar = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [nearbyHospitals, setNearbyHospitals] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [typedLoading, setTypedLoading] = useState(false);
+  const [typedResults, setTypedResults] = useState({ doctors: [], hospitals: [] });
 
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [locationStatus, setLocationStatus] = useState("idle");
@@ -127,6 +129,66 @@ const Navbar = () => {
       }
     }
   }, [searchExpanded]);
+
+  // Debounced typed search for navbar
+  useEffect(() => {
+    const q = (searchQuery || '').trim();
+    if (!searchExpanded) {
+      setTypedResults({ doctors: [], hospitals: [] });
+      setTypedLoading(false);
+      return;
+    }
+    if (q.length < 2) {
+      setTypedResults({ doctors: [], hospitals: [] });
+      setTypedLoading(false);
+      return;
+    }
+    const handle = setTimeout(async () => {
+      try {
+        setTypedLoading(true);
+        const params = new URLSearchParams({ q, limit: '6' });
+        if (userLocation) {
+          params.append('lat', userLocation.latitude.toString());
+          params.append('lng', userLocation.longitude.toString());
+          params.append('radius', '20');
+        }
+        const resp = await fetch(`/api/search?${params.toString()}`, { headers: { Accept: 'application/json' } });
+        const data = await resp.json();
+        const doctors = Array.isArray(data?.results?.doctors)
+          ? data.results.doctors
+          : Array.isArray(data?.doctors)
+            ? data.doctors
+            : [];
+        const hospitals = Array.isArray(data?.results?.hospitals)
+          ? data.results.hospitals
+          : Array.isArray(data?.hospitals)
+            ? data.hospitals
+            : [];
+        const normDoctors = doctors.map(d => ({
+          ...d,
+          id: d.id || d._id,
+          name: d.name || [d.firstName, d.lastName].filter(Boolean).join(' '),
+          specialization: d.specialization || d.doctorProfile?.specialization,
+          experience: d.experience ?? d.doctorProfile?.experience ?? null,
+          rating: typeof d.rating === 'number' ? d.rating : 0,
+        }));
+        const normHospitals = hospitals.map(h => ({
+          ...h,
+          id: h.id || h._id,
+          city: h.city || h.address?.city || h.location || '',
+          state: h.state || h.address?.state || '',
+          logo: h.logo || h.image || '',
+          rating: typeof h.rating === 'number' ? h.rating : 0,
+        }));
+        setTypedResults({ doctors: normDoctors, hospitals: normHospitals });
+      } catch (e) {
+        setTypedResults({ doctors: [], hospitals: [] });
+      } finally {
+        setTypedLoading(false);
+      }
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [searchQuery, searchExpanded, userLocation]);
 
   // Close search and menus on outside click
   useEffect(() => {
@@ -252,6 +314,10 @@ const Navbar = () => {
 
   const handleHospitalClick = (hospitalId) => {
     router.push(`/user/hospitals/${hospitalId}`);
+    setSearchExpanded(false);
+  };
+  const handleDoctorClick = (doctorId) => {
+    router.push(`/doctor/profile?id=${doctorId}`);
     setSearchExpanded(false);
   };
 
@@ -704,6 +770,80 @@ const Navbar = () => {
                   className="border-t border-blue-200/50 dark:border-blue-800/50"
                 >
                   <div className="px-6 py-4 bg-gradient-to-b from-white/50 to-blue-50/30 dark:from-gray-900/50 dark:to-blue-950/20">
+                    {searchQuery.trim().length >= 2 && (
+                      <>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Search className="w-4 h-4 text-blue-600" />
+                            <h3 className="font-bold text-sm text-gray-900 dark:text-white">Search Results</h3>
+                            {typedLoading && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
+                          </div>
+                          {(typedResults.hospitals.length + typedResults.doctors.length) > 0 && (
+                            <Badge className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-0 text-xs">
+                              {(typedResults.hospitals.length + typedResults.doctors.length)} found
+                            </Badge>
+                          )}
+                        </div>
+
+                        {typedResults.hospitals.length > 0 && (
+                          <div className="mb-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Hospital className="w-4 h-4 text-emerald-600" />
+                              <h4 className="text-sm font-semibold">Hospitals</h4>
+                            </div>
+                            <div className="grid grid-cols-5 gap-3">
+                              {typedResults.hospitals.map((hospital, index) => (
+                                <motion.button
+                                  key={hospital.id}
+                                  initial={{ opacity: 0, y: 20 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ delay: index * 0.05 }}
+                                  onClick={() => handleHospitalClick(hospital.id)}
+                                  className="group p-3 rounded-xl border-2 border-blue-200/50 dark:border-blue-800/50 bg-white dark:bg-gray-900 hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-lg transition-all text-left"
+                                >
+                                  <div className="w-10 h-10 mb-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg overflow-hidden border border-blue-200 flex items-center justify-center">
+                                    {hospital.logo ? (
+                                      <Image src={hospital.logo} alt={hospital.name} width={40} height={40} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <Building2 className="w-5 h-5 text-blue-600" />
+                                    )}
+                                  </div>
+                                  <h4 className="font-bold text-xs text-gray-900 dark:text-white mb-1 line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors min-h-[32px]">{hospital.name}</h4>
+                                  <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1 line-clamp-1"><MapPin className="w-2.5 h-2.5 flex-shrink-0" />{hospital.city || 'Unknown location'}{hospital.state && `, ${hospital.state}`}</p>
+                                  <div className="flex items-center justify-between">
+                                    {hospital.rating > 0 && (<div className="flex items-center gap-1"><Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" /><span className="text-[10px] font-semibold text-gray-700 dark:text-gray-300">{hospital.rating.toFixed(1)}</span></div>)}
+                                  </div>
+                                </motion.button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {typedResults.doctors.length > 0 && (
+                          <div className="mb-4">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Stethoscope className="w-4 h-4 text-blue-600" />
+                              <h4 className="text-sm font-semibold">Doctors</h4>
+                            </div>
+                            <div className="grid gap-3 grid-cols-2">
+                              {typedResults.doctors.map((d) => (
+                                <button key={d.id} onClick={() => handleDoctorClick(d.id)} className="w-full text-left p-3 rounded-xl border-2 border-blue-200/50 dark:border-blue-800/50 bg-white dark:bg-gray-900 hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-lg transition-all">
+                                  <p className="font-semibold text-xs text-gray-900 dark:text-white">{d.name}</p>
+                                  {d.specialization && (<p className="text-[10px] text-blue-700 dark:text-blue-300 mt-0.5">{d.specialization}</p>)}
+                                  {d.experience != null && (<p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">{d.experience} yrs</p>)}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {(typedResults.hospitals.length + typedResults.doctors.length) === 0 && !typedLoading && (
+                          <p className="text-sm text-gray-600 dark:text-gray-400">No results</p>
+                        )}
+
+                        <div className="h-px bg-blue-200/50 dark:bg-blue-800/50 my-3" />
+                      </>
+                    )}
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <Hospital className="w-4 h-4 text-blue-600" />

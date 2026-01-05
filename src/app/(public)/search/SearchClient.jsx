@@ -50,6 +50,10 @@ const SearchClient = () => {
     fetchResults(q);
   }, [searchParams]);
 
+  // Derive safe arrays for rendering
+  const doctors = Array.isArray(results?.doctors) ? results.doctors : [];
+  const hospitals = Array.isArray(results?.hospitals) ? results.hospitals : [];
+
   return (
     <div className="min-h-screen pt-24 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto mb-6 space-y-3">
@@ -78,21 +82,21 @@ const SearchClient = () => {
 
         {!loading &&
           !error &&
-          !results.doctors.length &&
-          !results.hospitals.length &&
+          !doctors.length &&
+          !hospitals.length &&
           query && (
             <p className="text-gray-500 dark:text-gray-400 text-sm">
               No results found.
             </p>
           )}
 
-        {results.doctors.length > 0 && (
+        {doctors.length > 0 && (
           <section className="mb-8">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
               Doctors
             </h2>
             <div className="grid gap-3 sm:grid-cols-2">
-              {results.doctors.map((d) => (
+              {doctors.map((d) => (
                 <button
                   key={d.id}
                   onClick={() =>
@@ -119,16 +123,16 @@ const SearchClient = () => {
           </section>
         )}
 
-        {results.hospitals.length > 0 && (
+        {hospitals.length > 0 && (
           <section className="mb-8">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
               Hospitals
             </h2>
             <div className="grid gap-3 sm:grid-cols-2">
-              {results.hospitals.map((h) => (
+              {hospitals.map((h) => (
                 <button
                   key={h.id}
-                  onClick={() => router.push(`/patient/hospitals/${h.id}`)}
+                  onClick={() => router.push(`/user/hospitals/${h.id}`)}
                   className="w-full text-left p-4 rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-emerald-400 hover:bg-emerald-50/30 dark:hover:bg-emerald-900/40 transition-all"
                 >
                   <p className="font-semibold text-gray-900 dark:text-white">

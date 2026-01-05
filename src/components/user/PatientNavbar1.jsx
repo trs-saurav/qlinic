@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
@@ -8,6 +8,7 @@ import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import { ModeToggle } from '@/components/extra/ModeToggle'
 import {
   DropdownMenu,
@@ -22,7 +23,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { 
   Home, Hospital, Calendar, Users, FileText,
   Menu, X, Bell, Search, LogOut, Settings, User, 
-  MapPin, ChevronRight, Loader2
+  MapPin, ChevronRight, Loader2, Stethoscope, Building2, Star
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -35,12 +36,16 @@ export default function UserNavbar() {
   const [searchQuery, setSearchQuery] = useState('')
   const [locationName, setLocationName] = useState('Patna')
   const [detectingLocation, setDetectingLocation] = useState(false)
+  const [searchFocused, setSearchFocused] = useState(false)
+  const [typedLoading, setTypedLoading] = useState(false)
+  const [typedResults, setTypedResults] = useState({ doctors: [], hospitals: [] })
+  const [userLocation, setUserLocation] = useState(null)
 
   // Main Navigation Items
   const navItems = [
     { href: '/user', label: 'Dashboard', icon: Home },
     { href: '/user/appointments', label: 'Appointments', icon: Calendar },
-    { href: '/user/hospitals', label: 'Hospitals', icon: Hospital },
+    { href: '/user/search', label: 'Hospitals', icon: Hospital },
     { href: '/user/settings', label: 'Settings', icon: Settings },
   ]
 
@@ -56,6 +61,7 @@ export default function UserNavbar() {
       async (position) => {
         try {
           const { latitude, longitude } = position.coords
+          setUserLocation({ latitude, longitude })
           const response = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
           )
@@ -84,6 +90,54 @@ export default function UserNavbar() {
     router.push(`/user/search?q=${encodeURIComponent(searchQuery)}&loc=${encodeURIComponent(locationName)}`)
     setIsMobileMenuOpen(false)
   }
+
+  // Debounced typed search dropdown
+  useEffect(() => {
+    const q = (searchQuery || '').trim()
+    if (!searchFocused || q.length < 2) {
+      setTypedResults({ doctors: [], hospitals: [] })
+      setTypedLoading(false)
+      return
+    }
+    const h = setTimeout(async () => {
+      try {
+        setTypedLoading(true)
+        const params = new URLSearchParams({ q, limit: '6' })
+        if (userLocation) {
+          params.append('lat', userLocation.latitude.toString())
+          params.append('lng', userLocation.longitude.toString())
+          params.append('radius', '20')
+        }
+        const resp = await fetch(`/api/search?${params.toString()}`, { headers: { Accept: 'application/json' } })
+        const data = await resp.json()
+        const doctors = Array.isArray(data?.results?.doctors) ? data.results.doctors : (Array.isArray(data?.doctors) ? data.doctors : [])
+        const hospitals = Array.isArray(data?.results?.hospitals) ? data.results.hospitals : (Array.isArray(data?.hospitals) ? data.hospitals : [])
+        const normDoctors = doctors.map(d => ({
+          ...d,
+          id: d.id || d._id,
+          name: d.name || [d.firstName, d.lastName].filter(Boolean).join(' '),
+          specialization: d.specialization || d.doctorProfile?.specialization,
+          experience: d.experience ?? d.doctorProfile?.experience ?? null,
+          rating: typeof d.rating === 'number' ? d.rating : 0,
+        }))
+        const normHospitals = hospitals.map(h => ({
+          ...h,
+          id: h.id || h._id,
+          name: h.name,
+          city: h.city || h.address?.city || '',
+          state: h.state || h.address?.state || '',
+          logo: h.logo || h.image || '',
+          rating: typeof h.rating === 'number' ? h.rating : 0,
+        }))
+        setTypedResults({ doctors: normDoctors, hospitals: normHospitals })
+      } catch {
+        setTypedResults({ doctors: [], hospitals: [] })
+      } finally {
+        setTypedLoading(false)
+      }
+    }, 350)
+    return () => clearTimeout(h)
+  }, [searchQuery, searchFocused, userLocation])
 
   const handleSignOut = async () => {
     await signOut({ callbackUrl: '/' })
@@ -159,7 +213,68 @@ export default function UserNavbar() {
                         className="w-full pl-9 pr-24 h-10 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-950 focus:border-blue-500 transition-all rounded-full text-sm"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
+                        onFocus={() => setSearchFocused(true)}
                     />
+
+                    {searchFocused && searchQuery.trim().length >= 2 && (
+                      <div className="absolute left-0 right-0 mt-2 z-50 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl shadow-2xl p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Search className="w-4 h-4 text-blue-600" />
+                            <span className="text-sm font-semibold">Search Results</span>
+                            {typedLoading && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
+                          </div>
+                          {(typedResults.hospitals.length + typedResults.doctors.length) > 0 && (
+                            <Badge className="text-xs">{typedResults.hospitals.length + typedResults.doctors.length} found</Badge>
+                          )}
+                        </div>
+
+                        {typedResults.hospitals.length > 0 && (
+                          <div className="mb-2">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Hospital className="w-4 h-4 text-emerald-600" />
+                              <span className="text-xs font-semibold">Hospitals</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              {typedResults.hospitals.map(h => (
+                                <button key={h.id} onClick={() => { router.push(`/user/hospitals/${h.id}`); setSearchFocused(false); }} className="text-left p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-blue-500 hover:bg-blue-50/40 dark:hover:bg-blue-900/20 transition-all">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
+                                      {h.logo ? <Image src={h.logo} alt={h.name} width={32} height={32} className="object-cover w-full h-full" /> : <Building2 className="w-4 h-4 text-blue-600" />}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-semibold truncate">{h.name}</p>
+                                      <p className="text-[10px] text-slate-500 truncate">{[h.city, h.state].filter(Boolean).join(', ')}</p>
+                                    </div>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {typedResults.doctors.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <Stethoscope className="w-4 h-4 text-blue-600" />
+                              <span className="text-xs font-semibold">Doctors</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              {typedResults.doctors.map(d => (
+                                <button key={d.id} onClick={() => { router.push(`/doctor/profile?id=${d.id}`); setSearchFocused(false); }} className="text-left p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-blue-500 hover:bg-blue-50/40 dark:hover:bg-blue-900/20 transition-all">
+                                  <p className="text-xs font-semibold truncate">{d.name}</p>
+                                  {d.specialization && <p className="text-[10px] text-blue-700 dark:text-blue-300 truncate">{d.specialization}</p>}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {(typedResults.hospitals.length + typedResults.doctors.length) === 0 && !typedLoading && (
+                          <p className="text-xs text-slate-500">No results</p>
+                        )}
+                      </div>
+                    )}
                     
                     {/* Location Button */}
                     <button
