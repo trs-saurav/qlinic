@@ -25,10 +25,33 @@ export async function middleware(req) {
   }
 
   // Get session token for protected routes
-  const token = await getToken({ 
-    req, 
-    secret: process.env.AUTH_SECRET 
-  })
+  // Try to read token from all possible cookie names (Auth.js v5 + legacy next-auth)
+  const cookieCandidates = [
+    '__Secure-authjs.session-token',
+    'authjs.session-token',
+    '__Secure-next-auth.session-token',
+    'next-auth.session-token',
+  ]
+
+  let token = null
+  for (const cookieName of cookieCandidates) {
+    if (req.cookies.get(cookieName)) {
+      token = await getToken({
+        req,
+        secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+        cookieName,
+      })
+      if (token) break
+    }
+  }
+
+  // Fallback to default resolution if not found by explicit cookie names
+  if (!token) {
+    token = await getToken({
+      req,
+      secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+    })
+  }
   
   const isLoggedIn = !!token
   const role = token?.role
