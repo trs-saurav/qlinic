@@ -1,17 +1,17 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useCallback } from 'react'
 import { useDoctor } from '@/context/DoctorContextProvider'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Separator } from '@/components/ui/separator'
 import { 
   Building2, 
   Calendar, 
@@ -23,37 +23,46 @@ import {
   Save,
   CalendarX,
   CalendarClock,
-  CheckCircle2
+  Loader2,
+  X
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
 
-function emptyWeekly() {
-  return DAYS.map((d) => ({ day: d, slots: [] }))
+// --- Helper Functions ---
+
+const toMinutes = (time) => {
+  if (!time) return 0
+  const [h, m] = time.split(':').map(Number)
+  return h * 60 + m
 }
+
+// --- Helper Components ---
 
 function SlotRow({ slot, onRemove }) {
   return (
-    <div className="flex items-center justify-between gap-2 rounded-lg border bg-card p-3 hover:bg-accent/50 transition-colors">
-      <div className="flex items-center gap-3 text-sm">
-        <Clock className="h-4 w-4 text-muted-foreground" />
-        <div>
-          <span className="font-semibold">{slot.start}</span>
-          <span className="text-muted-foreground mx-1">→</span>
-          <span className="font-semibold">{slot.end}</span>
+    <div className="flex items-center justify-between gap-3 rounded-md border border-slate-100 bg-slate-50/50 p-2.5 hover:bg-white hover:shadow-sm hover:border-slate-200 transition-all group">
+      <div className="flex items-center gap-3 text-sm overflow-hidden">
+        <Clock className="h-4 w-4 text-slate-400 shrink-0" />
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+          <span className="font-semibold text-slate-700">{slot.start}</span>
+          <span className="text-slate-400 text-xs">to</span>
+          <span className="font-semibold text-slate-700">{slot.end}</span>
           {slot.room && (
-            <span className="text-muted-foreground ml-2">• Room {slot.room}</span>
+            <Badge variant="secondary" className="text-[10px] px-1.5 h-5 ml-1 font-normal bg-white border-slate-200 text-slate-500">
+              Rm {slot.room}
+            </Badge>
           )}
         </div>
       </div>
       <Button 
         variant="ghost" 
-        size="sm" 
+        size="icon" 
         onClick={onRemove}
-        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+        className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
       >
-        <Trash2 className="h-4 w-4" />
+        <X className="h-4 w-4" />
       </Button>
     </div>
   )
@@ -61,30 +70,31 @@ function SlotRow({ slot, onRemove }) {
 
 function HospitalScheduleCard({ affiliation, onManageSchedule }) {
   const hospital = affiliation.hospitalId
+  const hasSchedule = affiliation.weeklySchedule?.some(day => day.slots?.length > 0)
 
   return (
-    <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={onManageSchedule}>
-      <CardHeader>
+    <Card className="group hover:shadow-lg hover:border-primary/20 transition-all duration-300 cursor-pointer overflow-hidden border-l-4 border-l-transparent hover:border-l-primary" onClick={onManageSchedule}>
+      <CardHeader className="pb-4 space-y-4">
         <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Building2 className="h-5 w-5 text-primary" />
-              {hospital?.name || 'Hospital'}
+          <div className="flex-1 min-w-0 space-y-1">
+            <CardTitle className="flex items-center gap-2 text-lg truncate text-slate-800 group-hover:text-primary transition-colors">
+              <Building2 className="h-5 w-5 shrink-0" />
+              <span className="truncate">{hospital?.name || 'Hospital'}</span>
             </CardTitle>
             {hospital?.address?.city && (
-              <CardDescription className="flex items-center gap-1 mt-1">
-                <MapPin className="h-3.5 w-3.5" />
+              <CardDescription className="flex items-center gap-1.5 text-xs truncate">
+                <MapPin className="h-3.5 w-3.5 shrink-0" />
                 {hospital.address.city}, {hospital.address.state}
               </CardDescription>
             )}
           </div>
-          <Badge variant="secondary">
-            {affiliation.hasSchedule ? 'Schedule Set' : 'No Schedule'}
+          <Badge variant={hasSchedule ? "default" : "secondary"} className={`shrink-0 ${hasSchedule ? 'bg-green-100 text-green-700 hover:bg-green-200' : ''}`}>
+            {hasSchedule ? 'Active' : 'Setup'}
           </Badge>
         </div>
       </CardHeader>
-      <CardContent>
-        <Button className="w-full" variant="outline">
+      <CardContent className="pt-0">
+        <Button className="w-full bg-slate-50 text-slate-700 border-slate-200 hover:bg-white hover:text-primary hover:border-primary transition-all shadow-sm group-hover:shadow">
           <CalendarClock className="h-4 w-4 mr-2" />
           Manage Schedule
         </Button>
@@ -93,242 +103,230 @@ function HospitalScheduleCard({ affiliation, onManageSchedule }) {
   )
 }
 
+// --- Main Page Component ---
+
 export default function DoctorSchedulePage() {
   const { affiliations, affiliationsLoading, fetchAffiliations } = useDoctor()
 
-  // Active hospital being edited
+  // --- State ---
   const [activeAffiliation, setActiveAffiliation] = useState(null)
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
-
-  // Schedule data for active hospital
-  const [loading, setLoading] = useState(false)
+  const [loadingSchedule, setLoadingSchedule] = useState(false)
   const [saving, setSaving] = useState(false)
+  
+  // Schedule Data
   const [weekly, setWeekly] = useState([])
   const [exceptions, setExceptions] = useState([])
+  
+  // ✅ FIX: Default is 15, but we will explicitly check API response
+  const [slotDuration, setSlotDuration] = useState(15) 
 
-  // Slot editor state
+  // Slot Editor State
   const [slotDialogOpen, setSlotDialogOpen] = useState(false)
   const [activeDay, setActiveDay] = useState('MON')
-  const [start, setStart] = useState('09:00')
-  const [end, setEnd] = useState('17:00')
-  const [room, setRoom] = useState('')
+  const [newSlot, setNewSlot] = useState({ start: '09:00', end: '17:00', room: '' })
 
-  // Exception editor state
+  // Exception Editor State
   const [exceptionDialogOpen, setExceptionDialogOpen] = useState(false)
-  const [excDate, setExcDate] = useState('')
-  const [excUnavailable, setExcUnavailable] = useState(false)
-  const [excReason, setExcReason] = useState('')
+  const [newException, setNewException] = useState({ date: '', unavailable: false, reason: '' })
 
-  useEffect(() => {
-    fetchAffiliations()
-  }, [])
-
-  // Get approved affiliations only
+  // --- Derived State ---
   const approvedAffiliations = useMemo(() => {
     return (affiliations || []).filter(a => a.status === 'APPROVED')
   }, [affiliations])
 
   const dayMap = useMemo(() => {
     const map = new Map()
-    for (const d of weekly) map.set(d.day, d)
+    DAYS.forEach(d => map.set(d, { day: d, slots: [] }))
+    if (weekly) {
+      weekly.forEach(d => map.set(d.day, d))
+    }
     return map
   }, [weekly])
 
-  async function openScheduleEditor(affiliation) {
+  // --- Effects ---
+  useEffect(() => {
+    if (!affiliationsLoading && affiliations.length === 0) {
+      fetchAffiliations()
+    }
+  }, [])
+
+  // --- Handlers ---
+
+  const openScheduleEditor = async (affiliation) => {
     setActiveAffiliation(affiliation)
     setScheduleDialogOpen(true)
-    setLoading(true)
+    setLoadingSchedule(true)
 
     try {
       const res = await fetch(`/api/doctor/schedule?affiliationId=${affiliation._id}`)
       const data = await res.json()
 
-      if (!res.ok) {
-        toast.error(data?.error || 'Failed to load schedule')
-        setWeekly(emptyWeekly())
-        setExceptions([])
+      if (data.success) {
+        setWeekly(data.schedule.weekly || [])
+        setExceptions(data.schedule.exceptions || [])
+        
+        // ✅ CRITICAL FIX: Only update if value exists, otherwise fallback to 15
+        const duration = data.schedule.slotDuration ? parseInt(data.schedule.slotDuration) : 15
+        setSlotDuration(duration)
+        
       } else {
-        setWeekly(data?.schedule?.weekly?.length ? data.schedule.weekly : emptyWeekly())
-        setExceptions(Array.isArray(data?.schedule?.exceptions) ? data.schedule.exceptions : [])
+        setWeekly([])
+        setExceptions([])
+        setSlotDuration(15)
       }
     } catch (e) {
+      console.error(e)
       toast.error('Failed to load schedule')
-      setWeekly(emptyWeekly())
-      setExceptions([])
     } finally {
-      setLoading(false)
+      setLoadingSchedule(false)
     }
   }
 
-  function validateSlot(day, newSlot) {
-    const dayData = dayMap.get(day)
-    if (!dayData?.slots?.length) return { valid: true }
-
-    const newStart = newSlot.start
-    const newEnd = newSlot.end
-
-    // Check time format
-    if (!newStart.match(/^\d{2}:\d{2}$/)) {
-      return { valid: false, error: 'Invalid start time format. Use HH:mm' }
-    }
-    if (!newEnd.match(/^\d{2}:\d{2}$/)) {
-      return { valid: false, error: 'Invalid end time format. Use HH:mm' }
+  function validateSlot(day, slot) {
+    if (!slot.start.match(/^\d{2}:\d{2}$/) || !slot.end.match(/^\d{2}:\d{2}$/)) {
+      return 'Invalid time format (HH:mm)'
     }
 
-    // Check start < end
-    if (newStart >= newEnd) {
-      return { valid: false, error: 'Start time must be before end time' }
+    const startMins = toMinutes(slot.start)
+    const endMins = toMinutes(slot.end)
+
+    if (startMins >= endMins) {
+      return 'Start time must be before end time'
     }
+    
+    const existingSlots = dayMap.get(day)?.slots || []
+    
+    // Robust Overlap Check
+    const hasOverlap = existingSlots.some(s => {
+      const sStart = toMinutes(s.start)
+      const sEnd = toMinutes(s.end)
 
-    // Check for overlaps
-    for (const slot of dayData.slots) {
-      const slotStart = slot.start
-      const slotEnd = slot.end
-
-      // Check if new slot overlaps with existing slot
-      if (
-        (newStart >= slotStart && newStart < slotEnd) ||
-        (newEnd > slotStart && newEnd <= slotEnd) ||
-        (newStart <= slotStart && newEnd >= slotEnd)
-      ) {
-        return { 
-          valid: false, 
-          error: `Overlaps with existing slot ${slotStart}-${slotEnd}`
-        }
-      }
-    }
-
-    return { valid: true }
-  }
-
-  function addSlot() {
-    const validation = validateSlot(activeDay, { start, end })
-
-    if (!validation.valid) {
-      toast.error(validation.error)
-      return
-    }
-
-    setWeekly((prev) => {
-      const next = prev.map((d) => 
-        d.day === activeDay 
-          ? { ...d, slots: [...(d.slots || []), { start, end, room }].sort((a, b) => a.start.localeCompare(b.start)) } 
-          : d
+      return (
+        (startMins >= sStart && startMins < sEnd) || 
+        (endMins > sStart && endMins <= sEnd) ||     
+        (startMins <= sStart && endMins >= sEnd)     
       )
-      return next
+    })
+    
+    if (hasOverlap) return 'Slot overlaps with existing time'
+    
+    return null
+  }
+
+  function handleAddSlot() {
+    const error = validateSlot(activeDay, newSlot)
+    if (error) return toast.error(error)
+
+    setWeekly(prev => {
+      const existingDayIndex = prev.findIndex(d => d.day === activeDay)
+      const updatedSlot = { ...newSlot }
+      
+      const sortSlots = (slots) => [...slots].sort((a, b) => toMinutes(a.start) - toMinutes(b.start))
+
+      if (existingDayIndex >= 0) {
+        const updatedWeekly = [...prev]
+        const currentSlots = [...updatedWeekly[existingDayIndex].slots]
+        updatedWeekly[existingDayIndex] = {
+          ...updatedWeekly[existingDayIndex],
+          slots: sortSlots([...currentSlots, updatedSlot])
+        }
+        return updatedWeekly
+      } else {
+        return [...prev, { day: activeDay, slots: [updatedSlot] }]
+      }
     })
 
-    toast.success('Slot added')
     setSlotDialogOpen(false)
-    setRoom('')
-    setStart('09:00')
-    setEnd('17:00')
+    setNewSlot({ start: '09:00', end: '17:00', room: '' })
+    toast.success('Slot added')
   }
 
-  function removeSlot(day, index) {
-    setWeekly((prev) =>
-      prev.map((d) => (d.day === day ? { ...d, slots: (d.slots || []).filter((_, i) => i !== index) } : d))
-    )
-    toast.success('Slot removed')
+  function handleRemoveSlot(day, index) {
+    setWeekly(prev => {
+      return prev.map(d => {
+        if (d.day !== day) return d
+        return { ...d, slots: d.slots.filter((_, i) => i !== index) }
+      }).filter(d => d.slots.length > 0)
+    })
   }
 
-  function upsertException() {
-    if (!excDate) return toast.error('Please select a date')
+  function handleAddException() {
+    if (!newException.date) return toast.error('Select a date')
+    
+    const today = new Date().toISOString().split('T')[0]
+    if (newException.date < today) return toast.error('Cannot set past dates')
 
-    // Validate date format
-    if (!excDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      return toast.error('Invalid date format. Use YYYY-MM-DD')
-    }
-
-    // Check if date is in the past
-    const selectedDate = new Date(excDate)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    if (selectedDate < today) {
-      return toast.error('Cannot set exception for past dates')
-    }
-
-    setExceptions((prev) => {
-      const idx = prev.findIndex((e) => e.date === excDate)
-      const nextItem = { 
-        date: excDate, 
-        unavailable: excUnavailable,
-        reason: excReason || '',
-        slots: [] 
-      }
-
-      if (idx >= 0) {
-        const copy = [...prev]
-        copy[idx] = nextItem
-        return copy
-      }
-      return [...prev, nextItem].sort((a, b) => a.date.localeCompare(b.date))
+    setExceptions(prev => {
+      const filtered = prev.filter(e => e.date !== newException.date)
+      return [...filtered, { ...newException, slots: [] }].sort((a, b) => a.date.localeCompare(b.date))
     })
 
-    toast.success(excUnavailable ? 'Day marked as unavailable' : 'Exception added')
     setExceptionDialogOpen(false)
-    setExcDate('')
-    setExcUnavailable(false)
-    setExcReason('')
+    setNewException({ date: '', unavailable: false, reason: '' })
+    toast.success('Exception added')
   }
 
-  function removeException(date) {
-    setExceptions((prev) => prev.filter(e => e.date !== date))
-    toast.success('Exception removed')
+  function handleRemoveException(date) {
+    setExceptions(prev => prev.filter(e => e.date !== date))
   }
 
-  async function saveSchedule() {
+  async function handleSave() {
     if (!activeAffiliation) return
-
     setSaving(true)
+
     try {
       const res = await fetch('/api/doctor/schedule', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           affiliationId: activeAffiliation._id,
-          weekly, 
-          exceptions 
-        }),
+          weekly,
+          exceptions,
+          slotDuration: parseInt(slotDuration) // ✅ Ensure number is sent
+        })
       })
+
       const data = await res.json()
-
-      if (!res.ok) return toast.error(data?.error || 'Failed to save schedule')
-
-      toast.success(`Schedule saved for ${activeAffiliation.hospitalId.name}`)
-      setScheduleDialogOpen(false)
-      fetchAffiliations()
+      if (data.success) {
+        toast.success('Schedule saved successfully')
+        setScheduleDialogOpen(false)
+        fetchAffiliations()
+      } else {
+        toast.error(data.error || 'Failed to save')
+      }
     } catch (e) {
-      toast.error('Failed to save schedule')
+      toast.error('Network error saving schedule')
     } finally {
       setSaving(false)
     }
   }
 
+  // --- Render ---
+
   if (affiliationsLoading) {
     return (
-      <div className="p-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-        </div>
+      <div className="flex h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
 
   if (approvedAffiliations.length === 0) {
     return (
-      <div className="p-6">
-        <Card>
-          <CardContent className="py-12">
-            <div className="flex flex-col items-center justify-center text-center">
-              <Building2 className="h-12 w-12 text-muted-foreground/50 mb-4" />
-              <h3 className="font-semibold text-lg mb-2">No Hospital Affiliations</h3>
-              <p className="text-sm text-muted-foreground max-w-sm">
-                You need to be affiliated with at least one hospital to set your schedule.
-                Go to Affiliations page to request affiliation with hospitals.
-              </p>
+      <div className="p-8 max-w-2xl mx-auto">
+        <Card className="text-center py-12 border-dashed shadow-sm">
+          <CardContent>
+            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Building2 className="h-8 w-8 text-slate-400" />
             </div>
+            <h2 className="text-xl font-semibold mb-2 text-slate-900">No Active Clinics</h2>
+            <p className="text-slate-500 mb-6 max-w-sm mx-auto">
+              You need to be affiliated with a hospital to manage your schedule.
+            </p>
+            <Button onClick={() => window.location.href = '/doctor/affiliations'}>
+              Find Hospitals
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -336,312 +334,279 @@ export default function DoctorSchedulePage() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl space-y-6">
-      {/* Header */}
+    <div className="container mx-auto p-4 md:p-6 max-w-7xl space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Schedule Management</h1>
-        <p className="text-muted-foreground mt-1">
-          Manage your availability across different hospitals
-        </p>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Schedule Management</h1>
+        <p className="text-slate-500 mt-2 text-lg">Set your weekly hours and manage holiday exceptions.</p>
       </div>
 
-      {/* Info Alert */}
-      <Alert>
-        <AlertCircle className="h-4 w-4" />
+      <Alert className="bg-blue-50 border-blue-100 text-blue-800">
+        <AlertCircle className="h-4 w-4 text-blue-600" />
         <AlertDescription>
-          Set separate schedules for each hospital. Patients can only book appointments during your available slots.
+          Tip: Setting a schedule enables patients to book appointments online automatically.
         </AlertDescription>
       </Alert>
 
-      {/* Hospital Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {approvedAffiliations.map((affiliation) => (
-          <HospitalScheduleCard
-            key={affiliation._id}
-            affiliation={affiliation}
-            onManageSchedule={() => openScheduleEditor(affiliation)}
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {approvedAffiliations.map(aff => (
+          <HospitalScheduleCard 
+            key={aff._id} 
+            affiliation={aff} 
+            onManageSchedule={() => openScheduleEditor(aff)} 
           />
         ))}
       </div>
 
-      {/* Schedule Editor Dialog */}
+      {/* Main Schedule Editor Dialog */}
       <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5" />
-              {activeAffiliation?.hospitalId?.name} - Schedule
-            </DialogTitle>
-            <DialogDescription>
-              Set your weekly availability and day-specific exceptions for this hospital
-            </DialogDescription>
+        <DialogContent className="w-[95vw] max-w-5xl h-[90vh] md:h-[85vh] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-xl">
+          <DialogHeader className="p-4 sm:p-6 pb-4 border-b bg-white shrink-0">
+             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                <div>
+                  <DialogTitle className="text-xl">
+                    {activeAffiliation?.hospitalId?.name}
+                  </DialogTitle>
+                  <DialogDescription className="mt-1">Manage availability</DialogDescription>
+                </div>
+                
+                {/* Slot Duration Selector */}
+                <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                   <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                     Per Patient
+                   </Label>
+                   <Select 
+                     value={slotDuration.toString()} // ✅ Force string match
+                     onValueChange={(val) => setSlotDuration(parseInt(val))} // ✅ Parse number for state
+                   >
+                     <SelectTrigger className="w-[110px] h-8 bg-white text-xs font-medium border-slate-200">
+                       <SelectValue />
+                     </SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="10">10 mins</SelectItem>
+                       <SelectItem value="15">15 mins</SelectItem>
+                       <SelectItem value="20">20 mins</SelectItem>
+                       <SelectItem value="30">30 mins</SelectItem>
+                       <SelectItem value="45">45 mins</SelectItem>
+                       <SelectItem value="60">60 mins</SelectItem>
+                     </SelectContent>
+                   </Select>
+                </div>
+             </div>
           </DialogHeader>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          {loadingSchedule ? (
+            <div className="flex-1 flex items-center justify-center bg-slate-50">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
-            <Tabs defaultValue="weekly" className="mt-4">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="weekly" className="gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Weekly Schedule
-                </TabsTrigger>
-                <TabsTrigger value="exceptions" className="gap-2">
-                  <CalendarX className="h-4 w-4" />
-                  Exceptions ({exceptions.length})
-                </TabsTrigger>
-              </TabsList>
+            <div className="flex-1 overflow-hidden flex flex-col bg-slate-50/50">
+              <Tabs defaultValue="weekly" className="flex-1 flex flex-col overflow-hidden">
+                <div className="px-4 sm:px-6 bg-white border-b shrink-0">
+                  <TabsList className="grid w-full grid-cols-2 max-w-[400px] mb-4 h-9">
+                    <TabsTrigger value="weekly" className="text-xs">Weekly Schedule</TabsTrigger>
+                    <TabsTrigger value="exceptions" className="text-xs">
+                      Exceptions {exceptions.length > 0 && `(${exceptions.length})`}
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
 
-              {/* Weekly Schedule Tab */}
-              <TabsContent value="weekly" className="mt-4 space-y-4">
-                {DAYS.map((day) => {
-                  const d = dayMap.get(day) || { day, slots: [] }
-                  return (
-                    <Card key={day}>
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-base font-semibold">{day}</CardTitle>
-                          <Dialog 
-                            open={slotDialogOpen && activeDay === day} 
-                            onOpenChange={(open) => {
-                              setSlotDialogOpen(open)
-                              if (open) setActiveDay(day)
-                            }}
-                          >
-                            <DialogTrigger asChild>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => setActiveDay(day)}
-                              >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Add Slot
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Add Time Slot - {day}</DialogTitle>
-                                <DialogDescription>
-                                  Define when you'll be available on {day}
-                                </DialogDescription>
-                              </DialogHeader>
-
-                              <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div className="space-y-2">
-                                    <Label htmlFor="start">Start Time</Label>
-                                    <Input 
-                                      id="start"
-                                      type="time"
-                                      value={start} 
-                                      onChange={(e) => setStart(e.target.value)} 
-                                    />
-                                  </div>
-                                  <div className="space-y-2">
-                                    <Label htmlFor="end">End Time</Label>
-                                    <Input 
-                                      id="end"
-                                      type="time"
-                                      value={end} 
-                                      onChange={(e) => setEnd(e.target.value)} 
-                                    />
-                                  </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                  <Label htmlFor="room">Room Number (Optional)</Label>
-                                  <Input 
-                                    id="room"
-                                    value={room} 
-                                    onChange={(e) => setRoom(e.target.value)} 
-                                    placeholder="e.g., 101, OPD-3"
-                                  />
-                                </div>
-                              </div>
-
-                              <DialogFooter>
-                                <Button variant="outline" onClick={() => setSlotDialogOpen(false)}>
-                                  Cancel
-                                </Button>
-                                <Button onClick={addSlot}>
-                                  <Plus className="h-4 w-4 mr-2" />
-                                  Add Slot
-                                </Button>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        {(d.slots || []).length === 0 ? (
-                          <p className="text-sm text-muted-foreground text-center py-4">
-                            No slots defined for this day
-                          </p>
-                        ) : (
-                          <div className="space-y-2">
-                            {(d.slots || []).map((slot, idx) => (
-                              <SlotRow 
-                                key={`${day}-${idx}`} 
-                                slot={slot} 
-                                onRemove={() => removeSlot(day, idx)} 
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </TabsContent>
-
-              {/* Exceptions Tab */}
-              <TabsContent value="exceptions" className="mt-4 space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Add Exception</CardTitle>
-                    <CardDescription>
-                      Mark specific dates as unavailable or set custom availability
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Dialog open={exceptionDialogOpen} onOpenChange={setExceptionDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" className="w-full">
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add Date Exception
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Add Date Exception</DialogTitle>
-                          <DialogDescription>
-                            Set a specific date as unavailable or with custom hours
-                          </DialogDescription>
-                        </DialogHeader>
-
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="exc-date">Date</Label>
-                            <Input 
-                              id="exc-date"
-                              type="date"
-                              value={excDate} 
-                              onChange={(e) => setExcDate(e.target.value)} 
-                            />
-                          </div>
-
-                          <div className="flex items-center justify-between space-x-2">
-                            <div className="space-y-0.5">
-                              <Label>Mark as Unavailable</Label>
-                              <p className="text-xs text-muted-foreground">
-                                No appointments will be accepted on this date
-                              </p>
+                {/* Weekly Content */}
+                <TabsContent value="weekly" className="flex-1 overflow-y-auto p-4 sm:p-6 m-0">
+                  <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {DAYS.map(day => {
+                      const dayData = dayMap.get(day)
+                      const hasSlots = dayData.slots.length > 0
+                      
+                      return (
+                        <Card key={day} className={`flex flex-col h-full border transition-all ${hasSlots ? 'border-slate-200 bg-white shadow-sm' : 'border-slate-100 bg-slate-50/50 opacity-80 hover:opacity-100'}`}>
+                          <CardHeader className="py-3 px-4 border-b flex flex-row items-center justify-between space-y-0 bg-white rounded-t-lg">
+                            <div className="flex items-center gap-2">
+                              <span className={`font-bold text-sm ${hasSlots ? 'text-primary' : 'text-slate-400'}`}>{day}</span>
+                              {hasSlots && <span className="h-1.5 w-1.5 rounded-full bg-green-500" />}
                             </div>
-                            <Switch
-                              checked={excUnavailable}
-                              onCheckedChange={setExcUnavailable}
-                            />
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label htmlFor="exc-reason">Reason (Optional)</Label>
-                            <Input 
-                              id="exc-reason"
-                              value={excReason} 
-                              onChange={(e) => setExcReason(e.target.value)} 
-                              placeholder="e.g., Conference, Leave, Emergency"
-                            />
-                          </div>
-                        </div>
-
-                        <DialogFooter>
-                          <Button variant="outline" onClick={() => setExceptionDialogOpen(false)}>
-                            Cancel
-                          </Button>
-                          <Button onClick={upsertException}>
-                            Add Exception
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </CardContent>
-                </Card>
-
-                {/* Exceptions List */}
-                {exceptions.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Scheduled Exceptions</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        {exceptions.map((exc) => (
-                          <div 
-                            key={exc.date} 
-                            className="flex items-center justify-between rounded-lg border bg-card p-3"
-                          >
-                            <div className="flex items-center gap-3">
-                              <CalendarX className="h-4 w-4 text-muted-foreground" />
-                              <div>
-                                <p className="font-semibold text-sm">
-                                  {new Date(exc.date).toLocaleDateString('en-IN', { 
-                                    weekday: 'short',
-                                    day: 'numeric', 
-                                    month: 'short', 
-                                    year: 'numeric' 
-                                  })}
-                                </p>
-                                {exc.unavailable ? (
-                                  <Badge variant="destructive" className="text-xs mt-1">
-                                    Unavailable
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="secondary" className="text-xs mt-1">
-                                    Custom
-                                  </Badge>
-                                )}
-                                {exc.reason && (
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    {exc.reason}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeException(exc.date)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-7 w-7 p-0 text-slate-400 hover:text-primary hover:bg-primary/5" 
+                              onClick={() => {
+                                setActiveDay(day)
+                                setSlotDialogOpen(true)
+                              }}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Plus className="h-4 w-4" />
                             </Button>
-                          </div>
-                        ))}
+                          </CardHeader>
+                          <CardContent className="flex-1 p-2 space-y-2 min-h-[100px]">
+                            {!hasSlots ? (
+                              <div className="h-full flex flex-col items-center justify-center text-slate-300 py-4 gap-2">
+                                <CalendarX className="h-6 w-6 opacity-20" />
+                                <span className="text-xs font-medium">Off Day</span>
+                              </div>
+                            ) : (
+                              dayData.slots.map((slot, idx) => (
+                                <SlotRow 
+                                  key={idx} 
+                                  slot={slot} 
+                                  onRemove={() => handleRemoveSlot(day, idx)} 
+                                />
+                              ))
+                            )}
+                          </CardContent>
+                        </Card>
+                      )
+                    })}
+                  </div>
+                </TabsContent>
+
+                {/* Exceptions Content */}
+                <TabsContent value="exceptions" className="flex-1 overflow-y-auto p-4 sm:p-6 m-0">
+                   <div className="max-w-3xl mx-auto space-y-6">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                        <div className="space-y-1">
+                          <h4 className="text-sm font-semibold text-blue-900">Date Overrides</h4>
+                          <p className="text-xs text-blue-700">Add holidays or special working hours for specific dates.</p>
+                        </div>
+                        <Button onClick={() => setExceptionDialogOpen(true)} size="sm" className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto">
+                          <Plus className="h-4 w-4 mr-2" /> Add Override
+                        </Button>
                       </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-            </Tabs>
+
+                      {exceptions.length === 0 ? (
+                        <div className="text-center py-16 border-2 border-dashed rounded-xl bg-white">
+                          <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <Calendar className="h-6 w-6 text-slate-300" />
+                          </div>
+                          <h3 className="text-sm font-medium text-slate-900">No Exceptions</h3>
+                          <p className="text-xs text-slate-500 mt-1">Your schedule follows the weekly plan strictly.</p>
+                        </div>
+                      ) : (
+                        <div className="grid gap-3">
+                          {exceptions.map((ex, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-4 bg-white rounded-lg border shadow-sm hover:border-slate-300 transition-all">
+                              <div className="flex items-center gap-4">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${ex.unavailable ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                                  {ex.unavailable ? <CalendarX className="h-5 w-5" /> : <CalendarClock className="h-5 w-5" />}
+                                </div>
+                                <div>
+                                  <p className="font-bold text-slate-800 text-sm">
+                                    {new Date(ex.date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <Badge variant={ex.unavailable ? "destructive" : "secondary"} className="text-[10px] h-4 px-1">
+                                      {ex.unavailable ? 'Closed' : 'Custom Hours'}
+                                    </Badge>
+                                    <span className="text-xs text-slate-500 truncate max-w-[200px]">
+                                      {ex.reason || 'No reason specified'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => handleRemoveException(ex.date)}
+                                className="text-slate-400 hover:text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                   </div>
+                </TabsContent>
+              </Tabs>
+            </div>
           )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setScheduleDialogOpen(false)}>
-              Cancel
+          <div className="p-4 sm:p-6 border-t bg-white shrink-0 flex flex-col-reverse sm:flex-row justify-end gap-3 z-10">
+            <Button variant="outline" onClick={() => setScheduleDialogOpen(false)} className="w-full sm:w-auto">Cancel</Button>
+            <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto min-w-[140px]">
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              Save Changes
             </Button>
-            <Button onClick={saveSchedule} disabled={saving}>
-              {saving ? (
-                <>Saving...</>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Schedule
-                </>
-              )}
-            </Button>
-          </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Slot Dialog */}
+      <Dialog open={slotDialogOpen} onOpenChange={setSlotDialogOpen}>
+        <DialogContent className="w-[90vw] max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle>Add Slot - {activeDay}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-slate-500">Start Time</Label>
+                <Input 
+                  type="time" 
+                  value={newSlot.start} 
+                  onChange={e => setNewSlot({...newSlot, start: e.target.value})} 
+                  className="font-mono"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-slate-500">End Time</Label>
+                <Input 
+                  type="time" 
+                  value={newSlot.end} 
+                  onChange={e => setNewSlot({...newSlot, end: e.target.value})} 
+                  className="font-mono"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-slate-500">Room Number (Optional)</Label>
+              <Input 
+                value={newSlot.room} 
+                onChange={e => setNewSlot({...newSlot, room: e.target.value})} 
+                placeholder="e.g. 104"
+              />
+            </div>
+            <Button onClick={handleAddSlot} className="w-full mt-2">Add Slot</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Exception Dialog */}
+      <Dialog open={exceptionDialogOpen} onOpenChange={setExceptionDialogOpen}>
+        <DialogContent className="w-[90vw] max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle>Add Exception</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 py-4">
+            <div className="space-y-2">
+              <Label className="text-xs text-slate-500">Select Date</Label>
+              <Input 
+                type="date" 
+                value={newException.date} 
+                onChange={e => setNewException({...newException, date: e.target.value})} 
+                min={new Date().toISOString().split('T')[0]}
+              />
+            </div>
+            
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border">
+              <div className="space-y-0.5">
+                <Label className="text-sm">Mark Unavailable</Label>
+                <p className="text-[10px] text-slate-500">Close clinic for this day</p>
+              </div>
+              <Switch 
+                checked={newException.unavailable} 
+                onCheckedChange={c => setNewException({...newException, unavailable: c})} 
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-slate-500">Reason / Note</Label>
+              <Input 
+                value={newException.reason} 
+                onChange={e => setNewException({...newException, reason: e.target.value})} 
+                placeholder="e.g. Public Holiday"
+              />
+            </div>
+            <Button onClick={handleAddException} className="w-full">Save Exception</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

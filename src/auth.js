@@ -7,7 +7,7 @@ import { authConfig } from './auth.config'
 import  connectDB  from '@/config/db'  // ✅ Named import
 import User from '@/models/user'
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const authOptions = {
   ...authConfig,
   providers: [
     Google({
@@ -188,4 +188,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: '/sign-in',
     error: '/auth/error',
   },
-})
+}
+
+export const { handlers, auth, signIn, signOut } = NextAuth(authOptions)

@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Search, Clock, UserPlus, Phone, Activity, AlertCircle } from 'lucide-react'
+import { Plus, Search, Clock, UserPlus, Phone, Activity, AlertCircle, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function ReceptionPage() {
@@ -44,7 +44,7 @@ export default function ReceptionPage() {
   const fetchData = async () => {
     try {
       const [apptRes, docRes] = await Promise.all([
-        fetch('/api/appointments'),
+        fetch('/api/appointment?role=hospital_admin'),
         fetch('/api/hospital/doctors')
       ])
 
@@ -68,7 +68,7 @@ export default function ReceptionPage() {
     const loadingToast = toast.loading('Adding patient...')
 
     try {
-      const response = await fetch('/api/appointments', {
+      const response = await fetch('/api/appointment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -114,19 +114,20 @@ export default function ReceptionPage() {
     const loadingToast = toast.loading('Checking in...')
     
     try {
-      const response = await fetch(`/api/appointments/${selectedAppt._id}`, {
+      const response = await fetch(`/api/appointment/${selectedAppt._id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'CHECKED_IN',
-          vitals: vitals
+          vitals: vitals,
+          paymentStatus: 'PAID' // Mark as paid on check-in
         })
       })
 
       const data = await response.json()
 
       if (data.success) {
-        toast.success('✅ Patient checked in', { id: loadingToast })
+        toast.success('✅ Patient checked in & payment confirmed', { id: loadingToast })
         fetchData()
         setSelectedAppt(null)
       } else {
@@ -141,6 +142,7 @@ export default function ReceptionPage() {
     waiting: appointments.filter(a => a.status === 'CHECKED_IN').length,
     inConsult: appointments.filter(a => a.status === 'IN_CONSULTATION').length,
     completed: appointments.filter(a => a.status === 'COMPLETED').length,
+    skipped: appointments.filter(a => a.status === 'SKIPPED').length,
   }
 
   const filteredAppointments = appointments.filter(apt => {
@@ -157,9 +159,35 @@ export default function ReceptionPage() {
       CHECKED_IN: 'bg-yellow-100 text-yellow-700 border-yellow-200',
       IN_CONSULTATION: 'bg-purple-100 text-purple-700 border-purple-200',
       COMPLETED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+      SKIPPED: 'bg-orange-100 text-orange-700 border-orange-200',
       CANCELLED: 'bg-red-100 text-red-700 border-red-200'
     }
     return colors[status] || colors.BOOKED
+  }
+
+  const handleReCheckIn = async (appointmentId) => {
+    const loadingToast = toast.loading('Re-checking in patient...')
+    
+    try {
+      const response = await fetch(`/api/appointment/${appointmentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'CHECKED_IN'
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast.success('✅ Patient re-checked in', { id: loadingToast })
+        fetchData()
+      } else {
+        toast.error(data.error, { id: loadingToast })
+      }
+    } catch (error) {
+      toast.error('Failed to re-check in', { id: loadingToast })
+    }
   }
 
   return (
@@ -290,7 +318,7 @@ export default function ReceptionPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -299,6 +327,18 @@ export default function ReceptionPage() {
                 <p className="text-4xl font-bold text-yellow-600">{stats.waiting}</p>
               </div>
               <Clock className="w-12 h-12 text-yellow-200" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600 mb-2">Skipped Patients</p>
+                <p className="text-4xl font-bold text-orange-600">{stats.skipped}</p>
+              </div>
+              <RefreshCw className="w-12 h-12 text-orange-200" />
             </div>
           </CardContent>
         </Card>
@@ -359,7 +399,9 @@ export default function ReceptionPage() {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center font-bold text-lg">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${
+                      apt.status === 'SKIPPED' ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'
+                    }`}>
                       #{apt.tokenNumber}
                     </div>
                     <div>
@@ -369,11 +411,31 @@ export default function ReceptionPage() {
                       <p className="text-sm text-slate-600">
                         Dr. {apt.doctorId?.firstName} {apt.doctorId?.lastName}
                       </p>
+                      {apt.skipCount > 0 && (
+                        <p className="text-xs text-orange-600 font-medium mt-1">
+                          Skipped {apt.skipCount}x
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <Badge className={getStatusColor(apt.status)}>
-                    {apt.status}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className={getStatusColor(apt.status)}>
+                      {apt.status}
+                    </Badge>
+                    {apt.status === 'SKIPPED' && (
+                      <Button 
+                        size="sm" 
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleReCheckIn(apt._id)
+                        }}
+                        className="bg-orange-600 hover:bg-orange-700 h-7 px-2"
+                      >
+                        <RefreshCw className="w-3 h-3 mr-1" />
+                        Re-Check In
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

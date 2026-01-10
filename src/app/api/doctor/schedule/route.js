@@ -3,11 +3,24 @@ import connectDB from '@/config/db'
 import HospitalAffiliation from '@/models/hospitalAffiliation'
 import { requireRole } from '@/lib/apiAuth'
 
-// ✅ GET - Fetch schedule for specific hospital affiliation
+// --- Helper Functions ---
+
+// Convert "HH:mm" string to minutes since midnight (e.g., "01:30" -> 90)
+const toMinutes = (time) => {
+  if (!time) return 0
+  const [h, m] = time.split(':').map(Number)
+  return h * 60 + m
+}
+
+// --- Routes ---
+
+// ✅ GET - Fetch schedule + slot duration for a specific affiliation
 export async function GET(req) {
+  // 1. Auth Check
   const gate = await requireRole(['doctor'])
   if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status })
 
+  // 2. Validate Params
   const { searchParams } = new URL(req.url)
   const affiliationId = searchParams.get('affiliationId')
 
@@ -18,7 +31,7 @@ export async function GET(req) {
   await connectDB()
 
   try {
-    // Find affiliation and verify it belongs to this doctor
+    // 3. Fetch Affiliation
     const affiliation = await HospitalAffiliation.findOne({
       _id: affiliationId,
       doctorId: gate.me._id,
@@ -31,13 +44,15 @@ export async function GET(req) {
       }, { status: 404 })
     }
 
-    // Return schedule (mapped to match frontend expectations)
-    const schedule = {
-      weekly: affiliation.weeklySchedule || [],
-      exceptions: affiliation.dateOverrides || []
-    }
-
-    return NextResponse.json({ schedule }, { status: 200 })
+    // 4. Return Data
+    return NextResponse.json({ 
+      success: true,
+      schedule: {
+        weekly: affiliation.weeklySchedule || [],
+        exceptions: affiliation.dateOverrides || [],
+        slotDuration: affiliation.slotDuration || 15 // Default 15 mins if not set
+      }
+    }, { status: 200 })
 
   } catch (e) {
     console.error('❌ Fetch schedule error:', e)
@@ -47,26 +62,29 @@ export async function GET(req) {
   }
 }
 
-// ✅ PATCH - Update schedule for specific hospital affiliation
+// ✅ PATCH - Update schedule + slot duration
 export async function PATCH(req) {
+  // 1. Auth Check
   const gate = await requireRole(['doctor'])
   if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status })
 
+  // 2. Parse Body
   const body = await req.json()
-  const { affiliationId, weekly, exceptions } = body || {}
+  const { affiliationId, weekly, exceptions, slotDuration } = body || {}
 
   if (!affiliationId) {
     return NextResponse.json({ error: 'affiliationId is required' }, { status: 400 })
   }
 
-  if (!Array.isArray(weekly)) {
-    return NextResponse.json({ error: 'weekly schedule is required' }, { status: 400 })
+  // 3. Basic Validation
+  if (weekly && !Array.isArray(weekly)) {
+    return NextResponse.json({ error: 'weekly schedule must be an array' }, { status: 400 })
   }
 
   await connectDB()
 
   try {
-    // Find affiliation and verify ownership
+    // 4. Find Affiliation
     const affiliation = await HospitalAffiliation.findOne({
       _id: affiliationId,
       doctorId: gate.me._id,
@@ -79,130 +97,117 @@ export async function PATCH(req) {
       }, { status: 404 })
     }
 
-    // Validate weekly schedule structure
-    const validDays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
-    
-    for (const daySchedule of weekly) {
-      if (!validDays.includes(daySchedule.day)) {
-        return NextResponse.json({ 
-          error: `Invalid day: ${daySchedule.day}` 
-        }, { status: 400 })
+    // 5. Update Slot Duration
+    if (slotDuration !== undefined && slotDuration !== null) {
+      const validDurations = [10, 15, 20, 30, 45, 60];
+      if (!validDurations.includes(slotDuration)) {
+        return NextResponse.json({ error: 'Invalid slot duration' }, { status: 400 });
       }
-
-      // Validate slots
-      if (daySchedule.slots && Array.isArray(daySchedule.slots)) {
-        for (const slot of daySchedule.slots) {
-          if (!slot.start || !slot.end) {
-            return NextResponse.json({ 
-              error: 'Each slot must have start and end time' 
-            }, { status: 400 })
-          }
-
-          // Validate time format (HH:mm)
-          if (!slot.start.match(/^\d{2}:\d{2}$/) || !slot.end.match(/^\d{2}:\d{2}$/)) {
-            return NextResponse.json({ 
-              error: 'Invalid time format. Use HH:mm (e.g., 09:00)' 
-            }, { status: 400 })
-          }
-
-          // Validate start < end
-          if (slot.start >= slot.end) {
-            return NextResponse.json({ 
-              error: `Start time must be before end time (${slot.start} >= ${slot.end})` 
-            }, { status: 400 })
-          }
-        }
-
-        // Check for overlapping slots on same day
-        const slots = daySchedule.slots.sort((a, b) => a.start.localeCompare(b.start))
-        for (let i = 0; i < slots.length - 1; i++) {
-          if (slots[i].end > slots[i + 1].start) {
-            return NextResponse.json({ 
-              error: `Overlapping slots on ${daySchedule.day}: ${slots[i].start}-${slots[i].end} overlaps with ${slots[i + 1].start}-${slots[i + 1].end}` 
-            }, { status: 400 })
-          }
-        }
-      }
+      affiliation.slotDuration = slotDuration;
     }
 
-    // Validate exceptions (dateOverrides)
-    if (exceptions && Array.isArray(exceptions)) {
-      for (const exc of exceptions) {
-        if (!exc.date) {
-          return NextResponse.json({ 
-            error: 'Each exception must have a date' 
-          }, { status: 400 })
+    // 6. Update Weekly Schedule with Robust Validation
+    if (weekly) {
+      const validDays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+      
+      for (const daySchedule of weekly) {
+        if (!validDays.includes(daySchedule.day)) {
+          return NextResponse.json({ error: `Invalid day: ${daySchedule.day}` }, { status: 400 })
         }
 
-        // Validate date format (YYYY-MM-DD)
-        if (!exc.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          return NextResponse.json({ 
-            error: `Invalid date format: ${exc.date}. Use YYYY-MM-DD` 
-          }, { status: 400 })
+        if (daySchedule.slots && Array.isArray(daySchedule.slots)) {
+          // Sort slots by start time using minute conversion
+          const sortedSlots = [...daySchedule.slots].sort((a, b) => 
+            toMinutes(a.start) - toMinutes(b.start)
+          )
+          
+          for (let i = 0; i < sortedSlots.length; i++) {
+            const slot = sortedSlots[i]
+            
+            // Format check (HH:mm)
+            if (!slot.start.match(/^\d{2}:\d{2}$/) || !slot.end.match(/^\d{2}:\d{2}$/)) {
+              return NextResponse.json({ error: 'Invalid time format (HH:mm)' }, { status: 400 })
+            }
+
+            const startMins = toMinutes(slot.start)
+            const endMins = toMinutes(slot.end)
+
+            // Logic check: Start < End
+            if (startMins >= endMins) {
+              return NextResponse.json({ error: `Start time (${slot.start}) must be before end time` }, { status: 400 })
+            }
+            
+            // Overlap check: Compare with previous slot
+            if (i > 0) {
+              const prevSlot = sortedSlots[i - 1]
+              const prevEndMins = toMinutes(prevSlot.end)
+
+              // If current start is before previous end, they overlap
+              if (startMins < prevEndMins) {
+                return NextResponse.json({ 
+                  error: `Overlapping slots on ${daySchedule.day}: ${prevSlot.start}-${prevSlot.end} overlaps with ${slot.start}-${slot.end}` 
+                }, { status: 400 })
+              }
+            }
+          }
         }
       }
-    }
 
-    // Update the affiliation schedule with proper field names
-    affiliation.weeklySchedule = weekly.map(day => ({
-      day: day.day,
-      slots: (day.slots || []).map(slot => ({
-        start: slot.start,
-        end: slot.end,
-        room: slot.room || ''
+      // If validation passes, map clean data to model
+      affiliation.weeklySchedule = weekly.map(day => ({
+        day: day.day,
+        slots: (day.slots || []).map(slot => ({
+          start: slot.start,
+          end: slot.end,
+          room: slot.room || ''
+        }))
       }))
-    }))
+    }
 
-    affiliation.dateOverrides = (exceptions || []).map(exc => ({
-      date: exc.date,
-      unavailable: exc.unavailable || false,
-      reason: exc.reason || '',
-      slots: exc.slots || [],
-      updatedBy: gate.me._id,
-      updatedByRole: 'doctor',
-      updatedAt: new Date()
-    }))
+    // 7. Update Exceptions (Date Overrides)
+    if (exceptions) {
+      if (!Array.isArray(exceptions)) {
+        return NextResponse.json({ error: 'exceptions must be an array' }, { status: 400 })
+      }
 
-    // Update audit fields
+      affiliation.dateOverrides = exceptions.map(exc => ({
+        date: exc.date,
+        unavailable: exc.unavailable || false,
+        reason: exc.reason || '',
+        slots: (exc.slots || []).map(slot => ({
+          start: slot.start,
+          end: slot.end,
+          room: slot.room || ''
+        })),
+        updatedBy: gate.me._id,
+        updatedByRole: 'doctor',
+        updatedAt: new Date()
+      }))
+    }
+
+    // 8. Update Audit Fields
     affiliation.lastScheduleUpdatedAt = new Date()
     affiliation.lastScheduleUpdatedBy = gate.me._id
     affiliation.lastScheduleUpdatedByRole = 'doctor'
 
     await affiliation.save()
 
-    console.log('✅ Schedule updated:', {
-      affiliationId: affiliation._id,
-      doctor: gate.me._id,
-      weeklySlots: affiliation.weeklySchedule.reduce((sum, day) => sum + (day.slots?.length || 0), 0),
-      exceptions: affiliation.dateOverrides.length
-    })
+    console.log(`✅ Schedule updated for affiliation ${affiliationId} by doctor ${gate.me._id}`)
 
     return NextResponse.json({ 
+      success: true,
       message: 'Schedule updated successfully',
       schedule: {
         weekly: affiliation.weeklySchedule,
-        exceptions: affiliation.dateOverrides
+        exceptions: affiliation.dateOverrides,
+        slotDuration: affiliation.slotDuration
       }
     }, { status: 200 })
 
   } catch (e) {
     console.error('❌ Update schedule error:', e)
-    
-    if (e.name === 'ValidationError') {
-      return NextResponse.json({ 
-        error: 'Validation error: ' + e.message 
-      }, { status: 400 })
-    }
-
-    if (e.code === 11000) {
-      return NextResponse.json({ 
-        error: 'Duplicate affiliation detected' 
-      }, { status: 409 })
-    }
-
     return NextResponse.json({ 
-      error: 'Failed to update schedule',
-      details: process.env.NODE_ENV === 'development' ? e.message : undefined
+      error: 'Failed to update schedule' 
     }, { status: 500 })
   }
 }

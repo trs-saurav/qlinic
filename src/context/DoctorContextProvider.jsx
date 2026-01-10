@@ -46,25 +46,15 @@ export function DoctorProvider({ children }) {
   // ================= Fetchers =================
 
   const fetchDoctorProfile = useCallback(async () => {
-    console.log('🚀 fetchDoctorProfile called, session:', session?.user?.email)
-    
     if (!session?.user) {
-      console.log('❌ No session, returning')
       setDoctorLoading(false)
       return
     }
 
     try {
       setDoctorLoading(true)
-      setDoctorError(null)
-
-      console.log('📡 Fetching /api/doctor/profile...')
-      const res = await fetch('/api/doctor/profile', {
-        headers: { Accept: 'application/json' },
-      })
+      const res = await fetch('/api/doctor/profile')
       const data = await res.json()
-
-      console.log('📊 Profile response:', { status: res.status, data })
 
       if (!res.ok) {
         setDoctor(null)
@@ -72,14 +62,11 @@ export function DoctorProvider({ children }) {
         return
       }
 
-      // ✅ Handle both 'profile' and 'doctor' keys
       const doctorData = data?.profile || data?.doctor || null
-      console.log('✅ Setting doctor:', doctorData)
       setDoctor(doctorData)
     } catch (err) {
       console.error('❌ fetchDoctorProfile:', err)
       setDoctor(null)
-      setDoctorError('Failed to load doctor profile')
       toast.error('Failed to load doctor profile')
     } finally {
       setDoctorLoading(false)
@@ -90,9 +77,7 @@ export function DoctorProvider({ children }) {
     if (!doctor?._id) return
     try {
       setDashboardLoading(true)
-      const res = await fetch('/api/doctor/dashboard', { 
-        headers: { Accept: 'application/json' } 
-      })
+      const res = await fetch('/api/doctor/dashboard')
       const data = await res.json()
       
       if (res.ok) {
@@ -105,15 +90,38 @@ export function DoctorProvider({ children }) {
     }
   }, [doctor?._id])
 
+  // ✅ UPDATED: Points to centralized /api/appointment
   const fetchAppointments = useCallback(
     async (filter = 'today') => {
       if (!doctor?._id) return
       try {
         setAppointmentsLoading(true)
-        const params = new URLSearchParams({ filter })
-        const res = await fetch(`/api/doctor/appointments?${params}`, {
+        
+        // Pass 'role=doctor' so the API knows to filter by doctorId, not patientId
+        const params = new URLSearchParams({ 
+          role: 'doctor', 
+          doctorId: doctor._id, 
+          filter 
+        })
+        
+        console.log('🔍 Fetching appointments with params:', params.toString())
+        
+        const res = await fetch(`/api/appointment?${params}`, {
           headers: { Accept: 'application/json' },
         })
+        
+        console.log('📡 Response status:', res.status, res.statusText)
+        
+        // Check if response is JSON
+        const contentType = res.headers.get('content-type')
+        if (!contentType || !contentType.includes('application/json')) {
+          console.error('❌ Expected JSON but got:', contentType)
+          const text = await res.text()
+          console.error('Response body:', text.substring(0, 500))
+          toast.error('Server error - please check console')
+          return
+        }
+        
         const data = await res.json()
 
         if (!res.ok) {
@@ -121,11 +129,13 @@ export function DoctorProvider({ children }) {
           return
         }
 
+        console.log('✅ Appointments loaded:', data.appointments?.length || 0)
         setAppointments(data.appointments || [])
         setAppointmentsFilter(filter)
       } catch (err) {
-        console.error('❌ fetchAppointments:', err)
-        toast.error('Failed to load appointments')
+        console.error('❌ fetchAppointments error:', err)
+        console.error('Error stack:', err.stack)
+        toast.error('Failed to load appointments: ' + err.message)
       } finally {
         setAppointmentsLoading(false)
       }
@@ -134,33 +144,21 @@ export function DoctorProvider({ children }) {
   )
 
   const fetchAffiliations = useCallback(async () => {
-    console.log('🔄 fetchAffiliations called, doctor:', doctor?._id)
-    
-    if (!doctor?._id) {
-      console.log('❌ No doctor ID, skipping affiliations fetch')
-      return
-    }
+    if (!doctor?._id) return
     
     try {
       setAffiliationsLoading(true)
-      const res = await fetch('/api/doctor/affiliations', {
-        headers: { Accept: 'application/json' },
-      })
+      const res = await fetch('/api/doctor/affiliations')
       const data = await res.json()
 
-      console.log('✅ Affiliations response:', { status: res.status, data })
-
       if (!res.ok) {
-        console.error('❌ Affiliations error:', data?.error)
-        toast.error(data?.error || 'Failed to load affiliations')
         setAffiliations([])
         return
       }
 
       setAffiliations(data.affiliations || [])
     } catch (err) {
-      console.error('❌ fetchAffiliations exception:', err)
-      toast.error('Failed to load affiliations')
+      console.error('❌ fetchAffiliations:', err)
       setAffiliations([])
     } finally {
       setAffiliationsLoading(false)
@@ -170,11 +168,8 @@ export function DoctorProvider({ children }) {
   const fetchNotifications = useCallback(async () => {
     if (!doctor?._id) return
     try {
-      const res = await fetch('/api/doctor/notifications', {
-        headers: { Accept: 'application/json' },
-      })
+      const res = await fetch('/api/doctor/notifications')
       const data = await res.json()
-
       if (res.ok) {
         setNotifications(data.notifications || [])
         setUnreadCount(data.unreadCount || 0)
@@ -190,10 +185,7 @@ export function DoctorProvider({ children }) {
     try {
       const res = await fetch('/api/doctor/profile', {
         method: 'PATCH',
-        headers: { 
-          'Content-Type': 'application/json',
-          Accept: 'application/json' 
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
       })
       const data = await res.json()
@@ -207,21 +199,22 @@ export function DoctorProvider({ children }) {
       toast.success('Profile updated successfully')
       return { success: true, doctor: data.doctor || data.profile }
     } catch (err) {
-      console.error('❌ updateDoctorProfile:', err)
       toast.error('Failed to update profile')
       return { success: false, error: err.message }
     }
   }, [])
 
-  const updateAppointmentStatus = useCallback(async (appointmentId, status, notes) => {
+  // ✅ UPDATED: Points to centralized /api/appointment/[id]
+  const updateAppointmentStatus = useCallback(async (appointmentId, status, additionalData = {}) => {
     try {
-      const res = await fetch(`/api/doctor/appointments/${appointmentId}`, {
+      const res = await fetch(`/api/appointment/${appointmentId}`, {
         method: 'PATCH',
-        headers: { 
-          'Content-Type': 'application/json',
-          Accept: 'application/json' 
-        },
-        body: JSON.stringify({ status, notes }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          status, 
+          ...additionalData,
+          updatedByRole: 'doctor' // Audit trail
+        }),
       })
       const data = await res.json()
 
@@ -234,7 +227,7 @@ export function DoctorProvider({ children }) {
       setAppointments(prev => 
         prev.map(apt => 
           apt._id === appointmentId 
-            ? { ...apt, status, notes: notes || apt.notes }
+            ? { ...apt, status, ...additionalData }
             : apt
         )
       )
@@ -250,124 +243,59 @@ export function DoctorProvider({ children }) {
 
   const markNotificationRead = useCallback(async (notificationId) => {
     try {
-      const res = await fetch(`/api/doctor/notifications/${notificationId}/read`, { 
-        method: 'PATCH' 
-      })
-      
+      const res = await fetch(`/api/doctor/notifications/${notificationId}/read`, { method: 'PATCH' })
       if (!res.ok) return
-
-      setNotifications(prev => 
-        prev.map(n => n._id === notificationId ? { ...n, read: true } : n)
-      )
+      setNotifications(prev => prev.map(n => n._id === notificationId ? { ...n, read: true } : n))
       setUnreadCount(prev => Math.max(0, prev - 1))
-    } catch (err) {
-      console.error('❌ markNotificationRead:', err)
-    }
+    } catch (err) { console.error(err) }
   }, [])
 
   const refreshAll = useCallback(async () => {
     if (!doctor?._id) return
-    
-    console.log('🔄 Refreshing all doctor data...')
-    
     await Promise.all([
       fetchDoctorDashboard(),
       fetchAppointments(appointmentsFilter),
       fetchAffiliations(),
       fetchNotifications(),
     ])
-  }, [
-    doctor?._id,
-    appointmentsFilter,
-    fetchDoctorDashboard,
-    fetchAppointments,
-    fetchAffiliations,
-    fetchNotifications,
-  ])
+  }, [doctor?._id, appointmentsFilter, fetchDoctorDashboard, fetchAppointments, fetchAffiliations, fetchNotifications])
 
   // ================= Effects =================
-
-  // 1. Init once when Auth.js session is ready
   useEffect(() => {
-    // ✅ Wait for session to load
     if (status === 'loading') return
-    
     if (status === 'unauthenticated' || !session?.user) {
-      console.log('❌ No session loaded, resetting state')
       setDoctor(null)
       setDoctorLoading(false)
       return
     }
-    
     if (didInitRef.current) return
-    
-    console.log('🎯 Initializing doctor context for user:', session.user.email)
     didInitRef.current = true
     fetchDoctorProfile()
   }, [status, session, fetchDoctorProfile])
 
-  // 2. After doctor is known, fetch baseline data once
   useEffect(() => {
     if (!doctor?._id) return
-    
-    console.log('📊 Doctor loaded, fetching initial data for:', doctor._id)
-    
     fetchDoctorDashboard()
     fetchAffiliations()
     fetchNotifications()
   }, [doctor?._id, fetchDoctorDashboard, fetchAffiliations, fetchNotifications])
 
-  // 3. Reset when user logs out
   useEffect(() => {
     if (status === 'unauthenticated') {
-      console.log('👋 User logged out, resetting context')
       didInitRef.current = false
       setDoctor(null)
-      setDashboard({
-        todayAppointments: 0,
-        upcomingAppointments: 0,
-        completedThisWeek: 0,
-        pendingHospitalInvites: 0,
-      })
       setAppointments([])
       setAffiliations([])
       setNotifications([])
-      setUnreadCount(0)
     }
   }, [status])
 
   const value = {
-    // doctor
-    doctor,
-    doctorLoading,
-    doctorError,
-    fetchDoctorProfile,
-    updateDoctorProfile,
-
-    // dashboard
-    dashboard,
-    dashboardLoading,
-    fetchDoctorDashboard,
-
-    // appointments
-    appointments,
-    appointmentsLoading,
-    appointmentsFilter,
-    fetchAppointments,
-    updateAppointmentStatus,
-
-    // affiliations
-    affiliations,
-    affiliationsLoading,
-    fetchAffiliations,
-
-    // notifications
-    notifications,
-    unreadCount,
-    fetchNotifications,
-    markNotificationRead,
-
-    // utilities
+    doctor, doctorLoading, doctorError, fetchDoctorProfile, updateDoctorProfile,
+    dashboard, dashboardLoading, fetchDoctorDashboard,
+    appointments, appointmentsLoading, appointmentsFilter, fetchAppointments, updateAppointmentStatus,
+    affiliations, affiliationsLoading, fetchAffiliations,
+    notifications, unreadCount, fetchNotifications, markNotificationRead,
     refreshAll,
   }
 

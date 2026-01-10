@@ -26,7 +26,7 @@ export const HospitalAdminProvider = ({ children }) => {
   const pathname = usePathname()
   const { data: session, status } = useSession()
 
-  // Auth state derived from session
+  // Auth state
   const isLoaded = status !== 'loading'
   const isSignedIn = status === 'authenticated'
   const user = session?.user
@@ -94,6 +94,7 @@ export const HospitalAdminProvider = ({ children }) => {
     theme: 'light',
   })
 
+  // Ref to track if we've already fetched the initial hospital profile
   const didInitRef = useRef(false)
 
   // ===== Shared fetch helper =====
@@ -119,28 +120,19 @@ export const HospitalAdminProvider = ({ children }) => {
 
   const handleErrorToast = useCallback((res, data, fallbackMsg) => {
     if (res.status === 401) {
-      console.log('🔒 Unauthorized - session expired or invalid')
+      console.log('🔒 Unauthorized')
       return
     }
     toast.error(data?.error || fallbackMsg)
   }, [])
 
   // ===== Fetchers =====
+  
   const fetchHospital = useCallback(async () => {
-    if (!isLoaded) {
-      console.log('⏳ Session not loaded yet')
-      return
-    }
-    if (!isSignedIn) {
-      console.log('❌ User not signed in')
-      setHospital(null)
-      setHospitalLoading(false)
-      return
-    }
+    if (!isLoaded || !isSignedIn) return
 
-    // Check if user has hospital_admin role
+    // Prevent fetching if role is wrong
     if (user?.role !== 'hospital_admin') {
-      console.log('❌ User is not a hospital admin:', user?.role)
       setHospital(null)
       setHospitalLoading(false)
       setHospitalError('Access denied: Hospital admin role required')
@@ -151,27 +143,15 @@ export const HospitalAdminProvider = ({ children }) => {
       setHospitalLoading(true)
       setHospitalError(null)
 
-      console.log('🔍 Fetching hospital profile for user:', user?.email)
-      
       const { res, data } = await apiFetch('/api/hospital/profile')
       
-      console.log('📊 Hospital response:', {
-        status: res.status,
-        ok: res.ok,
-        hasData: !!data,
-        success: data?.success,
-        hospitalName: data?.hospital?.name
-      })
-
       if (!res.ok) {
-        console.error('❌ Hospital fetch failed:', data?.error)
         setHospital(null)
         setAdminInfo(null)
         setHospitalError(data?.error || 'Failed to load hospital')
         return
       }
 
-      console.log('✅ Hospital loaded:', data.hospital?.name)
       setHospital(data?.hospital || null)
       setAdminInfo(data?.admin || null)
     } catch (err) {
@@ -182,29 +162,33 @@ export const HospitalAdminProvider = ({ children }) => {
     } finally {
       setHospitalLoading(false)
     }
-  }, [apiFetch, isLoaded, isSignedIn, user])
+  }, [apiFetch, isLoaded, isSignedIn, user?.role]) 
 
   const fetchStats = useCallback(async () => {
     if (!hospital?._id) return
     try {
       setStatsLoading(true)
       const { res, data } = await apiFetch('/api/hospital/dashboard/stats')
-      if (res.ok) setStats(data?.stats || stats)
-      else handleErrorToast(res, data, 'Failed to load stats')
+      if (res.ok && data?.stats) {
+        setStats(data.stats)
+      }
     } catch (err) {
       console.error('❌ fetchStats:', err)
     } finally {
       setStatsLoading(false)
     }
-  }, [apiFetch, handleErrorToast, hospital?._id])
+  }, [apiFetch, hospital?._id])
 
   const fetchAppointments = useCallback(
     async (filter = 'all') => {
       if (!hospital?._id) return
       try {
         setAppointmentsLoading(true)
-        const params = new URLSearchParams({ filter })
-        const { res, data } = await apiFetch(`/api/hospital/appointments?${params}`)
+        const params = new URLSearchParams({ 
+          role: 'hospital_admin',
+          filter
+        })
+        const { res, data } = await apiFetch(`/api/appointment?${params}`)
         if (res.ok) {
           setAppointments(data?.appointments || [])
           setAppointmentsFilter(filter)
@@ -229,16 +213,13 @@ export const HospitalAdminProvider = ({ children }) => {
       if (res.ok) {
         setDoctors(data?.doctors || [])
         setPendingDoctorRequests(data?.pendingRequests || [])
-      } else {
-        handleErrorToast(res, data, 'Failed to load doctors')
       }
     } catch (err) {
       console.error('❌ fetchDoctors:', err)
-      toast.error('Failed to load doctors')
     } finally {
       setDoctorsLoading(false)
     }
-  }, [apiFetch, handleErrorToast, hospital?._id])
+  }, [apiFetch, hospital?._id])
 
   const fetchPatients = useCallback(async () => {
     if (!hospital?._id) return
@@ -248,16 +229,13 @@ export const HospitalAdminProvider = ({ children }) => {
       if (res.ok) {
         setPatients(data?.patients || [])
         setTodayPatients(data?.todayPatients || [])
-      } else {
-        handleErrorToast(res, data, 'Failed to load patients')
       }
     } catch (err) {
       console.error('❌ fetchPatients:', err)
-      toast.error('Failed to load patients')
     } finally {
       setPatientsLoading(false)
     }
-  }, [apiFetch, handleErrorToast, hospital?._id])
+  }, [apiFetch, hospital?._id])
 
   const fetchStaff = useCallback(async () => {
     if (!hospital?._id) return
@@ -265,63 +243,75 @@ export const HospitalAdminProvider = ({ children }) => {
       setStaffLoading(true)
       const { res, data } = await apiFetch('/api/hospital/staff')
       if (res.ok) setStaff(data?.staff || [])
-      else handleErrorToast(res, data, 'Failed to load staff')
     } catch (err) {
       console.error('❌ fetchStaff:', err)
-      toast.error('Failed to load staff')
     } finally {
       setStaffLoading(false)
     }
-  }, [apiFetch, handleErrorToast, hospital?._id])
+  }, [apiFetch, hospital?._id])
 
   const fetchInventoryStats = useCallback(async () => {
     if (!hospital?._id) return
     try {
       const params = new URLSearchParams({ hospitalId: hospital._id })
       const { res, data } = await apiFetch(`/api/hospital/inventory/stats?${params}`)
-      if (res.ok) {
-        setInventoryStats(data?.stats || inventoryStats)
-      } else {
-        handleErrorToast(res, data, 'Failed to load inventory stats')
+      if (res.ok && data?.stats) {
+        setInventoryStats(data.stats)
       }
     } catch (err) {
       console.error('❌ fetchInventoryStats:', err)
     }
-  }, [apiFetch, handleErrorToast, hospital?._id])
+  }, [apiFetch, hospital?._id])
 
   const fetchInventory = useCallback(
-    async (filters = inventoryFilters) => {
+    async (filters) => {
+      // Use passed filters, or fallback to state
+      const activeFilters = filters || inventoryFilters
+      
       if (!hospital?._id) return
       try {
         setInventoryLoading(true)
         const params = new URLSearchParams({
           hospitalId: hospital._id,
-          ...(filters.category !== 'all' && { category: filters.category }),
-          ...(filters.status !== 'all' && { status: filters.status }),
-          ...(filters.search && { search: filters.search }),
+          ...(activeFilters.category !== 'all' && { category: activeFilters.category }),
+          ...(activeFilters.status !== 'all' && { status: activeFilters.status }),
+          ...(activeFilters.search && { search: activeFilters.search }),
         })
         
         const { res, data } = await apiFetch(`/api/hospital/inventory?${params}`)
         if (res.ok) {
           setInventory(data?.items || [])
-          setInventoryFilters(filters)
+          // Only update filter state if arguments were passed explicitly
+          if (filters) setInventoryFilters(filters)
           
           const lowStock = (data?.items || []).filter(
             item => item.status === 'low-stock' || item.status === 'out-of-stock'
           )
           setLowStockItems(lowStock)
-        } else {
-          handleErrorToast(res, data, 'Failed to load inventory')
         }
       } catch (err) {
         console.error('❌ fetchInventory:', err)
-        toast.error('Failed to load inventory')
       } finally {
         setInventoryLoading(false)
       }
     },
-    [apiFetch, handleErrorToast, hospital?._id]
+    [apiFetch, hospital?._id, inventoryFilters]
   )
+
+  const fetchNotifications = useCallback(async () => {
+    if (!hospital?._id) return
+    try {
+      const { res, data } = await apiFetch('/api/hospital/notifications')
+      if (res.ok) {
+        setNotifications(data?.notifications || [])
+        setUnreadCount(data?.unreadCount || 0)
+      }
+    } catch (err) {
+      console.error('❌ fetchNotifications:', err)
+    }
+  }, [apiFetch, hospital?._id])
+
+  // ===== Actions =====
 
   const addInventoryItem = useCallback(
     async (itemData) => {
@@ -338,7 +328,9 @@ export const HospitalAdminProvider = ({ children }) => {
         }
 
         toast.success('Item added successfully')
-        await Promise.all([fetchInventory(inventoryFilters), fetchInventoryStats()])
+        fetchInventory(inventoryFilters) 
+        fetchInventoryStats()
+        
         return { success: true, item: data?.item }
       } catch (err) {
         console.error('❌ addInventoryItem:', err)
@@ -364,7 +356,9 @@ export const HospitalAdminProvider = ({ children }) => {
         }
 
         toast.success('Item updated successfully')
-        await Promise.all([fetchInventory(inventoryFilters), fetchInventoryStats()])
+        fetchInventory(inventoryFilters)
+        fetchInventoryStats()
+        
         return { success: true, item: data?.item }
       } catch (err) {
         console.error('❌ updateInventoryItem:', err)
@@ -388,7 +382,9 @@ export const HospitalAdminProvider = ({ children }) => {
         }
 
         toast.success('Item deleted successfully')
-        await Promise.all([fetchInventory(inventoryFilters), fetchInventoryStats()])
+        fetchInventory(inventoryFilters)
+        fetchInventoryStats()
+        
         return { success: true }
       } catch (err) {
         console.error('❌ deleteInventoryItem:', err)
@@ -398,19 +394,6 @@ export const HospitalAdminProvider = ({ children }) => {
     },
     [apiFetch, handleErrorToast, fetchInventory, fetchInventoryStats, inventoryFilters]
   )
-
-  const fetchNotifications = useCallback(async () => {
-    if (!hospital?._id) return
-    try {
-      const { res, data } = await apiFetch('/api/hospital/notifications')
-      if (res.ok) {
-        setNotifications(data?.notifications || [])
-        setUnreadCount(data?.unreadCount || 0)
-      }
-    } catch (err) {
-      console.error('❌ fetchNotifications:', err)
-    }
-  }, [apiFetch, hospital?._id])
 
   const approveDoctorRequest = useCallback(
     async (affiliationId) => {
@@ -427,7 +410,8 @@ export const HospitalAdminProvider = ({ children }) => {
         }
 
         toast.success('Doctor approved successfully')
-        await Promise.all([fetchDoctors(), fetchStats()])
+        fetchDoctors()
+        fetchStats()
         return { success: true }
       } catch (err) {
         console.error('❌ approveDoctorRequest:', err)
@@ -456,9 +440,42 @@ export const HospitalAdminProvider = ({ children }) => {
     [apiFetch]
   )
 
+  const updateAppointmentStatus = useCallback(
+    async (appointmentId, status, additionalData = {}) => {
+      try {
+        const { res, data } = await apiFetch(`/api/appointment/${appointmentId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            status, 
+            ...additionalData,
+            updatedByRole: 'hospital_admin' 
+          }),
+        })
+
+        if (!res.ok) {
+          throw new Error(data?.error || 'Failed to update appointment')
+        }
+
+        setAppointments(prev => 
+          prev.map(apt => 
+            apt._id === appointmentId 
+              ? { ...apt, status, ...additionalData }
+              : apt
+          )
+        )
+
+        return { success: true }
+      } catch (err) {
+        console.error('❌ updateAppointmentStatus:', err)
+        return { success: false, error: err.message }
+      }
+    }, 
+    [apiFetch]
+  )
+
   const refreshAll = useCallback(async () => {
     if (!hospital?._id) return
-    console.log('🔄 Refreshing all hospital data...')
     await Promise.all([
       fetchStats(),
       fetchAppointments(appointmentsFilter),
@@ -469,7 +486,7 @@ export const HospitalAdminProvider = ({ children }) => {
     ])
   }, [
     hospital?._id,
-    appointmentsFilter,
+    appointmentsFilter, 
     fetchStats,
     fetchAppointments,
     fetchDoctors,
@@ -480,44 +497,38 @@ export const HospitalAdminProvider = ({ children }) => {
 
   // ===== Effects =====
 
-  // 1) Init hospital fetch once when auth is ready
+  // 1) Init Hospital Profile (Runs once per session load)
   useEffect(() => {
-    if (!isLoaded) return
-    if (!isSignedIn) return
-    if (didInitRef.current) return
+    if (!isLoaded || !isSignedIn) return
+    if (didInitRef.current) return 
     
-    console.log('🚀 Initializing hospital context...')
     didInitRef.current = true
     fetchHospital()
   }, [isLoaded, isSignedIn, fetchHospital])
 
-  // 2) Once hospital known, load lightweight global info
+  // 2) Load secondary data ONLY when hospital ID changes
   useEffect(() => {
     if (!hospital?._id) return
-    console.log('📊 Loading hospital data for:', hospital.name)
+    
     fetchStats()
     fetchInventoryStats()
     fetchNotifications()
-  }, [hospital?._id, fetchStats, fetchInventoryStats, fetchNotifications])
+    fetchDoctors() 
+  }, [hospital?._id, fetchStats, fetchInventoryStats, fetchNotifications, fetchDoctors])
 
-  // 3) Redirect to setup if signed in but hospital profile missing
+  // 3) Setup Redirect
   useEffect(() => {
-    if (!isLoaded) return
-    if (!isSignedIn) return
-    if (hospitalLoading) return
+    if (!isLoaded || !isSignedIn || hospitalLoading) return
     if (pathname?.includes('/hospital-admin/setup')) return
 
-    // Only redirect if user has hospital_admin role but no hospital profile
     if (user?.role === 'hospital_admin' && !hospital && !hospitalError) {
-      console.log('➡️ No hospital found, redirecting to setup...')
       router.push('/hospital-admin/setup')
     }
-  }, [isLoaded, isSignedIn, hospitalLoading, hospital, hospitalError, router, pathname, user])
+  }, [isLoaded, isSignedIn, hospitalLoading, hospital, hospitalError, router, pathname, user?.role])
 
-  // 4) Handle session expiration
+  // 4) Cleanup on logout
   useEffect(() => {
     if (isLoaded && !isSignedIn && didInitRef.current) {
-      console.log('🔒 Session expired, clearing hospital data')
       setHospital(null)
       setAdminInfo(null)
       setHospitalError('Session expired')
@@ -525,118 +536,33 @@ export const HospitalAdminProvider = ({ children }) => {
     }
   }, [isLoaded, isSignedIn])
 
-  const value = useMemo(
-    () => ({
-      // Auth info
-      user,
-      isLoaded,
-      isSignedIn,
-
-      // Hospital
-      hospital,
-      hospitalLoading,
-      hospitalError,
-      adminInfo,
-      fetchHospital,
-
-      // Stats
-      stats,
-      statsLoading,
-      fetchStats,
-
-      // Appointments
-      appointments,
-      appointmentsLoading,
-      appointmentsFilter,
-      fetchAppointments,
-
-      // Doctors
-      doctors,
-      doctorsLoading,
-      pendingDoctorRequests,
-      fetchDoctors,
-      approveDoctorRequest,
-
-      // Patients
-      patients,
-      patientsLoading,
-      todayPatients,
-      fetchPatients,
-
-      // Staff
-      staff,
-      staffLoading,
-      fetchStaff,
-
-      // Inventory
-      inventory,
-      inventoryLoading,
-      inventoryStats,
-      inventoryFilters,
-      lowStockItems,
-      fetchInventory,
-      fetchInventoryStats,
-      addInventoryItem,
-      updateInventoryItem,
-      deleteInventoryItem,
-
-      // Notifications
-      notifications,
-      unreadCount,
-      fetchNotifications,
-      markNotificationRead,
-
-      // Settings
-      settings,
-      setSettings,
-
-      // Utilities
+  const value = useMemo(() => ({
+      user, isLoaded, isSignedIn,
+      hospital, hospitalLoading, hospitalError, adminInfo, fetchHospital,
+      stats, statsLoading, fetchStats,
+      appointments, appointmentsLoading, appointmentsFilter, fetchAppointments, updateAppointmentStatus,
+      doctors, doctorsLoading, pendingDoctorRequests, fetchDoctors, approveDoctorRequest,
+      patients, patientsLoading, todayPatients, fetchPatients,
+      staff, staffLoading, fetchStaff,
+      inventory, inventoryLoading, inventoryStats, inventoryFilters, lowStockItems, fetchInventory, fetchInventoryStats,
+      addInventoryItem, updateInventoryItem, deleteInventoryItem,
+      notifications, unreadCount, fetchNotifications, markNotificationRead,
+      settings, setSettings,
       refreshAll,
     }),
     [
-      user,
-      isLoaded,
-      isSignedIn,
-      hospital,
-      hospitalLoading,
-      hospitalError,
-      adminInfo,
-      fetchHospital,
-      stats,
-      statsLoading,
-      fetchStats,
-      appointments,
-      appointmentsLoading,
-      appointmentsFilter,
-      fetchAppointments,
-      doctors,
-      doctorsLoading,
-      pendingDoctorRequests,
-      fetchDoctors,
-      approveDoctorRequest,
-      patients,
-      patientsLoading,
-      todayPatients,
-      fetchPatients,
-      staff,
-      staffLoading,
-      fetchStaff,
-      inventory,
-      inventoryLoading,
-      inventoryStats,
-      inventoryFilters,
-      lowStockItems,
-      fetchInventory,
-      fetchInventoryStats,
-      addInventoryItem,
-      updateInventoryItem,
-      deleteInventoryItem,
-      notifications,
-      unreadCount,
-      fetchNotifications,
-      markNotificationRead,
-      settings,
-      refreshAll,
+      user, isLoaded, isSignedIn,
+      hospital, hospitalLoading, hospitalError, adminInfo, fetchHospital,
+      stats, statsLoading, fetchStats,
+      appointments, appointmentsLoading, appointmentsFilter, fetchAppointments, updateAppointmentStatus,
+      doctors, doctorsLoading, pendingDoctorRequests, fetchDoctors, approveDoctorRequest,
+      patients, patientsLoading, todayPatients, fetchPatients,
+      staff, staffLoading, fetchStaff,
+      inventory, inventoryLoading, inventoryStats, inventoryFilters, lowStockItems, fetchInventory, fetchInventoryStats,
+      addInventoryItem, updateInventoryItem, deleteInventoryItem,
+      notifications, unreadCount, fetchNotifications, markNotificationRead,
+      settings, setSettings,
+      refreshAll
     ]
   )
 

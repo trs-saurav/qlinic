@@ -1,4 +1,3 @@
-// src/models/hospitalAffiliation.js
 import mongoose from 'mongoose'
 
 const timeSlotSchema = new mongoose.Schema(
@@ -29,7 +28,7 @@ const dateOverrideSchema = new mongoose.Schema(
     slots: { type: [timeSlotSchema], default: [] },
     reason: { type: String, default: '' },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    updatedByRole: { type: String, default: '' }, // 'doctor' | 'hospital_admin'
+    updatedByRole: { type: String, default: '' },
     updatedAt: { type: Date, default: Date.now },
   },
   { _id: false }
@@ -52,8 +51,14 @@ const hospitalAffiliationSchema = new mongoose.Schema(
       required: true,
     },
 
+    // ✅ ADDED THIS FIELD
+    slotDuration: { 
+      type: Number, 
+      default: 15, // Default 15 mins
+      enum: [10, 15, 20, 30, 45, 60] 
+    },
+
     consultationFee: Number,
-    availableDays: [String], // legacy (optional)
     consultationRoomNumber: String,
     startDate: Date,
     endDate: Date,
@@ -62,11 +67,9 @@ const hospitalAffiliationSchema = new mongoose.Schema(
     respondedAt: Date,
     respondedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
-    // ✅ NEW: scheduling
     weeklySchedule: { type: [weeklyDaySchema], default: [] },
     dateOverrides: { type: [dateOverrideSchema], default: [] },
 
-    // ✅ audit
     lastScheduleUpdatedAt: Date,
     lastScheduleUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     lastScheduleUpdatedByRole: String,
@@ -74,7 +77,6 @@ const hospitalAffiliationSchema = new mongoose.Schema(
   { timestamps: true }
 )
 
-// ✅ Make unique to prevent duplicates [web:583]
 hospitalAffiliationSchema.index({ doctorId: 1, hospitalId: 1 }, { unique: true })
 hospitalAffiliationSchema.index({ status: 1 })
 

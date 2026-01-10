@@ -54,10 +54,48 @@ import {
   CalendarClock,
   Info,
   UserMinus,
+  Loader2,
+  CalendarX,
+  Save,
+  X,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+
+const toMinutes = (time) => {
+  if (!time) return 0
+  const [h, m] = time.split(':').map(Number)
+  return h * 60 + m
+}
+
+function SlotRow({ slot, onRemove }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-slate-100 bg-slate-50/50 p-2.5 hover:bg-white hover:shadow-sm hover:border-slate-200 transition-all group">
+      <div className="flex items-center gap-3 text-sm overflow-hidden">
+        <Clock className="h-4 w-4 text-slate-400 shrink-0" />
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+          <span className="font-semibold text-slate-700">{slot.start}</span>
+          <span className="text-slate-400 text-xs">to</span>
+          <span className="font-semibold text-slate-700">{slot.end}</span>
+          {slot.room && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 h-5 ml-1 font-normal bg-white border-slate-200 text-slate-500">
+              Rm {slot.room}
+            </Badge>
+          )}
+        </div>
+      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onRemove}
+        className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  )
+}
 
 function buildEmptyWeekly() {
   return DAYS.map((d) => ({ day: d, slots: [] }))
@@ -113,10 +151,12 @@ export default function StaffPage() {
 
   const [weeklySchedule, setWeeklySchedule] = useState(buildEmptyWeekly())
   const [dateOverrides, setDateOverrides] = useState([])
+  const [slotDuration, setSlotDuration] = useState(15)
 
-  const [slotDay, setSlotDay] = useState('MON')
-  const [slotStart, setSlotStart] = useState('10:00')
-  const [slotEnd, setSlotEnd] = useState('13:00')
+  // Slot Editor State
+  const [slotDialogOpen, setSlotDialogOpen] = useState(false)
+  const [activeDay, setActiveDay] = useState('MON')
+  const [newSlot, setNewSlot] = useState({ start: '09:00', end: '17:00', room: '' })
 
   const [overrideDate, setOverrideDate] = useState('')
   const [overrideUnavailable, setOverrideUnavailable] = useState(false)
@@ -139,6 +179,15 @@ export default function StaffPage() {
     fetchStaff()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const dayMap = useMemo(() => {
+    const map = new Map()
+    DAYS.forEach((d) => map.set(d, { day: d, slots: [] }))
+    if (weeklySchedule) {
+      weeklySchedule.forEach((d) => map.set(d.day, d))
+    }
+    return map
+  }, [weeklySchedule])
 
   const doctorsNormalized = useMemo(() => {
     return (doctors || []).map((row) => ({
@@ -418,11 +467,15 @@ export default function StaffPage() {
 
       if (!res.ok) {
         toast.error(data?.error || 'Failed to load schedule')
+        setWeeklySchedule(buildEmptyWeekly())
+        setDateOverrides([])
+        setSlotDuration(15)
         return
       }
 
       setWeeklySchedule(data?.data?.weeklySchedule?.length ? data.data.weeklySchedule : buildEmptyWeekly())
       setDateOverrides(Array.isArray(data?.data?.dateOverrides) ? data.data.dateOverrides : [])
+      setSlotDuration(data?.data?.slotDuration || 15)
     } catch (e) {
       toast.error('Failed to load schedule')
     } finally {
@@ -430,21 +483,72 @@ export default function StaffPage() {
     }
   }
 
-  function addWeeklySlot() {
-    if (!slotStart || !slotEnd) return toast.error('Start/end required')
+  function validateSlot(day, slot) {
+    if (!slot.start.match(/^\d{2}:\d{2}$/) || !slot.end.match(/^\d{2}:\d{2}$/)) {
+      return 'Invalid time format (HH:mm)'
+    }
 
-    setWeeklySchedule((prev) =>
-      prev.map((d) =>
-        d.day === slotDay ? { ...d, slots: [...(d.slots || []), { start: slotStart, end: slotEnd }] } : d
+    const startMins = toMinutes(slot.start)
+    const endMins = toMinutes(slot.end)
+
+    if (startMins >= endMins) {
+      return 'Start time must be before end time'
+    }
+    
+    const existingSlots = dayMap.get(day)?.slots || []
+    
+    // Robust Overlap Check
+    const hasOverlap = existingSlots.some(s => {
+      const sStart = toMinutes(s.start)
+      const sEnd = toMinutes(s.end)
+
+      return (
+        (startMins >= sStart && startMins < sEnd) || 
+        (endMins > sStart && endMins <= sEnd) ||     
+        (startMins <= sStart && endMins >= sEnd)     
       )
-    )
+    })
+    
+    if (hasOverlap) return 'Slot overlaps with existing time'
+    
+    return null
+  }
+
+  function handleAddSlot() {
+    const error = validateSlot(activeDay, newSlot)
+    if (error) return toast.error(error)
+
+    setWeeklySchedule(prev => {
+      const existingDayIndex = prev.findIndex(d => d.day === activeDay)
+      const updatedSlot = { ...newSlot }
+      
+      const sortSlots = (slots) => [...slots].sort((a, b) => toMinutes(a.start) - toMinutes(b.start))
+
+      if (existingDayIndex >= 0) {
+        const updatedWeekly = [...prev]
+        const currentSlots = [...updatedWeekly[existingDayIndex].slots]
+        updatedWeekly[existingDayIndex] = {
+          ...updatedWeekly[existingDayIndex],
+          slots: sortSlots([...currentSlots, updatedSlot])
+        }
+        return updatedWeekly
+      } else {
+        return [...prev, { day: activeDay, slots: [updatedSlot] }]
+      }
+    })
+
+    setSlotDialogOpen(false)
+    setNewSlot({ start: '09:00', end: '17:00', room: '' })
     toast.success('Slot added')
   }
 
-  function removeWeeklySlot(day, idx) {
-    setWeeklySchedule((prev) =>
-      prev.map((d) => (d.day === day ? { ...d, slots: (d.slots || []).filter((_, i) => i !== idx) } : d))
-    )
+  function handleRemoveSlot(day, index) {
+    setWeeklySchedule(prev => {
+      return prev.map(d => {
+        if (d.day !== day) return d
+        return { ...d, slots: d.slots.filter((_, i) => i !== index) }
+      }).filter(d => d.slots.length > 0)
+    })
   }
 
   function upsertOverride() {
@@ -482,6 +586,7 @@ export default function StaffPage() {
           affiliationId: activeAffiliationId,
           weeklySchedule,
           dateOverrides,
+          slotDuration,
         }),
       })
       const data = await res.json()
@@ -1129,153 +1234,207 @@ export default function StaffPage() {
 
       {/* Schedule Editor Dialog */}
       <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Edit schedule</DialogTitle>
-            <DialogDescription>
-              {activeDoctorPreview ? doctorName(activeDoctorPreview) : 'Doctor'} • Weekly + day overrides
-            </DialogDescription>
+        <DialogContent className="w-[95vw] max-w-5xl h-[90vh] md:h-[85vh] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-xl">
+          <DialogHeader className="p-4 sm:p-6 pb-4 border-b bg-white shrink-0">
+             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                <div>
+                  <DialogTitle className="text-xl">
+                    {activeDoctorPreview ? doctorName(activeDoctorPreview) : 'Doctor'}
+                  </DialogTitle>
+                  <DialogDescription className="mt-1">Manage availability</DialogDescription>
+                </div>
+                
+                <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                   <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                     Per Patient
+                   </Label>
+                   <Select 
+                     value={slotDuration.toString()}
+                     onValueChange={(val) => setSlotDuration(parseInt(val))}
+                   >
+                     <SelectTrigger className="w-[110px] h-8 bg-white text-xs font-medium border-slate-200">
+                       <SelectValue />
+                     </SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="10">10 mins</SelectItem>
+                       <SelectItem value="15">15 mins</SelectItem>
+                       <SelectItem value="20">20 mins</SelectItem>
+                       <SelectItem value="30">30 mins</SelectItem>
+                       <SelectItem value="45">45 mins</SelectItem>
+                       <SelectItem value="60">60 mins</SelectItem>
+                     </SelectContent>
+                   </Select>
+                </div>
+             </div>
           </DialogHeader>
 
           {scheduleLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-40 w-full" />
+            <div className="flex-1 flex items-center justify-center bg-slate-50">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
-            <Tabs defaultValue="weekly" className="space-y-4">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="weekly">Weekly</TabsTrigger>
-                <TabsTrigger value="overrides">Day overrides</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="weekly" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Add weekly slot</CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid md:grid-cols-4 gap-3 items-end">
-                    <div className="space-y-2">
-                      <Label>Day</Label>
-                      <Select value={slotDay} onValueChange={setSlotDay}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {DAYS.map((d) => (
-                            <SelectItem key={d} value={d}>
-                              {d}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Start</Label>
-                      <Input value={slotStart} onChange={(e) => setSlotStart(e.target.value)} placeholder="HH:mm" />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>End</Label>
-                      <Input value={slotEnd} onChange={(e) => setSlotEnd(e.target.value)} placeholder="HH:mm" />
-                    </div>
-
-                    <Button onClick={addWeeklySlot}>Add</Button>
-                  </CardContent>
-                </Card>
-
-                <div className="grid md:grid-cols-2 gap-3">
-                  {weeklySchedule.map((d) => (
-                    <Card key={d.day}>
-                      <CardHeader>
-                        <CardTitle className="text-base">{d.day}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        {(d.slots || []).length === 0 ? (
-                          <p className="text-sm text-muted-foreground">No slots</p>
-                        ) : (
-                          d.slots.map((s, idx) => (
-                            <div key={`\${d.day}-\${idx}`} className="flex items-center justify-between gap-2 border rounded-lg p-2">
-                              <div className="text-sm">
-                                <span className="font-semibold">{s.start}</span> - <span className="font-semibold">{s.end}</span>
-                              </div>
-                              <Button variant="destructive" size="sm" onClick={() => removeWeeklySlot(d.day, idx)}>
-                                Remove
-                              </Button>
-                            </div>
-                          ))
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
+            <div className="flex-1 overflow-hidden flex flex-col bg-slate-50/50">
+              <Tabs defaultValue="weekly" className="flex-1 flex flex-col overflow-hidden">
+                <div className="px-4 sm:px-6 bg-white border-b shrink-0">
+                  <TabsList className="grid w-full grid-cols-2 max-w-[400px] mb-4 h-9">
+                    <TabsTrigger value="weekly" className="text-xs">Weekly Schedule</TabsTrigger>
+                    <TabsTrigger value="overrides" className="text-xs">
+                      Day Overrides {dateOverrides.length > 0 && `(${dateOverrides.length})`}
+                    </TabsTrigger>
+                  </TabsList>
                 </div>
-              </TabsContent>
 
-              <TabsContent value="overrides" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Add day override</CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid md:grid-cols-4 gap-3 items-end">
-                    <div className="space-y-2">
-                      <Label>Date</Label>
-                      <Input value={overrideDate} onChange={(e) => setOverrideDate(e.target.value)} placeholder="YYYY-MM-DD" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Unavailable</Label>
-                      <Select value={overrideUnavailable ? 'yes' : 'no'} onValueChange={(v) => setOverrideUnavailable(v === 'yes')}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="no">No</SelectItem>
-                          <SelectItem value="yes">Yes</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Reason</Label>
-                      <Input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Optional" />
-                    </div>
-                    <Button onClick={upsertOverride} variant="outline">
-                      Add/Update
-                    </Button>
-                  </CardContent>
-                </Card>
+                <TabsContent value="weekly" className="flex-1 overflow-y-auto p-4 sm:p-6 m-0">
+                  <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {DAYS.map(day => {
+                      const dayData = dayMap.get(day)
+                      const hasSlots = dayData.slots.length > 0
+                      
+                      return (
+                        <Card key={day} className={`flex flex-col h-full border transition-all ${hasSlots ? 'border-slate-200 bg-white shadow-sm' : 'border-slate-100 bg-slate-50/50 opacity-80 hover:opacity-100'}`}>
+                          <CardHeader className="py-3 px-4 border-b flex flex-row items-center justify-between space-y-0 bg-white rounded-t-lg">
+                            <div className="flex items-center gap-2">
+                              <span className={`font-bold text-sm ${hasSlots ? 'text-primary' : 'text-slate-400'}`}>{day}</span>
+                              {hasSlots && <span className="h-1.5 w-1.5 rounded-full bg-green-500" />}
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-7 w-7 p-0 text-slate-400 hover:text-primary hover:bg-primary/5" 
+                              onClick={() => {
+                                setActiveDay(day)
+                                setSlotDialogOpen(true)
+                              }}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </CardHeader>
+                          <CardContent className="flex-1 p-2 space-y-2 min-h-[100px]">
+                            {!hasSlots ? (
+                              <div className="h-full flex flex-col items-center justify-center text-slate-300 py-4 gap-2">
+                                <CalendarX className="h-6 w-6 opacity-20" />
+                                <span className="text-xs font-medium">Off Day</span>
+                              </div>
+                            ) : (
+                              dayData.slots.map((slot, idx) => (
+                                <SlotRow 
+                                  key={idx} 
+                                  slot={slot} 
+                                  onRemove={() => handleRemoveSlot(day, idx)} 
+                                />
+                              ))
+                            )}
+                          </CardContent>
+                        </Card>
+                      )
+                    })}
+                  </div>
+                </TabsContent>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Existing overrides</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {dateOverrides.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No overrides.</p>
-                    ) : (
-                      dateOverrides.map((o) => (
-                        <div key={o.date} className="flex items-center justify-between border rounded-lg p-2">
-                          <div className="text-sm">
-                            <span className="font-semibold">{o.date}</span>
-                            <span className="text-muted-foreground"> • {o.unavailable ? 'Unavailable' : 'Custom'}</span>
-                            {o.reason ? <span className="text-muted-foreground"> • {o.reason}</span> : null}
+                <TabsContent value="overrides" className="space-y-4 p-4 sm:p-6 m-0">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Add day override</CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid md:grid-cols-4 gap-3 items-end">
+                      <div className="space-y-2">
+                        <Label>Date</Label>
+                        <Input value={overrideDate} onChange={(e) => setOverrideDate(e.target.value)} placeholder="YYYY-MM-DD" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Unavailable</Label>
+                        <Select value={overrideUnavailable ? 'yes' : 'no'} onValueChange={(v) => setOverrideUnavailable(v === 'yes')}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="no">No</SelectItem>
+                            <SelectItem value="yes">Yes</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Reason</Label>
+                        <Input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Optional" />
+                      </div>
+                      <Button onClick={upsertOverride} variant="outline">
+                        Add/Update
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Existing overrides</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {dateOverrides.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No overrides.</p>
+                      ) : (
+                        dateOverrides.map((o) => (
+                          <div key={o.date} className="flex items-center justify-between border rounded-lg p-2">
+                            <div className="text-sm">
+                              <span className="font-semibold">{o.date}</span>
+                              <span className="text-muted-foreground"> • {o.unavailable ? 'Unavailable' : 'Custom'}</span>
+                              {o.reason ? <span className="text-muted-foreground"> • {o.reason}</span> : null}
+                            </div>
                           </div>
-                        </div>
-                      ))
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={() => setScheduleOpen(false)}>
-                  Close
-                </Button>
-                <Button className="flex-1" onClick={saveSchedule} disabled={scheduleSaving}>
-                  {scheduleSaving ? 'Saving...' : 'Save schedule'}
-                </Button>
-              </div>
-            </Tabs>
+                        ))
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            </div>
           )}
+
+          <div className="p-4 sm:p-6 border-t bg-white shrink-0 flex flex-col-reverse sm:flex-row justify-end gap-3 z-10">
+            <Button variant="outline" onClick={() => setScheduleOpen(false)} className="w-full sm:w-auto">Cancel</Button>
+            <Button onClick={saveSchedule} disabled={scheduleSaving} className="w-full sm:w-auto min-w-[140px]">
+              {scheduleSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Slot Dialog */}
+      <Dialog open={slotDialogOpen} onOpenChange={setSlotDialogOpen}>
+        <DialogContent className="w-[90vw] max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle>Add Slot - {activeDay}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-slate-500">Start Time</Label>
+                <Input 
+                  type="time" 
+                  value={newSlot.start} 
+                  onChange={e => setNewSlot({...newSlot, start: e.target.value})} 
+                  className="font-mono"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-slate-500">End Time</Label>
+                <Input 
+                  type="time" 
+                  value={newSlot.end} 
+                  onChange={e => setNewSlot({...newSlot, end: e.target.value})} 
+                  className="font-mono"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-slate-500">Room Number (Optional)</Label>
+              <Input 
+                value={newSlot.room} 
+                onChange={e => setNewSlot({...newSlot, room: e.target.value})} 
+                placeholder="e.g. 104"
+              />
+            </div>
+            <Button onClick={handleAddSlot} className="w-full mt-2">Add Slot</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

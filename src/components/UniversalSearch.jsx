@@ -287,7 +287,7 @@ export default function UniversalSearch({
 
   const handleResultClick = (result) => {
     if (result.type === 'doctor') {
-      router.push(`/doctor/${result.id}`)
+      router.push(`/user/doctors/${result.id}`)
     } else if (result.type === 'hospital') {
       router.push(`/user/hospitals/${result.id}`)
     }

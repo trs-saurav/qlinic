@@ -19,8 +19,12 @@ const appointmentSchema = new mongoose.Schema({
   },
   tokenNumber: {
     type: Number,
-    required: true
   },
+  skipCount: {
+    type: Number,
+    default: 0
+  },
+  lastSkippedAt: Date,
   scheduledTime: {
     type: Date,
     required: true
@@ -48,7 +52,21 @@ const appointmentSchema = new mongoose.Schema({
     spo2: String,
     heartRate: String
   },
+  diagnosis: String,
+  prescription: [{
+    name: String,
+    dosage: String,
+    frequency: String,
+    duration: String,
+    instructions: String
+  }],
+  prescriptionFileUrl: String,
   notes: String,
+  nextVisit: {
+    date: Date,
+    reason: String,
+    instructions: String
+  },
   cancelReason: String,
   cancelledBy: {
     type: String,

@@ -28,6 +28,7 @@ export async function GET(req) {
       data: {
         weeklySchedule: aff.weeklySchedule || [],
         dateOverrides: aff.dateOverrides || [],
+        slotDuration: aff.slotDuration || 15,
       },
     },
     { status: 200 }
@@ -39,7 +40,7 @@ export async function PATCH(req) {
   if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status })
 
   const body = await req.json()
-  const { affiliationId, weeklySchedule, dateOverrides } = body || {}
+  const { affiliationId, weeklySchedule, dateOverrides, slotDuration } = body || {}
   if (!affiliationId) return NextResponse.json({ error: 'affiliationId required' }, { status: 400 })
 
   await connectDB()
@@ -52,6 +53,15 @@ export async function PATCH(req) {
     status: 'APPROVED',
   })
   if (!aff) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Update slot duration
+  if (slotDuration !== undefined && slotDuration !== null) {
+    const validDurations = [10, 15, 20, 30, 45, 60]
+    if (!validDurations.includes(slotDuration)) {
+      return NextResponse.json({ error: 'Invalid slot duration' }, { status: 400 })
+    }
+    aff.slotDuration = slotDuration
+  }
 
   // Store schedule fields on the affiliation
   if (Array.isArray(weeklySchedule)) aff.weeklySchedule = weeklySchedule

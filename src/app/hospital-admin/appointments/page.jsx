@@ -1,78 +1,87 @@
-// src/app/hospital-admin/appointments/page.jsx
 'use client'
+
 import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useHospitalAdmin } from '@/context/HospitalAdminContext'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Search, Calendar, Clock, User, Stethoscope } from 'lucide-react'
+import { Search, Calendar, User, Printer } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 
-export default function AppointmentsPage() {
-  const [appointments, setAppointments] = useState([])
-  const [doctors, setDoctors] = useState([])
+export default function HospitalAppointmentsPage() {
+  const { appointments, fetchAppointments, fetchDoctors, doctors, loading: contextLoading, updateAppointmentStatus } = useHospitalAdmin()
   const [loading, setLoading] = useState(true)
+  
+  // Filters
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [doctorFilter, setDoctorFilter] = useState('ALL')
   const [typeFilter, setTypeFilter] = useState('ALL')
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    const loadData = async () => {
+      setLoading(true);
+      await Promise.all([
+        fetchAppointments(),
+        fetchDoctors()
+      ]);
+      setLoading(false);
+    };
+    
+    loadData();
+  }, [fetchAppointments, fetchDoctors])
 
-  const fetchData = async () => {
-    try {
-      const [apptRes, docRes] = await Promise.all([
-        fetch('/api/appointments'),
-        fetch('/api/hospital/doctors')
-      ])
 
-      const [apptData, docData] = await Promise.all([
-        apptRes.json(),
-        docRes.json()
-      ])
 
-      if (apptData.success) {
-        setAppointments(apptData.appointments || [])
-      }
-      if (docData.success) {
-        setDoctors(docData.doctors || [])
-      }
-    } catch (error) {
-      console.error('Error:', error)
-      toast.error('Failed to load data')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleStatusUpdate = async (appointmentId, newStatus) => {
-    const loadingToast = toast.loading('Updating status...')
+  // ✅ SMART QUEUE INTEGRATION
+  const handleStatusChange = async (appointmentId, newStatus) => {
+    const loadingToast = toast.loading('Processing...')
 
     try {
-      const response = await fetch(`/api/appointments/${appointmentId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        toast.success('Status updated', { id: loadingToast })
-        fetchData()
+      let result;
+      
+      // Special Logic for Check-In (Generates Token)
+      if (newStatus === 'CHECKED_IN') {
+        // For check-in, we need to call the check-in endpoint
+        const response = await fetch('/api/appointment/check-in', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appointmentId })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success || response.ok) {
+          toast.success(
+            `Checked In! Token #${data.tokenNumber || 'Assigned'}`, 
+            { id: loadingToast }
+          );
+          fetchAppointments(); // Refresh list
+        } else {
+          toast.error(data.error || 'Check-in failed', { id: loadingToast });
+        }
       } else {
-        toast.error(data.error, { id: loadingToast })
+        // Use context function for standard status updates
+        result = await updateAppointmentStatus(appointmentId, newStatus);
+        
+        if (result.success) {
+          toast.success('Status updated', { id: loadingToast });
+          fetchAppointments(); // Refresh list
+        } else {
+          toast.error(result.error || 'Update failed', { id: loadingToast });
+        }
       }
     } catch (error) {
-      toast.error('Failed to update', { id: loadingToast })
+      console.error(error);
+      toast.error('Network error', { id: loadingToast });
     }
   }
 
+  // Filter Logic
   const filteredAppointments = appointments.filter(apt => {
     const matchesStatus = statusFilter === 'ALL' || apt.status === statusFilter
     const matchesDoctor = doctorFilter === 'ALL' || apt.doctorId?._id === doctorFilter
@@ -89,86 +98,69 @@ export default function AppointmentsPage() {
            (name.includes(query) || phone.includes(query) || token.includes(query))
   })
 
+  // Helper: Status Colors
   const getStatusColor = (status) => {
     const colors = {
-      BOOKED: 'bg-blue-100 text-blue-700 border-blue-200',
-      CHECKED_IN: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-      IN_CONSULTATION: 'bg-purple-100 text-purple-700 border-purple-200',
-      COMPLETED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-      CANCELLED: 'bg-red-100 text-red-700 border-red-200'
+      BOOKED: 'bg-blue-50 text-blue-700 border-blue-200',
+      CHECKED_IN: 'bg-green-100 text-green-700 border-green-200', // Green implies active queue
+      IN_CONSULTATION: 'bg-purple-100 text-purple-700 border-purple-200 animate-pulse',
+      COMPLETED: 'bg-slate-100 text-slate-700 border-slate-200',
+      CANCELLED: 'bg-red-50 text-red-700 border-red-200',
+      SKIPPED: 'bg-orange-50 text-orange-700 border-orange-200'
     }
-    return colors[status] || colors.BOOKED
-  }
-
-  const formatTime = (date) => {
-    return new Date(date).toLocaleTimeString('en-IN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    })
+    return colors[status] || 'bg-slate-50 text-slate-700'
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-[calc(100vh-100px)]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Appointments</h1>
-          <p className="text-slate-600 dark:text-slate-400 mt-1">
-            Manage all hospital appointments
-          </p>
+          <h1 className="text-3xl font-bold text-slate-900">Appointments</h1>
+          <p className="text-slate-500 mt-1">Manage check-ins and queue flow</p>
         </div>
-        <Link href="/hospital-admin/reception">
-          <Button className="bg-emerald-600 hover:bg-emerald-700">
-            Add Walk-In
-          </Button>
-        </Link>
+        <div className="flex gap-3">
+          <Link href="/hospital-admin/reception">
+            <Button className="bg-emerald-600 hover:bg-emerald-700 shadow-sm">
+              <User className="w-4 h-4 mr-2" /> Walk-In Booking
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters Bar */}
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px] relative">
-              <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+            <div className="flex-1 min-w-[240px] relative">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="Search patients, phone, token..."
+                placeholder="Search by Patient Name, Phone, or Token..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className="pl-9"
               />
             </div>
 
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[160px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All Status</SelectItem>
-                <SelectItem value="BOOKED">Booked</SelectItem>
-                <SelectItem value="CHECKED_IN">Checked In</SelectItem>
-                <SelectItem value="IN_CONSULTATION">In Consultation</SelectItem>
+                <SelectItem value="BOOKED">Booked (Pre-Arrival)</SelectItem>
+                <SelectItem value="CHECKED_IN">Checked In (Queue)</SelectItem>
+                <SelectItem value="IN_CONSULTATION">In Consult</SelectItem>
                 <SelectItem value="COMPLETED">Completed</SelectItem>
-                <SelectItem value="CANCELLED">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All Types</SelectItem>
-                <SelectItem value="WALKIN">Walk-In</SelectItem>
-                <SelectItem value="ONLINE">Online</SelectItem>
+                <SelectItem value="SKIPPED">Skipped</SelectItem>
               </SelectContent>
             </Select>
 
@@ -189,102 +181,118 @@ export default function AppointmentsPage() {
         </CardContent>
       </Card>
 
-      {/* Appointments List */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50 dark:bg-slate-800 border-b">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Token</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Patient</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Doctor</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Time</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Payment</th>
-                  <th className="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {filteredAppointments.length > 0 ? (
-                  filteredAppointments.map(apt => (
-                    <tr key={apt._id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                      <td className="px-6 py-4">
-                        <span className="font-mono font-bold text-lg">#{apt.tokenNumber}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarFallback>
-                              {apt.patientId?.firstName?.[0]}{apt.patientId?.lastName?.[0]}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-semibold">
-                              {apt.patientId?.firstName} {apt.patientId?.lastName}
-                            </p>
-                            <p className="text-sm text-slate-500">{apt.patientId?.phoneNumber}</p>
-                          </div>
+      {/* Appointments Table */}
+      <Card className="overflow-hidden border-t-4 border-t-emerald-600">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-slate-50 border-b text-slate-500 uppercase text-xs font-semibold">
+              <tr>
+                <th className="px-6 py-4">Token</th>
+                <th className="px-6 py-4">Patient</th>
+                <th className="px-6 py-4">Doctor</th>
+                <th className="px-6 py-4">Time</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredAppointments.length > 0 ? (
+                filteredAppointments.map(apt => (
+                  <tr key={apt._id} className="hover:bg-slate-50/50 transition-colors">
+                    
+                    {/* Token Column */}
+                    <td className="px-6 py-4">
+                      {apt.tokenNumber ? (
+                        <div className="flex items-center gap-2">
+                           <span className="font-mono font-bold text-xl text-slate-800">#{apt.tokenNumber}</span>
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="font-medium">
-                          Dr. {apt.doctorId?.firstName} {apt.doctorId?.lastName}
-                        </p>
-                        <p className="text-sm text-slate-500">
-                          {apt.doctorId?.doctorProfile?.specialization}
-                        </p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-sm">{formatTime(apt.scheduledTime)}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <Badge variant={apt.type === 'EMERGENCY' ? 'destructive' : 'outline'}>
-                          {apt.appointmentType === 'WALKIN' ? '🚶 Walk-In' : '💻 Online'}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4">
-                        <Badge className={getStatusColor(apt.status)}>
-                          {apt.status.replace('_', ' ')}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4">
-                        <Badge variant={apt.paymentStatus === 'PAID' ? 'default' : 'secondary'}>
-                          {apt.paymentStatus}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <Select
-                          value={apt.status}
-                          onValueChange={(v) => handleStatusUpdate(apt._id, v)}
-                        >
-                          <SelectTrigger className="w-[140px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="BOOKED">Booked</SelectItem>
-                            <SelectItem value="CHECKED_IN">Check In</SelectItem>
-                            <SelectItem value="IN_CONSULTATION">In Consult</SelectItem>
-                            <SelectItem value="COMPLETED">Complete</SelectItem>
-                            <SelectItem value="CANCELLED">Cancel</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center">
-                      <Calendar className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-                      <p className="text-lg font-medium text-slate-600">No appointments found</p>
+                      ) : (
+                        <span className="text-xs text-slate-400 font-medium bg-slate-100 px-2 py-1 rounded">--</span>
+                      )}
+                    </td>
+
+                    {/* Patient Column */}
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-9 w-9 border bg-white">
+                          <AvatarFallback className="bg-emerald-50 text-emerald-700">
+                            {apt.patientId?.firstName?.[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-semibold text-slate-900">
+                            {apt.patientId?.firstName} {apt.patientId?.lastName}
+                          </p>
+                          <p className="text-xs text-slate-500">{apt.patientId?.phoneNumber}</p>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Doctor Column */}
+                    <td className="px-6 py-4">
+                      <div className="font-medium text-slate-700">Dr. {apt.doctorId?.firstName} {apt.doctorId?.lastName}</div>
+                      <div className="text-xs text-slate-500 truncate max-w-[150px]">
+                        {apt.doctorId?.doctorProfile?.specialization || 'General'}
+                      </div>
+                    </td>
+
+                    {/* Time Column */}
+                    <td className="px-6 py-4 text-slate-600">
+                      {new Date(apt.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </td>
+
+                    {/* Status Column */}
+                    <td className="px-6 py-4">
+                      <Badge variant="outline" className={`${getStatusColor(apt.status)} font-semibold`}>
+                        {apt.status.replace('_', ' ')}
+                      </Badge>
+                    </td>
+
+                    {/* Actions Column */}
+                    <td className="px-6 py-4 text-right">
+                       <div className="flex items-center justify-end gap-2">
+                          {/* Smart Action Button Logic */}
+                          {apt.status === 'BOOKED' && (
+                             <Button size="sm" onClick={() => handleStatusChange(apt._id, 'CHECKED_IN')} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8">
+                               Check In
+                             </Button>
+                          )}
+                          
+                          {apt.status === 'CHECKED_IN' && (
+                             <Button size="sm" variant="outline" className="h-8 text-slate-500">
+                               Waiting...
+                             </Button>
+                          )}
+
+                          {/* Fallback Dropdown for manual corrections */}
+                          <Select 
+                            value={apt.status} 
+                            onValueChange={(val) => handleStatusChange(apt._id, val)}
+                          >
+                            <SelectTrigger className="w-[32px] h-8 px-0 border-0 hover:bg-slate-100">
+                               <Printer className="w-4 h-4 text-slate-400" /> {/* Just an icon for "More" actions */}
+                            </SelectTrigger>
+                            <SelectContent align="end">
+                              <SelectItem value="CHECKED_IN">Force Check In</SelectItem>
+                              <SelectItem value="CANCELLED">Cancel Appointment</SelectItem>
+                              <SelectItem value="COMPLETED">Mark Completed</SelectItem>
+                            </SelectContent>
+                          </Select>
+                       </div>
                     </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="px-6 py-16 text-center text-slate-500">
+                    <Calendar className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+                    <p>No appointments matching filters.</p>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
     </div>
   )

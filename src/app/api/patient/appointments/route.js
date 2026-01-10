@@ -3,6 +3,7 @@ import { auth } from '@/auth'
 import  connectDB  from '@/config/db'
 import User from '@/models/user'
 import Appointment from '@/models/appointment'
+import FamilyMember from '@/models/familyMember'
 
 export async function GET(req) {
   console.log('🔵 Patient Appointments GET called')
@@ -16,20 +17,43 @@ export async function GET(req) {
 
     await connectDB()
 
-    const user = await User.findByEmail(session.user.email)
+    const user = await User.findOne({ email: session.user.email })
     
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
     // Verify user is a patient
-    if (user.role !== 'patient') {
+    if (user.role !== 'user') {
       return NextResponse.json({ 
         error: 'Access denied. Patient role required.' 
       }, { status: 403 })
     }
 
-    const appointments = await Appointment.find({ patientId: user._id })
+    // Get query parameters
+    const { searchParams } = new URL(req.url);
+    const familyMemberId = searchParams.get('familyMemberId');
+    
+    // Build query - either for user or family member
+    let query = {};
+    if (familyMemberId) {
+      // Verify that the family member belongs to this user
+      const familyMember = await FamilyMember.findOne({
+        _id: familyMemberId,
+        userId: user._id,
+        isActive: true
+      });
+      
+      if (!familyMember) {
+        return NextResponse.json({ error: 'Family member not found or unauthorized' }, { status: 404 });
+      }
+      
+      query.patientId = familyMemberId;
+    } else {
+      query.patientId = user._id;
+    }
+    
+    const appointments = await Appointment.find(query)
       .populate('doctorId', 'firstName lastName doctorProfile profileImage')
       .populate('hospitalId', 'name address contactDetails')
       .sort({ scheduledTime: -1 })
@@ -62,14 +86,14 @@ export async function POST(req) {
 
     await connectDB()
 
-    const user = await User.findByEmail(session.user.email)
+    const user = await User.findOne({ email: session.user.email })
     
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
     // Verify user is a patient
-    if (user.role !== 'patient') {
+    if (user.role !== 'user') {
       return NextResponse.json({ 
         error: 'Access denied. Patient role required.' 
       }, { status: 403 })

@@ -19,6 +19,7 @@ export const UserProvider = ({ children }) => {
   const [medicalRecords, setMedicalRecords] = useState([])
   const [familyMembers, setFamilyMembers] = useState([])
   const [appointments, setAppointments] = useState([])
+  const [allAppointments, setAllAppointments] = useState([]) // Store all appointments
   const [loading, setLoading] = useState(true)
 
   const fetchAllUserData = useCallback(async () => {
@@ -48,7 +49,9 @@ export const UserProvider = ({ children }) => {
       }
       if (appointmentsRes.ok) {
          const data = await appointmentsRes.json()
-         setAppointments(data.appointments || [])
+         const fetchedAppointments = data.appointments || []
+         setAppointments(fetchedAppointments)
+         setAllAppointments(fetchedAppointments) // Store all appointments
       }
 
     } catch (err) {
@@ -156,6 +159,31 @@ export const UserProvider = ({ children }) => {
     }
   }
 
+  // --- APPOINTMENTS ---
+
+  const fetchAppointmentsWithFilter = async (familyMemberId = null) => {
+    try {
+      let url = '/api/patient/appointments';
+      if (familyMemberId && familyMemberId !== 'self') {
+        url += `?familyMemberId=${familyMemberId}`;
+      }
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (response.ok) {
+        setAppointments(data.appointments || []);
+        return { success: true, appointments: data.appointments || [] };
+      } else {
+        throw new Error(data.error || 'Failed to fetch appointments');
+      }
+    } catch (err) {
+      console.error('Error fetching appointments with filter:', err);
+      toast.error('Failed to load appointments');
+      return { success: false, error: err.message };
+    }
+  };
+
   // --- MEDICAL RECORDS ---
 
   // NOTE: This doesn't actually upload (since uploads use FormData),
@@ -183,6 +211,7 @@ export const UserProvider = ({ children }) => {
     medicalRecords,
     familyMembers,
     appointments,
+    allAppointments, // Expose all appointments
     loading,
     isAuthenticated: status === 'authenticated',
     refreshData: fetchAllUserData,
@@ -195,6 +224,9 @@ export const UserProvider = ({ children }) => {
     updateFamilyMember,
     deleteFamilyMember,
 
+    // Appointments
+    fetchAppointmentsWithFilter,
+    
     // Records (New!)
     addMedicalRecord, 
     deleteMedicalRecord,
