@@ -10,6 +10,7 @@ import { cookies } from 'next/headers'
 
 export const authOptions = {
   ...authConfig,
+  secret: process.env.AUTH_SECRET,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
