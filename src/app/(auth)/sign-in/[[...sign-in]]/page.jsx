@@ -126,26 +126,20 @@ export default function SignInPage() {
     try {
       const callbackUrl = redirectTo || currentRole.redirectUrl
       
+      // Use redirect-based sign-in to avoid fetch failures
       const result = await signIn('credentials', {
         email: data.email,
         password: data.password,
-        redirect: false,
+        redirect: true,
         callbackUrl: callbackUrl
       })
 
+      // If we reach this point without redirecting, there was an error
       toast.dismiss(loadingToast)
-
       if (result?.error) {
         toast.error('Invalid email or password')
         setLoading(false)
         return
-      }
-
-      if (result?.ok) {
-        toast.success('Welcome back! 👋', { duration: 2000, icon: '🎉' })
-        setTimeout(() => {
-          window.location.href = callbackUrl
-        }, 500)
       }
     } catch (err) {
       toast.dismiss(loadingToast)
