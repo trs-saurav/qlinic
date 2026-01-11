@@ -317,7 +317,7 @@ const Navbar = () => {
     setSearchExpanded(false);
   };
   const handleDoctorClick = (doctorId) => {
-    router.push(`/doctor/profile?id=${doctorId}`);
+    router.push(`/user/doctors/profile?id=${doctorId}`);
     setSearchExpanded(false);
   };
 

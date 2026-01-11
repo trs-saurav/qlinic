@@ -305,7 +305,7 @@ export default function DoctorPublicProfile() {
                               
                               {/* Hospital Image - Wrapped in Link */}
                               <Link 
-                                href={`/user/hospital/${hospital._id}`}
+                                href={`/user/hospitals/${hospital._id}`}
                                 className="sm:w-36 h-40 sm:h-auto bg-slate-100 relative shrink-0 overflow-hidden cursor-pointer block"
                               >
                                   {hospital.logo ? (
@@ -326,7 +326,7 @@ export default function DoctorPublicProfile() {
                                   <div className="flex justify-between items-start mb-1">
                                     {/* Hospital Name - Wrapped in Link */}
                                     <h3 className="font-bold text-lg group-hover:text-primary transition-colors line-clamp-1">
-                                      <Link href={`/user/hospital/${hospital._id}`} className="hover:underline">
+                                      <Link href={`/user/hospitals/${hospital._id}`} className="hover:underline">
                                         {hospital.name}
                                       </Link>
                                     </h3>
