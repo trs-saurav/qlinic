@@ -1,169 +1,144 @@
-// src/app/patient/appointments/[id]/queue/page.jsx
+// src/app/user/appointments/[id]/queue/page.jsx
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
-import { Clock, Users, AlertCircle, CheckCircle, ArrowLeft, RefreshCw } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { ArrowLeft, RefreshCw, Clock, MapPin, Stethoscope } from 'lucide-react'
+import toast from 'react-hot-toast'
 
-export default function QueueDashboard() {
-  const { id } = useParams()
+export default function QueuePage() {
+  const params = useParams()
   const router = useRouter()
-  const [queueData, setQueueData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [appointment, setAppointment] = useState(null)
+  const [queueStats, setQueueStats] = useState(null)
 
+  // Initial Data Fetch
   useEffect(() => {
-    fetchQueueStatus()
-    const interval = setInterval(fetchQueueStatus, 10000) // Poll every 10s
-    return () => clearInterval(interval)
-  }, [id])
+    fetchData()
+  }, [])
 
-  const fetchQueueStatus = async () => {
+  // Auto Refresh Interval
+  useEffect(() => {
+    if (!appointment) return
+    const interval = setInterval(() => {
+       fetchQueueStats(appointment.doctorId._id, appointment.hospitalId._id)
+    }, 15000) // Fast refresh for active page (15s)
+    return () => clearInterval(interval)
+  }, [appointment])
+
+  const fetchData = async () => {
+    setLoading(true);
     try {
-      const response = await fetch(`/api/appointment/queue?appointmentId=${id}`)
-      const data = await response.json()
-      
-      if (data.success) {
-        setQueueData(data)
-      }
-    } catch (error) {
-      console.error('Error fetching queue:', error)
+       const res = await fetch(`/api/appointment/${params.id}`)
+       const data = await res.json()
+       if (!data.success || !data.appointment) {
+         throw new Error(data.error || "Appointment not found");
+       }
+       
+       setAppointment(data.appointment)
+       
+       await fetchQueueStats(data.appointment.doctorId._id, data.appointment.hospitalId._id)
+    } catch (err) {
+        toast.error(err.message || "Failed to load queue details")
+        console.error(err)
+        // Set appointment to null in case of error to show 'not found' message
+        setAppointment(null); 
     } finally {
-      setLoading(false)
+        setLoading(false)
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <RefreshCw className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    )
+  const fetchQueueStats = async (docId, hospId) => {
+      try {
+        const res = await fetch(`/api/appointment/queue?doctorId=${docId}&hospitalId=${hospId}`)
+        const data = await res.json()
+        if (data.success) setQueueStats(data.queue)
+      } catch (e) { console.error(e) }
   }
 
-  // State 1: Pre-Arrival (Relax Mode)
-  if (queueData?.state === 'PRE_ARRIVAL') {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-6">
-        <Button variant="ghost" onClick={() => router.back()} className="mb-4">
-          <ArrowLeft className="w-4 h-4 mr-2" /> Back
-        </Button>
+  if (loading) return <div className="p-8 text-center">Loading queue...</div>
+  if (!appointment) return <div className="p-8 text-center text-red-500">Appointment not found.</div>
 
-        <Card className="max-w-2xl mx-auto">
-          <CardContent className="p-8 text-center">
-            <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold mb-2">Appointment Confirmed</h2>
-            <p className="text-slate-600 mb-6">
-              {queueData.appointment.hospitalName}
-            </p>
-            
-            <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6 mb-6">
-              <p className="text-sm text-green-700 uppercase font-semibold mb-2">Safe Arrival Time</p>
-              <p className="text-3xl font-bold text-green-900">
-                {new Date(queueData.appointment.scheduledTime).toLocaleTimeString('en-US', {
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
-              </p>
-              <p className="text-sm text-green-600 mt-2">
-                {new Date(queueData.appointment.scheduledTime).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  month: 'long',
-                  day: 'numeric'
-                })}
-              </p>
-            </div>
 
-            <div className="bg-slate-50 rounded-lg p-4 text-left">
-              <p className="text-sm text-slate-700 flex items-start gap-2">
-                <AlertCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                <span>
-                  <strong>Note:</strong> Your token number will be assigned when you check in at the reception.
-                  The queue will become visible after check-in.
-                </span>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
+  // Calculations
+  const myToken = appointment?.tokenNumber
+  const currentToken = queueStats?.currentToken || 0
+  const isMyTurn = myToken === currentToken
+  const tokensAhead = Math.max(0, myToken - currentToken - 1)
+  const waitTime = tokensAhead * (queueStats?.avgConsultationTime || 15)
 
-  // State 3: Skipped (Panic Mode)
-  if (queueData?.state === 'SKIPPED') {
-    return (
-      <div className="min-h-screen bg-red-50 p-6">
-        <Card className="max-w-2xl mx-auto border-red-300">
-          <CardContent className="p-8 text-center">
-            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-red-900 mb-2">You Missed Your Turn</h2>
-            <p className="text-red-700 text-lg mb-6">
-              {queueData.message}
-            </p>
-            <Button variant="destructive" size="lg" onClick={() => router.push('/patient/appointments')}>
-              Contact Reception
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  // State 2: Live Queue (Active Mode)
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">
-      <Button variant="ghost" onClick={() => router.back()} className="mb-4">
-        <ArrowLeft className="w-4 h-4 mr-2" /> Back
-      </Button>
+    <div className="min-h-screen bg-slate-50 p-4 pb-24">
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-6">
+        <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ArrowLeft className="w-5 h-5" />
+        </Button>
+        <h1 className="text-xl font-bold">Live Queue Status</h1>
+      </div>
 
-      <div className="max-w-3xl mx-auto space-y-6">
-        {/* Your Token Card */}
-        <Card className="bg-gradient-to-r from-primary to-primary/80 text-white">
-          <CardContent className="p-8">
-            <p className="text-sm opacity-90 uppercase tracking-wide mb-2">Your Token Number</p>
-            <h1 className="text-7xl font-bold mb-4">#{queueData.yourToken}</h1>
-            {queueData.isYourTurnSoon && (
-              <Badge className="bg-amber-500 text-white px-4 py-1">
-                Get Ready! You're up in ~{queueData.tokensAhead} turns
-              </Badge>
-            )}
-          </CardContent>
-        </Card>
+      {/* Main Status Card */}
+      <Card className="mb-6 border-0 shadow-lg overflow-hidden relative">
+        <div className={`absolute top-0 left-0 w-full h-2 ${isMyTurn ? 'bg-green-500' : 'bg-teal-600'}`}></div>
+        <CardContent className="pt-8 pb-8 text-center">
+             
+             {isMyTurn ? (
+                 <div className="animate-pulse">
+                     <div className="mx-auto w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                         <Stethoscope className="w-10 h-10 text-green-600" />
+                     </div>
+                     <h2 className="text-2xl font-bold text-green-700">It's Your Turn!</h2>
+                     <p className="text-slate-600">Please proceed to the consultation room.</p>
+                 </div>
+             ) : (
+                 <>
+                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Current Token Serving</p>
+                    <div className="text-6xl font-black text-slate-900 mb-2">
+                        {currentToken}
+                    </div>
+                    <div className="flex justify-center gap-2 mb-6">
+                        <Badge variant="outline" className="border-teal-200 text-teal-700 bg-teal-50">
+                            Your Token: #{myToken}
+                        </Badge>
+                    </div>
 
-        {/* Current Token */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">Currently Serving</p>
-                <p className="text-4xl font-bold text-slate-900">#{queueData.currentToken}</p>
+                    {/* Progress Bar */}
+                    <div className="max-w-xs mx-auto space-y-2 text-left">
+                        <div className="flex justify-between text-xs text-slate-500 font-medium">
+                            <span>Progress</span>
+                            <span>{tokensAhead} people ahead</span>
+                        </div>
+                        <Progress value={(currentToken / myToken) * 100} className="h-2" />
+                        <p className="text-center text-xs text-slate-400 mt-2">
+                            Estimated Wait: <span className="text-slate-900 font-bold">{waitTime} mins</span>
+                        </p>
+                    </div>
+                 </>
+             )}
+        </CardContent>
+      </Card>
+
+      {/* Doctor Info */}
+      <Card className="mb-4">
+          <CardContent className="p-4 flex items-center gap-4">
+              <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center">
+                  <Stethoscope className="w-6 h-6 text-slate-600" />
               </div>
-              <Users className="w-12 h-12 text-slate-300" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Wait Info */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500 mb-1">Estimated Wait Time</p>
-                <p className="text-3xl font-bold text-slate-900">~{queueData.estimatedWaitMins} mins</p>
-                <p className="text-sm text-slate-600 mt-2">{queueData.tokensAhead} people ahead of you</p>
+                  <h3 className="font-bold text-slate-900">Dr. {appointment.doctorId?.firstName} {appointment.doctorId?.lastName}</h3>
+                  <p className="text-sm text-slate-500">{appointment.hospitalId?.name}</p>
               </div>
-              <Clock className="w-12 h-12 text-slate-300" />
-            </div>
           </CardContent>
-        </Card>
+      </Card>
 
-        {/* Auto-refresh indicator */}
-        <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
-          <RefreshCw className="w-4 h-4 animate-spin" />
-          <span>Auto-updating every 10 seconds</span>
-        </div>
+      <div className="text-center">
+          <Button variant="outline" size="sm" onClick={() => fetchData()} className="text-slate-500">
+              <RefreshCw className="w-3 h-3 mr-2" /> Refresh Status
+          </Button>
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -25,6 +25,8 @@ import {
   Stethoscope,
   LogOut,
   User,
+  ChevronRight,
+  ShieldCheck
 } from 'lucide-react'
 
 import {
@@ -53,8 +55,16 @@ export default function DoctorNavbar() {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const { data: session } = useSession()
+  const [scrolled, setScrolled] = useState(false)
 
   const { unreadCount, dashboard } = useDoctor()
+
+  // Scroll effect for formal transparency handling
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 20)
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   const nav = useMemo(
     () => NAV.map((i) => ({ ...i, active: isActivePath(pathname, i.href) })),
@@ -66,27 +76,30 @@ export default function DoctorNavbar() {
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-xl">
-      <motion.div
-        initial={{ y: -18, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.25, ease: 'easeOut' }}
-        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
-      >
-        <div className="h-16 flex items-center justify-between gap-3">
-          {/* Brand */}
-          <Link href="/doctor" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-sm">
+    <header 
+      className={cn(
+        "sticky top-0 z-50 transition-all duration-300 border-b",
+        scrolled 
+          ? "bg-white/95 backdrop-blur-md border-slate-200 shadow-sm dark:bg-slate-950/95 dark:border-slate-800" 
+          : "bg-white border-transparent dark:bg-slate-950"
+      )}
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="h-16 flex items-center justify-between gap-4">
+          
+          {/* BRAND */}
+          <Link href="/doctor" className="flex items-center gap-2.5 group">
+            <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-200 dark:shadow-none group-hover:scale-105 transition-transform">
               <Stethoscope className="w-5 h-5 text-white" />
             </div>
-            <div className="hidden sm:block leading-tight">
-              <div className="text-sm font-bold text-foreground">Qlinic</div>
-              <div className="text-xs text-muted-foreground">Doctor Portal</div>
+            <div className="leading-none">
+              <span className="block text-lg font-bold text-slate-900 dark:text-white tracking-tight">Qlinic</span>
+              <span className="text-[10px] font-semibold text-blue-600 uppercase tracking-wider">Doctor Portal</span>
             </div>
           </Link>
 
-          {/* Desktop nav */}
-          <nav className="hidden lg:flex items-center gap-1">
+          {/* DESKTOP NAV */}
+          <nav className="hidden lg:flex items-center gap-1 bg-slate-50 dark:bg-slate-900 p-1 rounded-full border border-slate-100 dark:border-slate-800">
             {nav.map((item) => {
               const Icon = item.icon
               return (
@@ -94,153 +107,180 @@ export default function DoctorNavbar() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    'flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors',
+                    'flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200',
                     item.active
-                      ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
+                      ? 'bg-white text-blue-700 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:text-blue-400 dark:ring-slate-700'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50 dark:text-slate-400 dark:hover:text-slate-200'
                   )}
                 >
-                  <Icon className="w-4 h-4" />
+                  <Icon className={cn("w-4 h-4", item.active ? "stroke-[2.5px]" : "stroke-2")} />
                   <span>{item.label}</span>
-
-                  {/* Optional badges */}
-                  {item.href === '/doctor/appointments' &&
-                    typeof dashboard?.todayAppointments === 'number' &&
-                    dashboard.todayAppointments > 0 && (
-                      <Badge className="ml-1 h-5 px-2 text-[10px] bg-emerald-600">
+                  
+                  {/* Badge Logic */}
+                  {item.href === '/doctor/appointments' && dashboard?.todayAppointments > 0 && (
+                     <span className="ml-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white">
                         {dashboard.todayAppointments > 9 ? '9+' : dashboard.todayAppointments}
-                      </Badge>
-                    )}
+                     </span>
+                  )}
                 </Link>
               )
             })}
           </nav>
 
-          {/* Right actions */}
-          <div className="flex items-center gap-2">
+          {/* RIGHT ACTIONS */}
+          <div className="flex items-center gap-2 sm:gap-4">
+            
             {/* Notifications */}
-            <Button variant="ghost" size="icon" className="relative">
+            <Button variant="ghost" size="icon" className="relative text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20">
               <Bell className="w-5 h-5" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1">
-                  <Badge className="h-5 min-w-5 px-1.5 p-0 flex items-center justify-center text-[10px] bg-emerald-600 border border-background">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </Badge>
+                <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500 border-2 border-white dark:border-slate-950"></span>
                 </span>
               )}
             </Button>
 
-            <div className="hidden md:block">
-              <ModeToggle />
-            </div>
+            <div className="hidden sm:block w-px h-6 bg-slate-200 dark:bg-slate-800" />
 
-            {/* ✅ Auth.js User Menu */}
+            {/* Profile Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  {session?.user?.image ? (
-                    <Image
-                      src={session.user.image}
-                      alt={session.user.name || 'User'}
-                      width={32}
-                      height={32}
-                      className="rounded-full"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center">
-                      <User className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">
-                      {session?.user?.name || 'Doctor'}
-                    </p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {session?.user?.email}
-                    </p>
+                <button className="flex items-center gap-3 pl-1 pr-2 py-1 rounded-full hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors border border-transparent hover:border-slate-100 dark:hover:border-slate-800 outline-none">
+                  <div className="relative">
+                    {session?.user?.image ? (
+                        <Image
+                        src={session.user.image}
+                        alt="Profile"
+                        width={36}
+                        height={36}
+                        className="rounded-full border-2 border-white shadow-sm object-cover"
+                        />
+                    ) : (
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white border-2 border-white shadow-sm">
+                        <User className="w-4 h-4" />
+                        </div>
+                    )}
+                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
                   </div>
-                </DropdownMenuLabel>
+                  
+                  <div className="hidden md:block text-left mr-2">
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Dr. {session?.user?.lastName || 'Doctor'}</p>
+                    <p className="text-[10px] text-slate-400 font-medium">Cardiology</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400 hidden md:block" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60 p-2">
+                <div className="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-900 rounded-lg mb-2">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg">
+                        {session?.user?.firstName?.[0] || 'D'}
+                    </div>
+                    <div className="overflow-hidden">
+                        <p className="text-sm font-bold truncate">Dr. {session?.user?.name}</p>
+                        <p className="text-xs text-slate-500 truncate">{session?.user?.email}</p>
+                    </div>
+                </div>
+                
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/doctor/settings" className="cursor-pointer">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
+                
+                <DropdownMenuItem asChild className="cursor-pointer py-2.5">
+                  <Link href="/doctor/profile">
+                    <User className="mr-2 h-4 w-4 text-slate-500" /> My Profile
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer py-2.5">
+                  <Link href="/doctor/settings">
+                    <Settings className="mr-2 h-4 w-4 text-slate-500" /> Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer py-2.5">
+                   <div className="flex items-center justify-between w-full">
+                      <span className="flex items-center"><ShieldCheck className="mr-2 h-4 w-4 text-slate-500" /> Theme</span>
+                      <ModeToggle />
+                   </div>
+                </DropdownMenuItem>
+
                 <DropdownMenuSeparator />
+                
                 <DropdownMenuItem
                   onClick={handleSignOut}
-                  className="cursor-pointer text-red-600 focus:text-red-600"
+                  className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50 py-2.5"
                 >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Sign out
+                  <LogOut className="mr-2 h-4 w-4" /> Sign out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Mobile menu toggle */}
+            {/* Mobile Toggle */}
             <button
-              className="lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-xl hover:bg-accent"
-              onClick={() => setMobileOpen((v) => !v)}
-              aria-label="Toggle menu"
+              className="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              onClick={() => setMobileOpen(true)}
             >
-              {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              <Menu className="w-6 h-6" />
             </button>
           </div>
         </div>
-      </motion.div>
+      </div>
 
-      {/* Mobile menu */}
+      {/* MOBILE MENU OVERLAY */}
       <AnimatePresence>
         {mobileOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="lg:hidden border-t border-border bg-background/95 backdrop-blur-xl overflow-hidden"
-          >
-            <div className="px-4 py-3 space-y-1">
-              {nav.map((item) => {
-                const Icon = item.icon
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileOpen(false)}
-                    className={cn(
-                      'flex items-center justify-between rounded-xl px-4 py-3 font-semibold',
-                      item.active
-                        ? 'bg-accent text-foreground'
-                        : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
-                    )}
-                  >
-                    <span className="flex items-center gap-3">
-                      <Icon className="w-5 h-5" />
-                      {item.label}
-                    </span>
-                  </Link>
-                )
-              })}
-
-              <div className="flex items-center justify-between rounded-xl px-4 py-3 border-t border-border mt-2">
-                <span className="text-sm font-semibold">Theme</span>
-                <ModeToggle />
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileOpen(false)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 lg:hidden"
+            />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed top-0 right-0 h-full w-[80%] max-w-[300px] bg-white dark:bg-slate-950 shadow-2xl z-50 lg:hidden flex flex-col"
+            >
+              {/* Mobile Header */}
+              <div className="p-5 border-b flex items-center justify-between">
+                 <span className="font-bold text-lg text-slate-900 dark:text-white">Menu</span>
+                 <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)}>
+                    <X className="w-5 h-5" />
+                 </Button>
               </div>
 
-              {/* Mobile sign out */}
-              <button
-                onClick={handleSignOut}
-                className="w-full flex items-center gap-3 rounded-xl px-4 py-3 font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-              >
-                <LogOut className="w-5 h-5" />
-                Sign Out
-              </button>
-            </div>
-          </motion.div>
+              {/* Mobile Links */}
+              <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+                 {nav.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileOpen(false)}
+                      className={cn(
+                        'flex items-center gap-4 px-4 py-3.5 rounded-xl font-medium transition-all',
+                        item.active 
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' 
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900'
+                      )}
+                    >
+                       <item.icon className={cn("w-5 h-5", item.active ? "text-blue-600" : "text-slate-400")} />
+                       {item.label}
+                    </Link>
+                 ))}
+              </div>
+
+              {/* Mobile Footer */}
+              <div className="p-4 border-t bg-slate-50 dark:bg-slate-900">
+                 <Button 
+                   variant="destructive" 
+                   className="w-full justify-start gap-3 pl-4"
+                   onClick={handleSignOut}
+                 >
+                    <LogOut className="w-4 h-4" /> Sign Out
+                 </Button>
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
     </header>

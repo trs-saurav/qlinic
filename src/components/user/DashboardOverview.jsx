@@ -1,295 +1,205 @@
-// src/components/patient/DashboardOverview.jsx
 'use client'
 import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 import { 
-  Calendar, 
-  Clock, 
-  Users, 
-  FileText,
-  Activity,
-  Heart,
-  TrendingUp,
-  AlertCircle,
-  ChevronRight,
-  Hospital,
-  Stethoscope
+  Calendar, Users, FileText, ChevronRight, Stethoscope, 
+  MapPin, Clock, Search, Activity, Pause, AlertCircle, Coffee
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ref, onValue, off } from 'firebase/database'
+import { realtimeDb } from '@/config/firebase'
 
 export default function DashboardOverview() {
-  const [stats, setStats] = useState({
-    upcomingAppointments: 0,
-    familyMembers: 0,
-    medicalRecords: 0,
-    lastVisit: null
-  })
-  const [recentAppointments, setRecentAppointments] = useState([])
+  const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
+  const [data, setData] = useState({ upcoming: [], activeAppointment: null })
+  
+  const [queueState, setQueueState] = useState({
+    currentToken: 0, isLive: false, status: 'OFFLINE'
+  })
+
+  const today = new Date()
+  const formattedDate = today.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })
+
+  useEffect(() => { fetchDashboardData() }, [])
 
   useEffect(() => {
-    fetchDashboardData()
-  }, [])
+    if (!data.activeAppointment) return
+    const { doctorId, hospitalId } = data.activeAppointment
+    const dId = doctorId?._id || doctorId
+    const hId = hospitalId?._id || hospitalId
+    if (!dId || !hId) return
+
+    const queueRef = ref(realtimeDb, `queues/${hId}/${dId}`)
+    const unsubscribe = onValue(queueRef, (snapshot) => {
+        const val = snapshot.val()
+        if (val) setQueueState({
+            currentToken: val.currentToken || 0,
+            isLive: val.isLive || false,
+            status: val.status || 'OFFLINE'
+        })
+    })
+    return () => off(queueRef)
+  }, [data.activeAppointment])
 
   const fetchDashboardData = async () => {
     try {
-      const [appointmentsRes, familyRes] = await Promise.all([
-        fetch('/api/patient/appointments'),
-        fetch('/api/patient/family')
-      ])
+      const appointmentsRes = await fetch('/api/patient/appointments')
+      const aptData = await appointmentsRes.json()
+      if (aptData.appointments) {
+        const now = new Date()
+        const upcoming = aptData.appointments.filter(a => 
+          new Date(a.scheduledTime) > now && !['COMPLETED', 'CANCELLED'].includes(a.status)
+        ).sort((a, b) => new Date(a.scheduledTime) - new Date(b.scheduledTime))
 
-      const appointmentsData = await appointmentsRes.json()
-      const familyData = await familyRes.json()
-
-      if (appointmentsData.appointments) {
-        const upcoming = appointmentsData.appointments.filter(a => 
-          new Date(a.scheduledTime) > new Date() && a.status !== 'COMPLETED'
-        )
-        setRecentAppointments(appointmentsData.appointments.slice(0, 3))
-        setStats(prev => ({ ...prev, upcomingAppointments: upcoming.length }))
+        const active = aptData.appointments.find(a => {
+            const aptDate = new Date(a.scheduledTime).toDateString()
+            return aptDate === now.toDateString() && ['BOOKED', 'CHECKED_IN', 'IN_CONSULTATION', 'SKIPPED'].includes(a.status)
+        })
+        setData({ upcoming, activeAppointment: active })
       }
+    } catch (error) { console.error('Error:', error) } 
+    finally { setIsLoading(false) }
+  }
 
-      if (familyData.familyMembers) {
-        setStats(prev => ({ ...prev, familyMembers: familyData.familyMembers.length }))
+  const handleNavigate = (path) => router.push(`/user/${path}`) 
+
+  const getStatusDisplay = (status) => {
+      switch(status) {
+          case 'OPD': return { label: 'Live', color: 'bg-green-500', icon: Activity, pulse: true };
+          case 'REST': return { label: 'Break', color: 'bg-orange-500', icon: Coffee, pulse: false };
+          case 'MEETING': return { label: 'Busy', color: 'bg-blue-500', icon: Pause, pulse: false };
+          case 'EMERGENCY': return { label: 'Urgent', color: 'bg-red-500', icon: AlertCircle, pulse: true };
+          default: return { label: 'Offline', color: 'bg-slate-400', icon:  Pause, pulse: false };
       }
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error)
-    } finally {
-      setIsLoading(false)
-    }
   }
 
-  const quickActions = [
-    { 
-      icon: Hospital, 
-      label: 'Find Hospital', 
-      color: 'bg-blue-500', 
-      action: 'hospitals',
-      description: 'Search nearby hospitals'
-    },
-    { 
-      icon: Calendar, 
-      label: 'Book Appointment', 
-      color: 'bg-green-500', 
-      action: 'hospitals',
-      description: 'Schedule a consultation'
-    },
-    { 
-      icon: Users, 
-      label: 'Add Family Member', 
-      color: 'bg-purple-500', 
-      action: 'family',
-      description: 'Manage family health'
-    },
-    { 
-      icon: FileText, 
-      label: 'View Records', 
-      color: 'bg-orange-500', 
-      action: 'records',
-      description: 'Access medical history'
-    }
-  ]
+  if (isLoading) return <div className="h-[40vh] flex items-center justify-center"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div></div>
 
-  const handleQuickAction = (action) => {
-    window.dispatchEvent(new CustomEvent('patientTabChange', { detail: action }))
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    )
-  }
+  const myToken = data.activeAppointment?.tokenNumber || 0
+  const currentToken = queueState.currentToken || 0
+  const tokensAhead = Math.max(0, myToken - currentToken - 1)
+  const estWaitTime = tokensAhead * 10 
+  const progressVal = myToken > 0 ? Math.min(100, (currentToken / myToken) * 100) : 0
+  const statusMeta = getStatusDisplay(queueState.status)
 
   return (
-    <div className="space-y-6">
-      {/* Welcome Banner */}
-      <Card className="bg-gradient-to-r from-primary to-blue-600 text-white border-0">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold mb-2">Welcome Back! 👋</h2>
-              <p className="text-blue-100">Manage your health and family appointments in one place</p>
-            </div>
-            <Activity className="w-16 h-16 opacity-20" />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Upcoming</p>
-                <p className="text-3xl font-bold text-slate-900">{stats.upcomingAppointments}</p>
-                <p className="text-xs text-slate-400 mt-1">Appointments</p>
-              </div>
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <Calendar className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Family</p>
-                <p className="text-3xl font-bold text-slate-900">{stats.familyMembers}</p>
-                <p className="text-xs text-slate-400 mt-1">Members</p>
-              </div>
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <Users className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Records</p>
-                <p className="text-3xl font-bold text-slate-900">{stats.medicalRecords}</p>
-                <p className="text-xs text-slate-400 mt-1">Documents</p>
-              </div>
-              <div className="p-3 bg-green-100 rounded-lg">
-                <FileText className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Health Score</p>
-                <p className="text-3xl font-bold text-slate-900">85</p>
-                <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                  <TrendingUp className="w-3 h-3" />
-                  Good
-                </p>
-              </div>
-              <div className="p-3 bg-red-100 rounded-lg">
-                <Heart className="w-6 h-6 text-red-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+    // FIX: Using w-full and a flexible max-width so it adapts to any screen
+    <div className="space-y-6 pb-20 p-4 font-sans text-slate-900 w-full max-w-3xl mx-auto">
+      
+      {/* 1. Header (No Notification Bell) */}
+      <div className="flex flex-col">
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-sm text-slate-500 font-medium uppercase tracking-wider">{formattedDate}</p>
       </div>
 
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {quickActions.map((action, index) => {
-              const Icon = action.icon
-              return (
-                <button
-                  key={index}
-                  onClick={() => handleQuickAction(action.action)}
-                  className="flex flex-col items-center p-6 rounded-xl border-2 border-slate-100 hover:border-primary hover:shadow-lg transition-all group"
-                >
-                  <div className={`${action.color} p-4 rounded-xl mb-3 group-hover:scale-110 transition-transform`}>
-                    <Icon className="w-6 h-6 text-white" />
-                  </div>
-                  <h3 className="font-semibold text-slate-900 mb-1">{action.label}</h3>
-                  <p className="text-xs text-slate-500 text-center">{action.description}</p>
-                </button>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Recent Appointments */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Recent Appointments</CardTitle>
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={() => handleQuickAction('appointments')}
-          >
-            View All
-            <ChevronRight className="w-4 h-4 ml-1" />
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {recentAppointments.length > 0 ? (
-            <div className="space-y-3">
-              {recentAppointments.map((appointment) => (
-                <div
-                  key={appointment._id}
-                  className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-white rounded-lg">
-                      <Stethoscope className="w-5 h-5 text-primary" />
+      {/* 2. Live Widget */}
+      {data.activeAppointment ? (
+        <Card className="border-0 shadow-lg bg-blue-600 text-white overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full blur-2xl -mt-12 -mr-12"></div>
+            
+            <CardContent className="p-5 relative z-10">
+                <div className="flex justify-between items-start mb-5">
+                    <div className="flex-1 min-w-0 mr-4">
+                        <div className="flex items-center gap-2 mb-1.5">
+                            <span className={`h-2.5 w-2.5 rounded-full ${statusMeta.color} ${statusMeta.pulse ? 'animate-pulse' : ''}`}></span>
+                            <span className="text-xs font-bold uppercase opacity-90">{statusMeta.label}</span>
+                        </div>
+                        <h3 className="font-bold text-lg md:text-xl truncate">Dr.{data.activeAppointment.doctorId?.firstName} {data.activeAppointment.doctorId?.lastName}</h3>
+                        <p className="text-xs md:text-sm text-blue-100 truncate opacity-80">{data.activeAppointment.hospitalId?.name}</p>
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-slate-900">
-                        Dr. {appointment.doctorId?.firstName} {appointment.doctorId?.lastName}
-                      </h4>
-                      <p className="text-sm text-slate-500">
-                        {appointment.doctorId?.doctorProfile?.specialization}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {new Date(appointment.scheduledTime).toLocaleString()}
-                      </p>
+                    <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 text-center min-w-[70px]">
+                        <p className="text-[10px] uppercase font-bold opacity-70">Token</p>
+                        <p className="text-2xl md:text-3xl font-bold leading-none">#{myToken}</p>
                     </div>
-                  </div>
-                  <Badge 
-                    variant={appointment.status === 'COMPLETED' ? 'success' : 'default'}
-                    className="capitalize"
-                  >
-                    {appointment.status.toLowerCase()}
-                  </Badge>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 text-slate-400">
-              <Calendar className="w-12 h-12 mx-auto mb-2 opacity-30" />
-              <p>No appointments yet</p>
-              <Button 
-                variant="link" 
-                className="mt-2"
-                onClick={() => handleQuickAction('hospitals')}
-              >
-                Book your first appointment
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Health Tips */}
-      <Card className="bg-blue-50 border-blue-200">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <AlertCircle className="w-5 h-5 text-blue-600" />
-            </div>
+                {/* Metrics Grid - Flex on mobile, wider on desktop */}
+                <div className="bg-black/20 rounded-xl p-3 flex items-center justify-between mb-4 text-sm gap-2">
+                    <div className="text-center flex-1 border-r border-white/10 last:border-0">
+                        <p className="text-[10px] text-blue-200 uppercase mb-0.5">Serving</p>
+                        <p className="font-bold text-lg">#{currentToken || '--'}</p>
+                    </div>
+                    <div className="text-center flex-1 border-r border-white/10 last:border-0">
+                        <p className="text-[10px] text-blue-200 uppercase mb-0.5">Ahead</p>
+                        <p className="font-bold text-lg">{tokensAhead}</p>
+                    </div>
+                    <div className="text-center flex-1 last:border-0">
+                        <p className="text-[10px] text-blue-200 uppercase mb-0.5">Wait</p>
+                        <p className="font-bold text-lg">{estWaitTime}m</p>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                     <Progress value={progressVal} className="h-2 flex-1 bg-black/20" indicatorClassName="bg-white" />
+                     <span className="text-[10px] font-bold w-8 text-right">{Math.round(progressVal)}%</span>
+                </div>
+            </CardContent>
+        </Card>
+      ) : (
+        <div className="bg-slate-900 text-white rounded-2xl p-6 flex items-center justify-between shadow-lg">
             <div>
-              <h4 className="font-semibold text-blue-900 mb-1">Health Tip of the Day</h4>
-              <p className="text-sm text-blue-700">
-                Stay hydrated! Drink at least 8 glasses of water daily to maintain optimal health and energy levels.
-              </p>
+                <p className="text-lg font-bold">Find a Specialist</p>
+                <p className="text-sm text-slate-400 mb-3">Book appointments easily.</p>
+                <Button size="sm" variant="secondary" className="px-4" onClick={() => handleNavigate('search')}>Search Doctors</Button>
             </div>
+            <Stethoscope className="w-12 h-12 text-slate-700 opacity-50" />
+        </div>
+      )}
+
+      {/* 3. Icon Grid - Responsive Columns (4 cols mobile, 4 cols desktop but bigger) */}
+      <div className="grid grid-cols-4 gap-3 md:gap-4">
+        {[
+            { label: 'Book', icon: Calendar, action: 'search', bg: 'bg-blue-50', text: 'text-blue-600' },
+            { label: 'Family', icon: Users, action: 'settings/family', bg: 'bg-indigo-50', text: 'text-indigo-600' },
+            { label: 'Records', icon: FileText, action: 'settings/records', bg: 'bg-violet-50', text: 'text-violet-600' },
+            { label: 'Search', icon: Search, action: 'search', bg: 'bg-slate-100', text: 'text-slate-600' },
+        ].map((item, idx) => (
+            <button key={idx} onClick={() => handleNavigate(item.action)} className="flex flex-col items-center p-3 rounded-xl hover:bg-slate-50 transition-colors w-full">
+                <div className={`h-12 w-12 md:h-14 md:w-14 rounded-2xl ${item.bg} ${item.text} flex items-center justify-center mb-2 shadow-sm`}>
+                    <item.icon className="w-6 h-6 md:w-7 md:h-7" />
+                </div>
+                <span className="text-xs md:text-sm font-semibold text-slate-600">{item.label}</span>
+            </button>
+        ))}
+      </div>
+
+      {/* 4. Upcoming List */}
+      <section>
+          <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-base md:text-lg text-slate-900">Upcoming Appointments</h3>
+              <Button variant="link" className="text-blue-600 h-auto p-0 text-sm font-semibold" onClick={() => handleNavigate('appointments')}>
+                  View All
+              </Button>
           </div>
-        </CardContent>
-      </Card>
+          
+          <div className="space-y-3">
+              {data.upcoming.length > 0 ? data.upcoming.slice(0, 3).map((apt) => (
+                  <div key={apt._id} className="bg-white border border-slate-100 rounded-xl p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleNavigate(`appointments`)}>
+                      <div className="bg-slate-50 h-12 w-12 rounded-xl flex flex-col items-center justify-center border border-slate-100 flex-shrink-0 text-slate-700">
+                          <span className="text-[10px] font-bold uppercase opacity-60">{new Date(apt.scheduledTime).toLocaleDateString('en-US', {month: 'short'})}</span>
+                          <span className="text-lg font-bold leading-none">{new Date(apt.scheduledTime).getDate()}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                          <h4 className="text-sm md:text-base font-bold text-slate-800 truncate">Dr. {apt.doctorId?.firstName} {apt.doctorId?.lastName}</h4>
+                          <div className="flex items-center gap-2 text-xs md:text-sm text-slate-500 mt-0.5">
+                             <span className="truncate max-w-[150px]">{apt.hospitalId?.name}</span>
+                             <span className="w-1 h-1 rounded-full bg-slate-300 flex-shrink-0"></span>
+                             <span>{new Date(apt.scheduledTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                          </div>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-slate-300" />
+                  </div>
+              )) : (
+                  <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                      <p className="text-sm text-slate-400">No upcoming appointments</p>
+                  </div>
+              )}
+          </div>
+      </section>
     </div>
   )
 }

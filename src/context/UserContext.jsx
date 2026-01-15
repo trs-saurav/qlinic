@@ -162,6 +162,7 @@ export const UserProvider = ({ children }) => {
   // --- APPOINTMENTS ---
 
   const fetchAppointmentsWithFilter = async (familyMemberId = null) => {
+    console.log('Fetching appointments for familyMemberId:', familyMemberId);
     try {
       let url = '/api/patient/appointments';
       if (familyMemberId && familyMemberId !== 'self') {

@@ -1,436 +1,347 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect, useMemo } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { 
-  Users, Calendar, Hospital, Clock, 
-  CheckCircle, AlertCircle, TrendingUp, 
-  ArrowRight, Activity, Stethoscope,
-  MapPin, Bell, ChevronRight, Plus,
-  CalendarDays, Sparkles, BarChart3
+  Users, Calendar, Clock, 
+  MapPin, ChevronRight, Activity, 
+  Play, Pause, Coffee, AlertCircle, CheckCircle,
+  Stethoscope, User, LogOut, Briefcase, ChevronDown
 } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import Link from 'next/link'
-import toast from 'react-hot-toast'
 import { useDoctor } from '@/context/DoctorContextProvider'
+import { useRealtimeQueue } from '@/hooks/useRealtimeQueue'
 
 export default function DoctorDashboard() {
   const {
     doctor,
     doctorLoading,
-    dashboard,
-    dashboardLoading,
     appointments,
-    appointmentsLoading,
-    affiliations,
-    affiliationsLoading,
-    fetchDoctorProfile,
     fetchDoctorDashboard,
-    fetchAppointments
+    fetchAppointments,
+    setDoctorStatus, 
+    performQueueAction 
   } = useDoctor()
+
+  // STATE: Active Hospital Selection
+  const [selectedHospitalId, setSelectedHospitalId] = useState(null)
+
+  // 1. Smart Hospital Selection
+  useEffect(() => {
+    if (!selectedHospitalId && appointments?.length > 0) {
+      const todayHospital = appointments[0].hospitalId?._id || appointments[0].hospitalId;
+      if (todayHospital) setSelectedHospitalId(todayHospital);
+    } else if (!selectedHospitalId && doctor?.affiliations?.length > 0) {
+       const primary = doctor.affiliations.find(a => a.status === 'APPROVED')
+       if (primary) setSelectedHospitalId(primary.hospitalId?._id || primary.hospitalId)
+    }
+  }, [appointments, doctor, selectedHospitalId])
+
+  // Realtime Hook
+  const { currentToken, isLive, status: queueStatus } = useRealtimeQueue(doctor?._id, selectedHospitalId)
+
+  // Auto-Initialize Queue
+  useEffect(() => {
+    const initQueue = async () => {
+      if (doctor?._id && selectedHospitalId && queueStatus === 'NOT_STARTED') {
+        console.log('⚡ Auto-initializing Queue...');
+        await setDoctorStatus('OPD', 'Auto-Start', selectedHospitalId);
+      }
+    }
+    const timer = setTimeout(initQueue, 1500);
+    return () => clearTimeout(timer);
+  }, [doctor?._id, selectedHospitalId, queueStatus, setDoctorStatus]);
 
   useEffect(() => {
     if (doctor?._id) {
       fetchDoctorDashboard()
       fetchAppointments('today')
     }
-  }, [doctor?._id])
+  }, [doctor?._id, fetchDoctorDashboard, fetchAppointments])
 
-  const formatTime = (date) => {
-    return new Date(date).toLocaleTimeString('en-IN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    })
-  }
+  if (doctorLoading) return <DashboardSkeleton />
 
-  const getStatusConfig = (status) => {
-    const configs = {
-      BOOKED: { 
-        color: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800',
-        label: 'Booked'
-      },
-      CHECKED_IN: { 
-        color: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800',
-        label: 'Checked In'
-      },
-      IN_CONSULTATION: { 
-        color: 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800',
-        label: 'In Progress'
-      },
-      COMPLETED: { 
-        color: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
-        label: 'Completed'
-      },
-      CANCELLED: { 
-        color: 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800',
-        label: 'Cancelled'
+  // Filter appointments
+  const hospitalAppointments = (appointments || []).filter(apt => {
+     const hId = apt.hospitalId?._id || apt.hospitalId;
+     return hId === selectedHospitalId;
+  })
+  
+  const ongoingPatient = hospitalAppointments.find(apt => apt.status === 'IN_CONSULTATION')
+  const nextPatient = hospitalAppointments
+    .filter(apt => apt.status === 'CHECKED_IN')
+    .sort((a, b) => (a.tokenNumber || 0) - (b.tokenNumber || 0))[0]
+
+  // --- HELPER TO FIX MISSING NAME ---
+  const getPatientName = (apt) => {
+      if (!apt.patientId) return 'Unknown Patient';
+      if (apt.patientId.firstName) {
+          return `${apt.patientId.firstName} ${apt.patientId.lastName || ''}`.trim();
       }
+      if (typeof apt.patientId === 'string') return `Patient #${apt.patientId.slice(-4)}`;
+      return 'Unknown Patient';
+  }
+
+  // Handlers
+  const handleStatusChange = async (newStatus) => {
+    if (!selectedHospitalId) return;
+    let message = ''
+    if (newStatus === 'REST') message = 'Lunch Break'
+    if (newStatus === 'MEETING') message = 'In Meeting'
+    if (newStatus === 'EMERGENCY') message = 'Emergency Case'
+    await setDoctorStatus(newStatus, message, selectedHospitalId)
+  }
+
+  const handleEndDay = async () => {
+    if (!selectedHospitalId) return;
+    if (confirm('Are you sure you want to end today\'s consultation? This will clear the queue.')) {
+       await setDoctorStatus('REST', 'Consultation Ended', selectedHospitalId)
     }
-    return configs[status] || configs.BOOKED
   }
 
-  if (doctorLoading) {
-    return <DashboardSkeleton />
+  const handleNextPatient = async () => {
+     if (nextPatient) await performQueueAction('START', nextPatient._id)
   }
 
-  const isProfileComplete = doctor?.isProfileComplete
-  const todayAppointments = appointments || []
-  const approvedAffiliationsCount = (affiliations || []).filter(a => a.status === 'APPROVED').length
-  const pendingAffiliationsCount = (affiliations || []).filter(a => a.status === 'PENDING').length
+  const handleCompleteVisit = async () => {
+     if (ongoingPatient) await performQueueAction('COMPLETE', ongoingPatient._id)
+  }
+
+  const currentHospitalName = appointments?.find(a => (a.hospitalId?._id || a.hospitalId) === selectedHospitalId)?.hospitalId?.name 
+                              || doctor?.affiliations?.find(a => (a.hospitalId?._id || a.hospitalId) === selectedHospitalId)?.hospitalId?.name 
+                              || 'Select Clinic';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-emerald-50/20 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20 font-sans">
+      
+      {/* HEADER */}
+      {/* FIX: Removed 'overflow-hidden' from parent so the negative-bottom card isn't clipped */}
+      <div className="bg-blue-600 pt-6 pb-20 px-4 rounded-b-[2.5rem] shadow-xl relative">
         
-        {/* Profile Incomplete Alert - Mobile Optimized */}
-        {!isProfileComplete && (
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 p-[2px]">
-            <div className="bg-white dark:bg-slate-900 rounded-[14px] p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                <div className="flex items-start gap-3 flex-1">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                    <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base sm:text-lg mb-1">
-                      Complete Your Profile
-                    </h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                      Set up your profile to start accepting appointments
-                    </p>
-                  </div>
-                </div>
-                <Link href="/doctor/profile" className="w-full sm:w-auto">
-                  <Button className="w-full sm:w-auto bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white border-0 shadow-lg shadow-orange-500/25 font-semibold">
-                    Complete Now
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Welcome Header - Enhanced Mobile Design */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl shadow-emerald-500/20">
-          {/* Decorative Elements */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-32 translate-x-32 blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-teal-400/10 rounded-full translate-y-24 -translate-x-24 blur-2xl" />
-          
-          <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                </div>
-                <span className="text-emerald-100 text-sm font-medium">
-                  {new Date().toLocaleDateString('en-IN', { weekday: 'long', month: 'short', day: 'numeric' })}
-                </span>
-              </div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-2">
-                Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}, Dr. {doctor?.firstName || 'Doctor'}!
-              </h1>
-              <p className="text-emerald-50 text-base sm:text-lg">
-                {dashboard.todayAppointments > 0 
-                  ? `You have ${dashboard.todayAppointments} appointment${dashboard.todayAppointments !== 1 ? 's' : ''} scheduled for today`
-                  : 'No appointments today - enjoy your day!'}
-              </p>
-            </div>
-            <div className="hidden sm:block">
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center">
-                <Stethoscope className="w-10 h-10 sm:w-12 sm:h-12 text-white/80" />
-              </div>
-            </div>
-          </div>
+        {/* Background Decorations - Wrapped in their own overflow-hidden container */}
+        <div className="absolute inset-0 overflow-hidden rounded-b-[2.5rem] pointer-events-none">
+           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-32 translate-x-32 blur-3xl" />
         </div>
-
-        {/* Stats Grid - Mobile First, Card-Based */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <StatCard
-            label="Today"
-            value={dashboard.todayAppointments || 0}
-            icon={Calendar}
-            gradient="from-blue-500 to-blue-600"
-            iconBg="bg-blue-500/10"
-            iconColor="text-blue-600 dark:text-blue-400"
-            trend={dashboard.todayAppointments > 0 ? 'Scheduled' : 'Free day'}
-          />
-          <StatCard
-            label="Patients"
-            value={dashboard.upcomingAppointments || 0}
-            icon={Users}
-            gradient="from-emerald-500 to-emerald-600"
-            iconBg="bg-emerald-500/10"
-            iconColor="text-emerald-600 dark:text-emerald-400"
-            trend="All time"
-          />
-          <StatCard
-            label="Hospitals"
-            value={approvedAffiliationsCount || dashboard.hospitalsCount || 0}
-            icon={Hospital}
-            gradient="from-purple-500 to-purple-600"
-            iconBg="bg-purple-500/10"
-            iconColor="text-purple-600 dark:text-purple-400"
-            trend="Active"
-          />
-          <StatCard
-            label="Pending"
-            value={pendingAffiliationsCount || dashboard.pendingHospitalInvites || 0}
-            icon={Bell}
-            gradient="from-orange-500 to-red-500"
-            iconBg="bg-orange-500/10"
-            iconColor="text-orange-600 dark:text-orange-400"
-            trend={dashboard.pendingHospitalInvites > 0 ? 'Action needed' : 'All clear'}
-            highlight={(pendingAffiliationsCount || dashboard.pendingHospitalInvites) > 0}
-          />
-        </div>
-
-        {/* Quick Actions - Enhanced Mobile Grid */}
-        <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">
-              Quick Actions
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <QuickActionButton
-              href="/doctor/appointments"
-              icon={Calendar}
-              label="Appointments"
-              gradient="from-blue-500 to-blue-600"
-            />
-            <QuickActionButton
-              href="/doctor/affiliations"
-              icon={Hospital}
-              label="Hospitals"
-              gradient="from-purple-500 to-purple-600"
-              badge={dashboard.pendingHospitalInvites}
-            />
-            <QuickActionButton
-              href="/doctor/schedule"
-              icon={Clock}
-              label="Schedule"
-              gradient="from-emerald-500 to-emerald-600"
-            />
-            <QuickActionButton
-              href="/doctor/profile"
-              icon={Stethoscope}
-              label="Profile"
-              gradient="from-orange-500 to-orange-600"
-            />
-          </CardContent>
-        </Card>
-
-        {/* Today's Schedule - Mobile Optimized List */}
-        <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <div>
-              <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 mb-1">
-                Today's Schedule
-              </CardTitle>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {todayAppointments.length} appointment{todayAppointments.length !== 1 ? 's' : ''}
-              </p>
-            </div>
-            <Link href="/doctor/appointments">
-              <Button variant="ghost" size="sm" className="font-semibold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950">
-                View All
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {appointmentsLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-20 w-full" />
+        
+        {/* Top Bar */}
+        <div className="flex items-center justify-between mb-8 relative z-10">
+           <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="bg-white/10 hover:bg-white/20 text-white border border-white/10 rounded-xl pl-3 pr-4 h-12 max-w-[200px]">
+                   <div className="flex flex-col items-start mr-2 overflow-hidden text-left">
+                      <span className="text-[10px] text-blue-200 font-medium uppercase tracking-wider">Current Clinic</span>
+                      <span className="text-sm font-bold truncate w-full leading-tight">
+                        {currentHospitalName}
+                      </span>
+                   </div>
+                   <ChevronDown className="w-4 h-4 opacity-70 flex-shrink-0" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuLabel>Switch Clinic</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {doctor?.affiliations?.filter(a => a.status === 'APPROVED').map(aff => (
+                   <DropdownMenuItem 
+                      key={aff._id} 
+                      onClick={() => setSelectedHospitalId(aff.hospitalId?._id || aff.hospitalId)}
+                      className="flex items-center gap-2 cursor-pointer"
+                   >
+                      <MapPin className="w-4 h-4 text-slate-400" />
+                      <span className="flex-1 truncate">{aff.hospitalId?.name || 'Unknown Clinic'}</span>
+                      {selectedHospitalId === (aff.hospitalId?._id || aff.hospitalId) && <CheckCircle className="w-4 h-4 text-green-600" />}
+                   </DropdownMenuItem>
                 ))}
-              </div>
-            ) : todayAppointments.length > 0 ? (
-              <div className="space-y-3">
-                {todayAppointments.slice(0, 5).map((appointment) => {
-                  const patientName = `${appointment.patientId?.firstName || ''} ${appointment.patientId?.lastName || ''}`.trim()
-                  const patientInitials = appointment.patientId?.firstName && appointment.patientId?.lastName
-                    ? `${appointment.patientId.firstName[0]}${appointment.patientId.lastName[0]}`.toUpperCase()
-                    : 'P'
-                  const statusConfig = getStatusConfig(appointment.status)
+              </DropdownMenuContent>
+           </DropdownMenu>
 
-                  return (
-                    <div 
-                      key={appointment._id} 
-                      className="group relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-lg hover:border-emerald-200 dark:hover:border-emerald-800 transition-all duration-200"
-                    >
-                      {/* Gradient Border on Hover */}
-                      <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/5 to-emerald-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      
-                      <div className="relative p-4">
-                        <div className="flex items-start sm:items-center gap-3">
-                          {/* Avatar */}
-                          <Avatar className="w-12 h-12 sm:w-14 sm:h-14 border-2 border-emerald-200 dark:border-emerald-800 flex-shrink-0">
-                            <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-500 text-white font-bold text-lg">
-                              {patientInitials}
-                            </AvatarFallback>
-                          </Avatar>
+           <Link href="/doctor/profile" className="h-12 w-12 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-white font-bold text-lg hover:bg-white/20 transition">
+              {doctor?.firstName?.[0]}
+           </Link>
+        </div>
 
-                          {/* Info */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2 mb-2">
-                              <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base truncate">
-                                {patientName || 'Patient'}
-                              </h3>
-                              <Badge className={`${statusConfig.color} border flex-shrink-0 text-xs`}>
-                                {statusConfig.label}
-                              </Badge>
-                            </div>
-                            
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-500" />
-                                {formatTime(appointment.scheduledTime)}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Activity className="w-3 h-3 sm:w-4 sm:h-4 text-blue-500" />
-                                Token #{appointment.tokenNumber}
-                              </span>
-                              {appointment.hospitalId?.name && (
-                                <span className="flex items-center gap-1 truncate">
-                                  <MapPin className="w-3 h-3 sm:w-4 sm:h-4 text-purple-500 flex-shrink-0" />
-                                  <span className="truncate">{appointment.hospitalId.name}</span>
-                                </span>
-                              )}
-                            </div>
-                          </div>
+        {/* Welcome Text */}
+        <div className="text-white relative z-10 mb-4 px-1">
+           <h1 className="text-3xl font-bold">Hello, Dr. {doctor?.lastName}</h1>
+           <p className="text-blue-100 opacity-90 text-sm">
+             Ready? You have <span className="font-bold text-white">{hospitalAppointments.length}</span> appointments today.
+           </p>
+        </div>
 
-                          {/* Action Button - Desktop Only */}
-                          <div className="hidden sm:block">
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              className="border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950 hover:border-emerald-300 dark:hover:border-emerald-700"
-                              asChild
-                            >
-                              <Link href="/doctor/appointments">
-                                View
-                              </Link>
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <EmptyState
-                icon={CalendarDays}
-                title="No appointments today"
-                description="Enjoy your free time! Your next appointments will appear here."
-              />
-            )}
-          </CardContent>
-        </Card>
-
-      </div>
-    </div>
-  )
-}
-
-// Modern Stat Card Component
-function StatCard({ label, value, icon: Icon, gradient, iconBg, iconColor, trend, highlight }) {
-  return (
-    <Card className={`
-      relative overflow-hidden border-0 shadow-lg hover:shadow-xl transition-all duration-300
-      bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm
-      ${highlight ? 'ring-2 ring-orange-500 shadow-orange-500/20' : ''}
-    `}>
-      {highlight && (
-        <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-orange-500 to-red-500" />
-      )}
-      <CardContent className="p-4 sm:p-6">
-        <div className="flex flex-col gap-3">
-          {/* Icon */}
-          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${iconBg} flex items-center justify-center`}>
-            <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${iconColor}`} />
-          </div>
+        {/* FLOATING CARD - Now visible because parent is not overflow-hidden */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-xl flex items-center justify-between absolute left-4 right-4 -bottom-14 z-20 border border-slate-100">
           
-          {/* Value */}
-          <div>
-            <p className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 dark:text-slate-100 mb-1">
-              {value}
+          <div className="flex-1">
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
+              <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`} />
+              Now Serving
             </p>
-            <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
-              {label}
-            </p>
-            <div className="flex items-center gap-1">
-              <TrendingUp className={`w-3 h-3 ${iconColor}`} />
-              <span className={`text-xs font-semibold ${iconColor}`}>
-                {trend}
+            <div className="flex items-baseline gap-1">
+              <span className="text-4xl font-extrabold text-slate-900">
+                 {currentToken > 0 ? `#${currentToken}` : '--'}
+              </span>
+              <span className="text-slate-400 text-sm font-medium">
+                / {hospitalAppointments.length}
               </span>
             </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-// Quick Action Button Component
-function QuickActionButton({ href, icon: Icon, label, gradient, badge }) {
-  return (
-    <Link href={href} className="relative group">
-      <div className="relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-lg transition-all duration-300 h-full">
-        <div className="p-4 sm:p-5 flex flex-col items-center text-center gap-3">
-          <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg`}>
-            <Icon className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
+          
+          <div className="flex flex-col gap-2 items-end">
+             <div className="flex items-center gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                       variant={queueStatus === 'OPD' ? 'default' : 'outline'} 
+                       className={`h-9 px-3 text-xs font-semibold gap-2 ${
+                          queueStatus === 'OPD' 
+                          ? 'bg-green-600 hover:bg-green-700 text-white' 
+                          : 'border-orange-200 text-orange-600 bg-orange-50'
+                       }`}
+                    >
+                       {queueStatus === 'OPD' ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
+                       {queueStatus === 'OPD' ? 'Live (OPD)' : (queueStatus === 'NOT_STARTED' ? 'Offline' : queueStatus)}
+                       <ChevronDown className="w-3 h-3 opacity-70" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuLabel>Set Availability</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => handleStatusChange('OPD')} className="gap-2 cursor-pointer">
+                       <Play className="w-4 h-4 text-green-600" /> Start / Resume OPD
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleStatusChange('REST')} className="gap-2 cursor-pointer">
+                       <Coffee className="w-4 h-4 text-orange-500" /> Take Break
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleStatusChange('MEETING')} className="gap-2 cursor-pointer">
+                       <Briefcase className="w-4 h-4 text-blue-500" /> In Meeting
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleStatusChange('EMERGENCY')} className="gap-2 cursor-pointer">
+                       <AlertCircle className="w-4 h-4 text-red-500" /> Emergency
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleEndDay} className="gap-2 cursor-pointer text-red-600 focus:text-red-700 bg-red-50 focus:bg-red-100">
+                       <LogOut className="w-4 h-4" /> End Consultation
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+             </div>
           </div>
-          <span className="font-semibold text-sm sm:text-base text-slate-900 dark:text-slate-100">
-            {label}
-          </span>
-          {badge > 0 && (
-            <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-gradient-to-br from-red-500 to-orange-500 text-white text-xs font-bold flex items-center justify-center shadow-lg">
-              {badge}
-            </div>
-          )}
         </div>
       </div>
-    </Link>
-  )
-}
 
-// Empty State Component
-function EmptyState({ icon: Icon, title, description }) {
-  return (
-    <div className="text-center py-12 sm:py-16">
-      <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-        <Icon className="w-8 h-8 sm:w-10 sm:h-10 text-slate-400 dark:text-slate-600" />
+      <div className="px-4 mt-20 space-y-6">
+
+        {/* CRITICAL ACTION CARD */}
+        {ongoingPatient ? (
+           <Card className="border-l-4 border-l-blue-500 shadow-lg overflow-hidden ring-1 ring-slate-100">
+             <CardContent className="p-0">
+               <div className="bg-blue-50/50 p-4 border-b border-blue-100 flex justify-between items-start">
+                  <div>
+                    <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 mb-2 border-0 shadow-none">In Consultation</Badge>
+                    <h3 className="text-xl font-bold text-slate-900">{getPatientName(ongoingPatient)}</h3>
+                    <div className="flex items-center gap-3 text-sm text-slate-500 mt-1">
+                       <span className="flex items-center gap-1"><User className="w-3 h-3" /> {ongoingPatient.patientId?.gender || 'N/A'}</span>
+                       <span className="flex items-center gap-1"><Activity className="w-3 h-3" /> Token #{ongoingPatient.tokenNumber}</span>
+                    </div>
+                  </div>
+                  <div className="h-12 w-12 rounded-full bg-white flex items-center justify-center text-blue-600 font-bold text-lg border-2 border-blue-100 shadow-sm">
+                    {ongoingPatient.patientId?.firstName?.[0] || 'P'}
+                  </div>
+               </div>
+               <div className="p-4">
+                 <Button onClick={handleCompleteVisit} className="w-full bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 py-6 text-base transition-transform active:scale-[0.98]">
+                   Complete Visit <CheckCircle className="w-5 h-5 ml-2" />
+                 </Button>
+               </div>
+             </CardContent>
+           </Card>
+        ) : nextPatient ? (
+           <Card className="border-l-4 border-l-green-500 shadow-lg overflow-hidden ring-1 ring-slate-100">
+             <CardContent className="p-0">
+               <div className="bg-green-50/50 p-4 border-b border-green-100 flex justify-between items-start">
+                  <div>
+                    <Badge className="bg-green-100 text-green-700 hover:bg-green-100 mb-2 border-0 shadow-none">Next in Queue</Badge>
+                    <h3 className="text-xl font-bold text-slate-900">{getPatientName(nextPatient)}</h3>
+                    <p className="text-slate-500 text-sm mt-1">Token #{nextPatient.tokenNumber}</p>
+                  </div>
+                  <div className="h-12 w-12 rounded-full bg-white flex items-center justify-center text-green-600 font-bold text-lg border-2 border-green-100 shadow-sm">
+                    #{nextPatient.tokenNumber}
+                  </div>
+               </div>
+               <div className="p-4">
+                 <Button onClick={handleNextPatient} className="w-full bg-slate-900 text-white hover:bg-slate-800 py-6 text-base shadow-xl shadow-slate-200 transition-transform active:scale-[0.98]">
+                   Call Patient <Play className="w-5 h-5 ml-2" />
+                 </Button>
+               </div>
+             </CardContent>
+           </Card>
+        ) : (
+           <Card className="bg-slate-50 border-dashed border-2 border-slate-200 shadow-none">
+             <CardContent className="p-8 text-center text-slate-400">
+               <Coffee className="w-6 h-6 text-slate-300 mx-auto mb-3" />
+               <p className="font-medium">No patients waiting.</p>
+               <p className="text-xs mt-1">{hospitalAppointments.length > 0 ? "You've seen everyone!" : "No appointments yet."}</p>
+             </CardContent>
+           </Card>
+        )}
+
+        {/* UPCOMING LIST */}
+        <div>
+          <div className="flex items-center justify-between mb-3 px-1">
+            <h3 className="font-bold text-slate-700 text-lg">Upcoming</h3>
+            <Link href="/doctor/appointments" className="text-blue-600 text-sm font-semibold flex items-center">View All <ChevronRight className="w-4 h-4" /></Link>
+          </div>
+          <div className="space-y-3 pb-6">
+            {hospitalAppointments.filter(apt => ['BOOKED', 'CHECKED_IN'].includes(apt.status)).sort((a,b) => (a.tokenNumber || 0) - (b.tokenNumber || 0)).slice(0, 3).map(apt => (
+              <div key={apt._id} className="bg-white p-3 rounded-xl shadow-sm border border-slate-100 flex items-center gap-3">
+                 <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-sm shadow-sm ${apt.status === 'CHECKED_IN' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>#{apt.tokenNumber || '?'}</div>
+                 <div className="flex-1 min-w-0">
+                   <h4 className="font-semibold text-slate-900 text-sm truncate">{getPatientName(apt)}</h4>
+                   <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Clock className="w-3 h-3" /> {new Date(apt.scheduledTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} <span className="mx-1">•</span> {apt.type || 'Regular'}</p>
+                 </div>
+                 <Badge variant="outline" className="text-[10px] h-5 border-slate-200 text-slate-500">{apt.status === 'CHECKED_IN' ? 'Checked In' : 'Booked'}</Badge>
+              </div>
+            ))}
+            {hospitalAppointments.filter(apt => ['BOOKED', 'CHECKED_IN'].includes(apt.status)).length === 0 && (
+               <p className="text-center text-slate-400 text-sm py-4 bg-slate-50 rounded-xl">Queue is empty</p>
+            )}
+          </div>
+        </div>
       </div>
-      <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">
-        {title}
-      </h3>
-      <p className="text-sm text-slate-600 dark:text-slate-400 max-w-sm mx-auto px-4">
-        {description}
-      </p>
     </div>
   )
 }
 
-// Loading Skeleton
+function StatBox({ label, value, icon: Icon, color, bg }) {
+  return (
+    <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center text-center">
+      <div className={`p-2.5 rounded-full ${bg} mb-2`}><Icon className={`w-5 h-5 ${color}`} /></div>
+      <span className="text-3xl font-bold text-slate-900">{value}</span>
+      <span className="text-xs text-slate-500 font-semibold uppercase tracking-wide">{label}</span>
+    </div>
+  )
+}
+
 function DashboardSkeleton() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-emerald-50/20 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8">
-        <Skeleton className="h-32 sm:h-40 w-full rounded-3xl" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-32 sm:h-40 rounded-xl" />
-          ))}
-        </div>
-        <Skeleton className="h-48 w-full rounded-2xl" />
-        <Skeleton className="h-96 w-full rounded-2xl" />
+    <div className="p-4 space-y-6 bg-slate-50 min-h-screen">
+      <Skeleton className="h-48 w-full rounded-b-3xl" />
+      <div className="mt-8 space-y-4">
+         <Skeleton className="h-40 w-full rounded-xl" />
+         <div className="grid grid-cols-2 gap-4">
+           <Skeleton className="h-28 rounded-xl" />
+           <Skeleton className="h-28 rounded-xl" />
+         </div>
       </div>
     </div>
   )

@@ -34,9 +34,9 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const familyMemberId = searchParams.get('familyMemberId');
     
-    // Build query - either for user or family member
+    // Build query
     let query = {};
-    if (familyMemberId) {
+    if (familyMemberId && familyMemberId !== 'all') {
       // Verify that the family member belongs to this user
       const familyMember = await FamilyMember.findOne({
         _id: familyMemberId,
@@ -47,13 +47,19 @@ export async function GET(req) {
       if (!familyMember) {
         return NextResponse.json({ error: 'Family member not found or unauthorized' }, { status: 404 });
       }
-      
       query.patientId = familyMemberId;
-    } else {
+
+    } else if (familyMemberId === 'all') {
+      const familyMembers = await FamilyMember.find({ userId: user._id, isActive: true }).select('_id');
+      const familyMemberIds = familyMembers.map(m => m._id);
+      query.patientId = { $in: [user._id, ...familyMemberIds] };
+
+    } else { // 'self' or null
       query.patientId = user._id;
     }
     
     const appointments = await Appointment.find(query)
+      .populate('patientId', 'firstName lastName')
       .populate('doctorId', 'firstName lastName doctorProfile profileImage')
       .populate('hospitalId', 'name address contactDetails')
       .sort({ scheduledTime: -1 })
@@ -111,6 +117,7 @@ export async function POST(req) {
 
     // Use family member if provided, otherwise use current user
     const patientId = familyMemberId || user._id
+    const patientModel = familyMemberId ? 'FamilyMember' : 'User'
 
     // Calculate token number for the day
     const todayStart = new Date()
@@ -133,6 +140,7 @@ export async function POST(req) {
     // Create appointment
     const appointment = await Appointment.create({
       patientId,
+      patientModel,
       doctorId,
       hospitalId,
       scheduledTime: new Date(scheduledTime),

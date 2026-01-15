@@ -7,8 +7,8 @@ import toast from 'react-hot-toast'
 import DashboardOverview from './DashboardOverview'
 import HospitalSearch from './HospitalSearch'
 import AppointmentsList from './AppointmentsList'
-import FamilyMembers from './FamilyMembers'
-import MedicalRecords from './MedicalRecords'
+import FamilyMembers from './settings/FamilyMembers'
+import MedicalRecords from './settings/MedicalRecords'
 
 export default function userDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard')

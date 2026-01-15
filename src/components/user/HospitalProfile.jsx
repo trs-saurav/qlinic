@@ -20,7 +20,7 @@ import {
   CheckCircle
 } from 'lucide-react'
 import DoctorCard from './DoctorCard'
-import BookAppointmentModal from './BookAppointmentModal'
+import BookAppointmentModal from './appointments/BookAppointmentModal'
 
 export default function HospitalProfile({ hospital, onClose }) {
   const [doctors, setDoctors] = useState([])

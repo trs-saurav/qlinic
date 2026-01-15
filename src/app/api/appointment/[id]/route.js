@@ -3,6 +3,28 @@ import connectDB from '@/config/db';
 import Appointment from '@/models/appointment';
 import { requireRole } from '@/lib/apiAuth';
 
+export async function GET(req, { params }) {
+  try {
+    const { id } = params;
+    await connectDB();
+
+    const appointment = await Appointment.findById(id)
+      .populate('doctorId', 'firstName lastName')
+      .populate('hospitalId', 'name');
+
+    if (!appointment) {
+      return NextResponse.json({ success: false, error: 'Appointment not found' }, { status: 404 });
+    }
+
+    // Optional: Add authorization check here if needed
+
+    return NextResponse.json({ success: true, appointment });
+  } catch (error) {
+    console.error('Error fetching appointment:', error);
+    return NextResponse.json({ success: false, error: 'Server Error' }, { status: 500 });
+  }
+}
+
 export async function PATCH(req, { params }) {
   try {
     const gate = await requireRole(['hospital_admin', 'doctor', 'user']);

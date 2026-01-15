@@ -18,7 +18,7 @@ import {
 import { toast } from 'react-hot-toast'
 
 // Placeholder for the BookAppointmentModal
-import BookAppointmentModal from '@/components/user/BookAppointmentModal' 
+import BookAppointmentModal from '@/components/user/appointments/BookAppointmentModal' 
 
 export default function DoctorPublicProfile() {
   const { id } = useParams()

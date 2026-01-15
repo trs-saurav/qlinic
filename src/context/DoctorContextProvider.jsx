@@ -90,37 +90,21 @@ export function DoctorProvider({ children }) {
     }
   }, [doctor?._id])
 
-  // ✅ UPDATED: Points to centralized /api/appointment
   const fetchAppointments = useCallback(
     async (filter = 'today') => {
       if (!doctor?._id) return
       try {
         setAppointmentsLoading(true)
         
-        // Pass 'role=doctor' so the API knows to filter by doctorId, not patientId
         const params = new URLSearchParams({ 
           role: 'doctor', 
           doctorId: doctor._id, 
           filter 
         })
         
-        console.log('🔍 Fetching appointments with params:', params.toString())
-        
         const res = await fetch(`/api/appointment?${params}`, {
           headers: { Accept: 'application/json' },
         })
-        
-        console.log('📡 Response status:', res.status, res.statusText)
-        
-        // Check if response is JSON
-        const contentType = res.headers.get('content-type')
-        if (!contentType || !contentType.includes('application/json')) {
-          console.error('❌ Expected JSON but got:', contentType)
-          const text = await res.text()
-          console.error('Response body:', text.substring(0, 500))
-          toast.error('Server error - please check console')
-          return
-        }
         
         const data = await res.json()
 
@@ -129,13 +113,11 @@ export function DoctorProvider({ children }) {
           return
         }
 
-        console.log('✅ Appointments loaded:', data.appointments?.length || 0)
         setAppointments(data.appointments || [])
         setAppointmentsFilter(filter)
       } catch (err) {
         console.error('❌ fetchAppointments error:', err)
-        console.error('Error stack:', err.stack)
-        toast.error('Failed to load appointments: ' + err.message)
+        toast.error('Failed to load appointments')
       } finally {
         setAppointmentsLoading(false)
       }
@@ -145,18 +127,11 @@ export function DoctorProvider({ children }) {
 
   const fetchAffiliations = useCallback(async () => {
     if (!doctor?._id) return
-    
     try {
       setAffiliationsLoading(true)
       const res = await fetch('/api/doctor/affiliations')
       const data = await res.json()
-
-      if (!res.ok) {
-        setAffiliations([])
-        return
-      }
-
-      setAffiliations(data.affiliations || [])
+      if (res.ok) setAffiliations(data.affiliations || [])
     } catch (err) {
       console.error('❌ fetchAffiliations:', err)
       setAffiliations([])
@@ -204,7 +179,7 @@ export function DoctorProvider({ children }) {
     }
   }, [])
 
-  // ✅ UPDATED: Points to centralized /api/appointment/[id]
+  // 🔄 Unified Appointment Update
   const updateAppointmentStatus = useCallback(async (appointmentId, status, additionalData = {}) => {
     try {
       const res = await fetch(`/api/appointment/${appointmentId}`, {
@@ -213,7 +188,7 @@ export function DoctorProvider({ children }) {
         body: JSON.stringify({ 
           status, 
           ...additionalData,
-          updatedByRole: 'doctor' // Audit trail
+          updatedByRole: 'doctor' 
         }),
       })
       const data = await res.json()
@@ -223,7 +198,7 @@ export function DoctorProvider({ children }) {
         return { success: false }
       }
 
-      // Update local state
+      // Optimistic Update
       setAppointments(prev => 
         prev.map(apt => 
           apt._id === appointmentId 
@@ -240,6 +215,77 @@ export function DoctorProvider({ children }) {
       return { success: false }
     }
   }, [])
+
+  // 🏥 NEW: Queue Action (Start/Next/Skip/Complete)
+  // Calls the centralized queue-action API which updates MongoDB AND Firebase
+  const performQueueAction = useCallback(async (action, appointmentId, payload = {}) => {
+    try {
+      const res = await fetch('/api/appointment/queue-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action, // 'START', 'COMPLETE', 'SKIP', 'RECALL'
+          appointmentId,
+          ...payload // e.g. notes
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Action failed');
+      }
+
+      // Refresh appointments to reflect status changes
+      await fetchAppointments(appointmentsFilter); 
+      
+      // Update Dashboard stats
+      await fetchDoctorDashboard();
+
+      toast.success(`Action ${action} successful`);
+      return { success: true, data: data.data };
+
+    } catch (err) {
+      console.error('Queue Action Failed:', err);
+      toast.error(err.message);
+      return { success: false, error: err.message };
+    }
+  }, [appointmentsFilter, fetchAppointments, fetchDoctorDashboard]);
+
+  // 🩺 NEW: Set Doctor Status (OPD/Rest/Emergency)
+  const setDoctorStatus = useCallback(async (statusType, statusMessage = '', hospitalId) => {
+    if (!hospitalId) {
+       toast.error('Hospital ID required to set status');
+       return;
+    }
+    
+    try {
+      const res = await fetch('/api/appointment/queue-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'SET_STATUS',
+          statusType, // 'OPD', 'REST', 'EMERGENCY'
+          statusMessage,
+          hospitalId
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Status update failed');
+      }
+
+      toast.success(`Status updated to ${statusType}`);
+      return { success: true };
+
+    } catch (err) {
+      console.error('Status Update Failed:', err);
+      toast.error(err.message);
+      return { success: false };
+    }
+  }, []);
 
   const markNotificationRead = useCallback(async (notificationId) => {
     try {
@@ -293,7 +339,8 @@ export function DoctorProvider({ children }) {
   const value = {
     doctor, doctorLoading, doctorError, fetchDoctorProfile, updateDoctorProfile,
     dashboard, dashboardLoading, fetchDoctorDashboard,
-    appointments, appointmentsLoading, appointmentsFilter, fetchAppointments, updateAppointmentStatus,
+    appointments, appointmentsLoading, appointmentsFilter, fetchAppointments, 
+    updateAppointmentStatus, performQueueAction, setDoctorStatus, // <-- Exported new actions
     affiliations, affiliationsLoading, fetchAffiliations,
     notifications, unreadCount, fetchNotifications, markNotificationRead,
     refreshAll,

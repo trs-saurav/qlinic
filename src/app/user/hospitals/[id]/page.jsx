@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
-import BookAppointmentModal from '@/components/user/BookAppointmentModal' 
+import BookAppointmentModal from '@/components/user/appointments/BookAppointmentModal' 
 
 // --- Helper: Parse time to minutes ---
 const parseToMinutes = (timeStr) => {

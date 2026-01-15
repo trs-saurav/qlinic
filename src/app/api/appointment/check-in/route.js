@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import connectDB from '@/config/db'
 import Appointment from '@/models/appointment'
+import { adminDb } from '@/config/firebaseAdmin' // Import Firebase Admin
 import { startOfDay, endOfDay } from 'date-fns'
 
 export async function POST(req) {
@@ -37,6 +38,33 @@ export async function POST(req) {
     appointment.checkInTime = new Date()
     
     await appointment.save()
+
+    // ---------------------------------------------------------
+    // 3. FIREBASE SYNC: Notify Doctor's Dashboard
+    // ---------------------------------------------------------
+    // We update 'lastUpdated' timestamp in Firebase. 
+    // This forces the doctor's 'useRealtimeQueue' hook to re-fetch or notice a change.
+    // We do NOT need to write the whole appointment data, just a signal.
+    
+    const hospitalId = appointment.hospitalId.toString();
+    const doctorId = appointment.doctorId.toString();
+
+    if (hospitalId && doctorId) {
+       try {
+          const queueRef = adminDb.ref(`queues/${hospitalId}/${doctorId}`);
+          
+          // We just touch the timestamp. The frontend will likely re-fetch the list 
+          // via MongoDB based on this signal, OR simply see the count increase if you sync counts.
+          // For now, let's update 'lastUpdated'.
+          await queueRef.update({
+             lastUpdated: Date.now()
+          });
+       } catch (fbError) {
+          console.error('Firebase Sync Error on Check-in:', fbError);
+          // Don't fail the request if Firebase fails, just log it.
+       }
+    }
+    // ---------------------------------------------------------
 
     return NextResponse.json({ 
       success: true, 

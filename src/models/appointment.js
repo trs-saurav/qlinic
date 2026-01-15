@@ -4,8 +4,14 @@ import mongoose from 'mongoose'
 const appointmentSchema = new mongoose.Schema({
   patientId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    required: true,
+    refPath: 'patientModel'
+  },
+  patientModel: {
+    type: String,
+    required: true,
+    enum: ['User', 'FamilyMember'],
+    default: 'User' // ✅ ADDED DEFAULT
   },
   doctorId: {
     type: mongoose.Schema.Types.ObjectId,

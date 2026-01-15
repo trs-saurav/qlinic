@@ -19,12 +19,14 @@ function Avatar({
 
 function AvatarImage({
   className,
+  objectFit,
   ...props
 }) {
   return (
     <AvatarPrimitive.Image
       data-slot="avatar-image"
       className={cn("aspect-square size-full", className)}
+      style={{ objectFit }}
       {...props} />
   );
 }

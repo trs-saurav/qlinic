@@ -1,5 +1,5 @@
 
-import FamilyMembers from '@/components/user/FamilyMembers' // Your fixed component
+import FamilyMembers from '@/components/user/settings/FamilyMembers' // Your fixed component
 
 export default function FamilyPage() {
   return (
