@@ -27,8 +27,8 @@ import {
 } from '@/components/ui/popover'
 import { Plus, AlertTriangle, Search, Edit, Trash2, Package, MinusCircle, PlusCircle } from 'lucide-react'
 import { useHospitalAdmin } from '@/context/HospitalAdminContext'
-import AddInventoryDialog from '@/components/hospital/AddInventoryDialog'
-import EditInventoryDialog from '@/components/hospital/EditInventoryDialog'
+import AddInventoryDialog from '@/components/hospital/inventory/AddInventoryDialog'
+import EditInventoryDialog from '@/components/hospital/inventory/EditInventoryDialog'
 import toast from 'react-hot-toast'
 
 export default function InventoryPage() {

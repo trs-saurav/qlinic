@@ -699,7 +699,7 @@ export default function StaffPage() {
 
           <Dialog open={addStaffDialogOpen} onOpenChange={setAddStaffDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+              <Button className="gap-2 bg-blue-600 hover:bg-blue-700">
                 <Plus className="w-4 h-4" />
                 Add Staff
               </Button>
@@ -983,7 +983,7 @@ export default function StaffPage() {
                         </Button>
                         <Button
                           size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-700"
+                          className="bg-blue-600 hover:bg-blue-700"
                           onClick={() => handleApproveRequest(request._id)}
                         >
                           <CheckCircle className="w-4 h-4 mr-2" />

@@ -1,551 +1,465 @@
-// src/app/hospital-admin/reception/page.jsx
 'use client'
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+
+import { useState, useMemo, useEffect } from 'react'
+import { useHospitalAdmin } from '@/context/HospitalAdminContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Search, Clock, UserPlus, Phone, Activity, AlertCircle, RefreshCw } from 'lucide-react'
+import { 
+  Plus, Calendar, RefreshCw, Activity, 
+  Search, ChevronRight, Stethoscope, 
+  Play, Pause, Coffee, AlertCircle, Loader2, User,
+  TrendingUp, Clock
+} from 'lucide-react'
+import { format, subDays, startOfDay, isToday } from 'date-fns'
 import toast from 'react-hot-toast'
 
+import WalkInModal from '@/components/hospital/reception/WalkInModal'
+import QueueList from '@/components/hospital/reception/QueueList'
+import PatientCheckIn from '@/components/hospital/reception/PatientCheckIn'
+
 export default function ReceptionPage() {
-  const [appointments, setAppointments] = useState([])
+  const { 
+    hospital,
+    hospitalLoading,
+    appointments,           
+    appointmentsFilter,
+    doctors,                
+    liveQueueData,          
+    selectedDate, 
+    setSelectedDate,
+    refreshAll,
+    fetchAppointments,
+    updateAppointmentStatus,
+    appointmentsLoading 
+  } = useHospitalAdmin()
+
+  // STATE
+  const [selectedDoctorId, setSelectedDoctorId] = useState(null)
   const [selectedAppt, setSelectedAppt] = useState(null)
-  const [showAddModal, setShowAddModal] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [doctors, setDoctors] = useState([])
-  const [loading, setLoading] = useState(true)
 
-  const [vitals, setVitals] = useState({
-    temperature: '',
-    weight: '',
-    bpSystolic: '',
-    bpDiastolic: '',
-    spo2: ''
-  })
-
-  const [newPatient, setNewPatient] = useState({
-    firstName: '',
-    lastName: '',
-    phone: '',
-    age: '',
-    gender: 'male',
-    doctorId: '',
-    isEmergency: false
-  })
-
+  // 1. Refresh on Mount
   useEffect(() => {
-    fetchData()
-  }, [])
+    if (hospital?._id) refreshAll()
+  }, [hospital?._id]) 
 
-  const fetchData = async () => {
-    try {
-      const [apptRes, docRes] = await Promise.all([
-        fetch('/api/appointment?role=hospital_admin'),
-        fetch('/api/hospital/doctors')
-      ])
+  // 2. Refetch when doctor selection OR date changes
+  useEffect(() => {
+    if (hospital?._id) {
+      fetchAppointments(appointmentsFilter, selectedDate, selectedDoctorId)
+    }
+  }, [selectedDoctorId, selectedDate, hospital?._id, fetchAppointments, appointmentsFilter])
 
-      const [apptData, docData] = await Promise.all([
-        apptRes.json(),
-        docRes.json()
-      ])
-
-      setAppointments(apptData.appointments || [])
-      setDoctors(docData.doctors || [])
-    } catch (error) {
-      console.error('Error:', error)
-      toast.error('Failed to load data')
-    } finally {
-      setLoading(false)
+  // 3. Helper: Status Colors
+  const getStatusMeta = (status) => {
+    switch(status) {
+      case 'OPD': return { color: 'bg-green-500', text: 'text-green-600', bg: 'bg-green-50', label: 'Live OPD' }
+      case 'REST': return { color: 'bg-orange-500', text: 'text-orange-600', bg: 'bg-orange-50', label: 'On Break' }
+      case 'MEETING': return { color: 'bg-blue-500', text: 'text-blue-600', bg: 'bg-blue-50', label: 'Meeting' }
+      case 'EMERGENCY': return { color: 'bg-red-500', text: 'text-red-600', bg: 'bg-red-50', label: 'Emergency' }
+      default: return { color: 'bg-slate-300', text: 'text-slate-500', bg: 'bg-slate-100', label: 'Offline' }
     }
   }
 
-  const handleAddWalkIn = async (e) => {
-    e.preventDefault()
-    const loadingToast = toast.loading('Adding patient...')
+  // 4. Filter appointments: Past 3 days onwards (for stats)
+  const recentAppointments = useMemo(() => {
+    const threeDaysAgo = startOfDay(subDays(new Date(), 3))
+    return appointments.filter(apt => new Date(apt.scheduledTime) >= threeDaysAgo)
+  }, [appointments])
 
-    try {
-      const response = await fetch('/api/appointment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          patientData: {
-            firstName: newPatient.firstName,
-            lastName: newPatient.lastName,
-            phone: newPatient.phone,
-            gender: newPatient.gender,
-            dateOfBirth: new Date(new Date().getFullYear() - parseInt(newPatient.age), 0, 1)
-          },
-          doctorId: newPatient.doctorId,
-          isEmergency: newPatient.isEmergency,
-          appointmentType: 'WALKIN'
-        })
-      })
+  // 5. LOGIC: Sort Doctors (Active/Working First)
+  const sortedDoctors = useMemo(() => {
+    return [...doctors].sort((a, b) => {
+      const statusA = liveQueueData?.[a._id]?.status || 'OFFLINE'
+      const statusB = liveQueueData?.[b._id]?.status || 'OFFLINE'
+      
+      // Count recent appointments for this doctor
+      const countA = recentAppointments.filter(apt => (apt.doctorId?._id || apt.doctorId) === a._id).length
+      const countB = recentAppointments.filter(apt => (apt.doctorId?._id || apt.doctorId) === b._id).length
 
-      const data = await response.json()
+      const isOnlineA = ['OPD', 'EMERGENCY'].includes(statusA)
+      const isOnlineB = ['OPD', 'EMERGENCY'].includes(statusB)
+      
+      if (isOnlineA && !isOnlineB) return -1
+      if (!isOnlineA && isOnlineB) return 1
+      if (countA > countB) return -1
+      if (countA < countB) return 1
+      return 0
+    })
+  }, [doctors, liveQueueData, recentAppointments])
 
-      if (data.success) {
-        toast.success('✅ Patient added to queue!', { id: loadingToast })
-        setShowAddModal(false)
-        setNewPatient({
-          firstName: '',
-          lastName: '',
-          phone: '',
-          age: '',
-          gender: 'male',
-          doctorId: '',
-          isEmergency: false
-        })
-        fetchData()
-      } else {
-        toast.error(data.error, { id: loadingToast })
-      }
-    } catch (error) {
-      toast.error('Failed to add patient', { id: loadingToast })
-    }
-  }
-
-  const handleCheckIn = async () => {
-    if (!selectedAppt) return
-
-    const loadingToast = toast.loading('Checking in...')
+  // 6. FILTER LOGIC: Search only
+  const filteredQueue = useMemo(() => {
+    if (!recentAppointments) return []
     
-    try {
-      const response = await fetch(`/api/appointment/${selectedAppt._id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'CHECKED_IN',
-          vitals: vitals,
-          paymentStatus: 'PAID' // Mark as paid on check-in
-        })
+    // Filter by selected doctor if any
+    let filtered = recentAppointments
+    if (selectedDoctorId) {
+      filtered = filtered.filter(apt => (apt.doctorId?._id || apt.doctorId) === selectedDoctorId)
+    }
+
+    // Apply search filtering
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      filtered = filtered.filter(apt => {
+        const p = apt.patientId || {}
+        return (
+          p.firstName?.toLowerCase().includes(q) ||
+          p.lastName?.toLowerCase().includes(q) ||
+          p.phoneNumber?.includes(q) ||
+          apt.tokenNumber?.toString().includes(q)
+        )
       })
-
-      const data = await response.json()
-
-      if (data.success) {
-        toast.success('✅ Patient checked in & payment confirmed', { id: loadingToast })
-        fetchData()
-        setSelectedAppt(null)
-      } else {
-        toast.error(data.error, { id: loadingToast })
-      }
-    } catch (error) {
-      toast.error('Failed to check in', { id: loadingToast })
     }
-  }
 
-  const stats = {
-    waiting: appointments.filter(a => a.status === 'CHECKED_IN').length,
-    inConsult: appointments.filter(a => a.status === 'IN_CONSULTATION').length,
-    completed: appointments.filter(a => a.status === 'COMPLETED').length,
-    skipped: appointments.filter(a => a.status === 'SKIPPED').length,
-  }
+    return filtered
+  }, [recentAppointments, searchQuery, selectedDoctorId])
 
-  const filteredAppointments = appointments.filter(apt => {
-    if (!searchQuery) return true
-    const query = searchQuery.toLowerCase()
-    const name = `${apt.patientId?.firstName} ${apt.patientId?.lastName}`.toLowerCase()
-    const phone = apt.patientId?.phoneNumber || ''
-    return name.includes(query) || phone.includes(query) || apt.tokenNumber?.toString().includes(query)
-  })
-
-  const getStatusColor = (status) => {
-    const colors = {
-      BOOKED: 'bg-blue-100 text-blue-700 border-blue-200',
-      CHECKED_IN: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-      IN_CONSULTATION: 'bg-purple-100 text-purple-700 border-purple-200',
-      COMPLETED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-      SKIPPED: 'bg-orange-100 text-orange-700 border-orange-200',
-      CANCELLED: 'bg-red-100 text-red-700 border-red-200'
-    }
-    return colors[status] || colors.BOOKED
-  }
-
-  const handleReCheckIn = async (appointmentId) => {
-    const loadingToast = toast.loading('Re-checking in patient...')
+  // 7. STATS: Calculated based on filtered appointments
+  const viewStats = useMemo(() => {
+    // Only count today's appointments for live stats
+    const todayAppointments = filteredQueue.filter(apt => isToday(new Date(apt.scheduledTime)))
     
-    try {
-      const response = await fetch(`/api/appointment/${appointmentId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'CHECKED_IN'
-        })
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        toast.success('✅ Patient re-checked in', { id: loadingToast })
-        fetchData()
-      } else {
-        toast.error(data.error, { id: loadingToast })
-      }
-    } catch (error) {
-      toast.error('Failed to re-check in', { id: loadingToast })
+    return {
+      waiting: todayAppointments.filter(a => a.status === 'CHECKED_IN').length,
+      consulting: todayAppointments.filter(a => a.status === 'IN_CONSULTATION').length,
+      completed: todayAppointments.filter(a => a.status === 'COMPLETED').length,
+      total: filteredQueue.length
     }
+  }, [filteredQueue])
+
+  // 8. Handle Date Change
+  const handleDateChange = (e) => {
+    const newDate = new Date(e.target.value)
+    setSelectedDate(newDate)
+    setSelectedAppt(null)
   }
+
+  // 9. Quick Date Filters
+  const setQuickDate = (daysOffset) => {
+    const newDate = daysOffset === 0 ? new Date() : subDays(new Date(), Math.abs(daysOffset))
+    setSelectedDate(startOfDay(newDate))
+    setSelectedAppt(null)
+  }
+
+  if (hospitalLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center space-y-3">
+          <Loader2 className="w-10 h-10 animate-spin text-blue-600 mx-auto" />
+          <p className="text-slate-500 text-sm">Loading reception...</p>
+        </div>
+      </div>
+    )
+  }
+  
+  if (!hospital) {
+    return (
+      <div className="p-10 text-center">
+        <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+        <p className="text-slate-500">Hospital Profile Not Found</p>
+      </div>
+    )
+  }
+
+  const todayDate = new Date()
+  const isViewingToday = isToday(selectedDate)
 
   return (
-    <div className="space-y-6">
-      {/* Add Walk-In Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-lg w-full">
-            <div className="bg-emerald-50 dark:bg-emerald-950 p-6 border-b">
-              <div className="flex items-center justify-between">
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Add Walk-In Patient</h3>
-                <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 text-2xl">×</button>
-              </div>
-            </div>
-
-            <form onSubmit={handleAddWalkIn} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>First Name *</Label>
-                  <Input
-                    required
-                    value={newPatient.firstName}
-                    onChange={(e) => setNewPatient({ ...newPatient, firstName: e.target.value })}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label>Last Name *</Label>
-                  <Input
-                    required
-                    value={newPatient.lastName}
-                    onChange={(e) => setNewPatient({ ...newPatient, lastName: e.target.value })}
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Phone *</Label>
-                  <Input
-                    required
-                    type="tel"
-                    value={newPatient.phone}
-                    onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label>Age *</Label>
-                  <Input
-                    required
-                    type="number"
-                    value={newPatient.age}
-                    onChange={(e) => setNewPatient({ ...newPatient, age: e.target.value })}
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label>Gender *</Label>
-                <Select value={newPatient.gender} onValueChange={(v) => setNewPatient({ ...newPatient, gender: v })}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label>Assign Doctor *</Label>
-                <Select required value={newPatient.doctorId} onValueChange={(v) => setNewPatient({ ...newPatient, doctorId: v })}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select doctor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {doctors.map(doc => (
-                      <SelectItem key={doc._id} value={doc._id}>
-                        Dr. {doc.firstName} {doc.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <label className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer ${newPatient.isEmergency ? 'border-red-500 bg-red-50' : 'border-slate-200'}`}>
-                <input
-                  type="checkbox"
-                  checked={newPatient.isEmergency}
-                  onChange={(e) => setNewPatient({ ...newPatient, isEmergency: e.target.checked })}
-                  className="w-5 h-5 accent-red-600"
-                />
-                <div>
-                  <span className="font-bold block">Mark as Emergency</span>
-                  <span className="text-xs text-slate-600">Priority treatment</span>
-                </div>
-              </label>
-
-              <div className="flex gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={() => setShowAddModal(false)} className="flex-1">
-                  Cancel
-                </Button>
-                <Button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-700">
-                  <UserPlus className="w-4 h-4 mr-2" />
-                  Add to Queue
-                </Button>
-              </div>
-            </form>
+    <div className="h-[calc(100vh-4rem)] flex flex-col bg-slate-50/50">
+      
+      {/* HEADER */}
+      <header className="h-16 px-6 bg-white border-b border-slate-200 flex items-center justify-between flex-shrink-0 shadow-sm">
+        <div className="flex items-center gap-4">
+          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <Stethoscope className="w-5 h-5 text-blue-600" /> Reception Desk
+          </h1>
+          <div className="h-6 w-px bg-slate-200" />
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-slate-400" />
+            <p className="text-slate-600 text-sm font-semibold hidden md:block">
+              {format(todayDate, 'MMMM do, yyyy')}
+            </p>
           </div>
         </div>
-      )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Reception Desk</h1>
-          <p className="text-slate-600 dark:text-slate-400 mt-1">Manage walk-in patients and queue</p>
+        <div className="flex items-center gap-3">
+          {/* Quick Date Buttons */}
+          <div className="hidden lg:flex items-center gap-2">
+            <Button
+              variant={isViewingToday ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setQuickDate(0)}
+              className={isViewingToday ? 'bg-blue-600 hover:bg-blue-700' : 'border-slate-200'}
+            >
+              Today
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setQuickDate(-1)}
+              className="border-slate-200"
+            >
+              Yesterday
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setQuickDate(-3)}
+              className="border-slate-200"
+            >
+              3 Days Ago
+            </Button>
+          </div>
+
+          <div className="h-6 w-px bg-slate-200 hidden lg:block" />
+          
+          {/* Date Picker */}
+          <div className="relative">
+            <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+            <input 
+              type="date" 
+              className="pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-700 cursor-pointer w-40 md:w-auto"
+              value={format(selectedDate, 'yyyy-MM-dd')}
+              onChange={handleDateChange}
+            />
+          </div>
+          
+          {/* Refresh Button */}
+          <Button 
+            variant="outline" 
+            size="icon" 
+            onClick={() => refreshAll()} 
+            disabled={appointmentsLoading}
+            className="border-slate-200"
+          >
+            <RefreshCw className={`w-4 h-4 ${appointmentsLoading ? 'animate-spin' : ''}`} />
+          </Button>
+          
+          {/* New Walk-In Button */}
+          <Button 
+            onClick={() => setIsModalOpen(true)} 
+            className="bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-md shadow-blue-200"
+          >
+            <Plus className="w-4 h-4" /> 
+            <span className="hidden md:inline">New Walk-In</span>
+            <span className="md:hidden">Walk-In</span>
+          </Button>
         </div>
-        <Button onClick={() => setShowAddModal(true)} className="bg-emerald-600 hover:bg-emerald-700">
-          <Plus className="w-4 h-4 mr-2" />
-          New Walk-In
-        </Button>
-      </div>
+      </header>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-600 mb-2">Waiting Queue</p>
-                <p className="text-4xl font-bold text-yellow-600">{stats.waiting}</p>
-              </div>
-              <Clock className="w-12 h-12 text-yellow-200" />
+      <div className="flex-1 flex overflow-hidden">
+        
+        {/* --- LEFT SIDEBAR: WORKING DOCTORS --- */}
+        <aside className="w-80 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 z-10 hidden md:flex">
+          <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                Doctors on Duty
+              </h2>
+              <Badge className="bg-blue-100 text-blue-700 border-0 text-xs">
+                {doctors.length}
+              </Badge>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-600 mb-2">Skipped Patients</p>
-                <p className="text-4xl font-bold text-orange-600">{stats.skipped}</p>
-              </div>
-              <RefreshCw className="w-12 h-12 text-orange-200" />
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <Input placeholder="Find doctor..." className="pl-9 bg-white border-slate-200" />
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-600 mb-2">In Consultation</p>
-                <p className="text-4xl font-bold text-purple-600">{stats.inConsult}</p>
-              </div>
-              <Activity className="w-12 h-12 text-purple-200" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-600 mb-2">Completed Today</p>
-                <p className="text-4xl font-bold text-emerald-600">{stats.completed}</p>
-              </div>
-              <Activity className="w-12 h-12 text-emerald-200" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Queue Management */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Patient Queue */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Today's Queue</CardTitle>
-              <div className="relative">
-                <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Search..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-48"
-                />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3 max-h-[600px] overflow-y-auto">
-            {filteredAppointments.map(apt => (
-              <div
-                key={apt._id}
-                onClick={() => setSelectedAppt(apt)}
-                className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                  selectedAppt?._id === apt._id
-                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950'
-                    : 'border-slate-200 hover:border-emerald-300'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${
-                      apt.status === 'SKIPPED' ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'
-                    }`}>
-                      #{apt.tokenNumber}
-                    </div>
-                    <div>
-                      <p className="font-bold text-slate-900 dark:text-slate-100">
-                        {apt.patientId?.firstName} {apt.patientId?.lastName}
-                      </p>
-                      <p className="text-sm text-slate-600">
-                        Dr. {apt.doctorId?.firstName} {apt.doctorId?.lastName}
-                      </p>
-                      {apt.skipCount > 0 && (
-                        <p className="text-xs text-orange-600 font-medium mt-1">
-                          Skipped {apt.skipCount}x
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge className={getStatusColor(apt.status)}>
-                      {apt.status}
-                    </Badge>
-                    {apt.status === 'SKIPPED' && (
-                      <Button 
-                        size="sm" 
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleReCheckIn(apt._id)
-                        }}
-                        className="bg-orange-600 hover:bg-orange-700 h-7 px-2"
-                      >
-                        <RefreshCw className="w-3 h-3 mr-1" />
-                        Re-Check In
-                      </Button>
-                    )}
-                  </div>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {/* "All Queues" Button */}
+            <button
+              onClick={() => setSelectedDoctorId(null)}
+              className={`w-full text-left p-3 rounded-xl border transition-all ${
+                selectedDoctorId === null 
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-md' 
+                  : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50 hover:border-slate-200'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4" />
+                  <span className="font-bold">All Queues</span>
                 </div>
+                <Badge variant="secondary" className={`${
+                  selectedDoctorId === null 
+                    ? 'bg-white/20 text-white' 
+                    : 'bg-slate-100 text-slate-700'
+                } border-0`}>
+                  {recentAppointments.length}
+                </Badge>
               </div>
-            ))}
-          </CardContent>
-        </Card>
+            </button>
 
-        {/* Patient Details & Check-In */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle>Patient Details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {selectedAppt ? (
-              <div className="space-y-6">
-                <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl">
-                  <Avatar className="w-16 h-16">
-                    <AvatarFallback className="text-xl font-bold">
-                      {selectedAppt.patientId?.firstName?.[0]}{selectedAppt.patientId?.lastName?.[0]}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h3 className="text-xl font-bold">
-                      {selectedAppt.patientId?.firstName} {selectedAppt.patientId?.lastName}
-                    </h3>
-                    <p className="text-sm text-slate-600">Token #{selectedAppt.tokenNumber}</p>
-                  </div>
-                </div>
+            {/* Sorted Doctor List */}
+            {sortedDoctors.map(doc => {
+              const live = liveQueueData?.[doc._id] || { status: 'OFFLINE', currentToken: 0 }
+              const meta = getStatusMeta(live.status)
+              const isActive = selectedDoctorId === doc._id
+              
+              // Count recent appointments for this doctor
+              const docPatientCount = recentAppointments.filter(a => 
+                (a.doctorId?._id || a.doctorId) === doc._id
+              ).length
 
-                {selectedAppt.status === 'BOOKED' && (
-                  <form onSubmit={(e) => { e.preventDefault(); handleCheckIn(); }} className="space-y-4">
-                    <h4 className="font-bold text-lg">Record Vitals</h4>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Temperature (°F)</Label>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          value={vitals.temperature}
-                          onChange={(e) => setVitals({ ...vitals, temperature: e.target.value })}
-                          placeholder="98.6"
-                          className="mt-1"
-                        />
+              const firstName = doc.firstName || 'Unknown'
+              const lastName = doc.lastName || ''
+              const initial = firstName[0] || 'D'
+
+              return (
+                <button
+                  key={doc._id}
+                  onClick={() => setSelectedDoctorId(doc._id)}
+                  className={`w-full p-3 rounded-xl border transition-all text-left group ${
+                    isActive 
+                      ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200 shadow-sm' 
+                      : 'bg-white border-slate-100 hover:border-blue-200 hover:shadow-sm'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="relative">
+                      <Avatar className="h-10 w-10 border-2 border-white shadow-sm">
+                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-bold">
+                          {initial}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white ${meta.color} shadow-sm`}></span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start gap-2">
+                        <h3 className={`font-bold text-sm truncate ${
+                          isActive ? 'text-blue-700' : 'text-slate-900'
+                        }`}>
+                          Dr. {firstName} {lastName}
+                        </h3>
+                        {docPatientCount > 0 && (
+                          <Badge variant="secondary" className="text-[10px] bg-slate-100 text-slate-700 border-0 h-5 px-1.5">
+                            {docPatientCount}
+                          </Badge>
+                        )}
                       </div>
-                      <div>
-                        <Label>Weight (kg)</Label>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          value={vitals.weight}
-                          onChange={(e) => setVitals({ ...vitals, weight: e.target.value })}
-                          placeholder="70"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label>BP Systolic</Label>
-                        <Input
-                          type="number"
-                          value={vitals.bpSystolic}
-                          onChange={(e) => setVitals({ ...vitals, bpSystolic: e.target.value })}
-                          placeholder="120"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label>BP Diastolic</Label>
-                        <Input
-                          type="number"
-                          value={vitals.bpDiastolic}
-                          onChange={(e) => setVitals({ ...vitals, bpDiastolic: e.target.value })}
-                          placeholder="80"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <Label>SpO2 (%)</Label>
-                        <Input
-                          type="number"
-                          value={vitals.spo2}
-                          onChange={(e) => setVitals({ ...vitals, spo2: e.target.value })}
-                          placeholder="98"
-                          className="mt-1"
-                        />
+                      
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <Badge variant="outline" className={`h-5 text-[10px] px-1.5 border-0 ${meta.bg} ${meta.text} font-medium`}>
+                          {meta.label}
+                        </Badge>
+                        {live.currentToken > 0 && (
+                          <span className="text-xs text-slate-400">
+                            Token: <span className="text-slate-700 font-bold">#{live.currentToken}</span>
+                          </span>
+                        )}
                       </div>
                     </div>
-
-                    <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700">
-                      Check In Patient
-                    </Button>
-                  </form>
-                )}
-
-                {selectedAppt.status === 'CHECKED_IN' && (
-                  <div className="text-center py-8">
-                    <Activity className="w-16 h-16 mx-auto text-yellow-500 mb-4" />
-                    <p className="font-bold text-lg">Patient is Waiting</p>
-                    <p className="text-sm text-slate-600">In queue for consultation</p>
+                    {isActive && <ChevronRight className="w-4 h-4 text-blue-500 self-center" />}
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <AlertCircle className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-                <p className="text-slate-500">Select a patient from the queue</p>
+                </button>
+              )
+            })}
+
+            {sortedDoctors.length === 0 && (
+              <div className="text-center py-8 text-slate-400">
+                <User className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No doctors available</p>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </aside>
+
+        {/* --- CENTER: PATIENT LIST --- */}
+        <main className="flex-1 flex flex-col min-w-0 bg-slate-50/50">
+          
+          {/* Stats Header */}
+          <div className="h-16 px-6 border-b border-slate-200 bg-white flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-2 overflow-hidden">
+              {selectedDoctorId ? (
+                <>
+                  <h2 className="text-lg font-bold text-slate-800 truncate">
+                    Dr. {doctors.find(d => d._id === selectedDoctorId)?.firstName}'s Queue
+                  </h2>
+                  <Badge className="bg-blue-50 text-blue-700 border-blue-100 hidden sm:inline-flex text-xs">
+                    Filtered
+                  </Badge>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-lg font-bold text-slate-800 truncate">All Patients</h2>
+                  <Badge variant="outline" className="border-slate-200 text-slate-500 hidden sm:inline-flex text-xs">
+                    Last 3 Days + Upcoming
+                  </Badge>
+                </>
+              )}
+            </div>
+
+            {/* Today's Live Stats */}
+            <div className="flex gap-4 text-sm shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+                <span className="text-slate-500 hidden sm:inline">Waiting:</span> 
+                <span className="font-bold text-slate-900">{viewStats.waiting}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                <span className="text-slate-500 hidden sm:inline">Consulting:</span> 
+                <span className="font-bold text-slate-900">{viewStats.consulting}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-slate-400" />
+                <span className="text-slate-500 hidden sm:inline">Done:</span> 
+                <span className="font-bold text-slate-900">{viewStats.completed}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 flex min-h-0">
+            {/* Queue List */}
+            <div className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col">
+              <QueueList 
+                appointments={filteredQueue} 
+                selectedDate={selectedDate}
+                selectedId={selectedAppt?._id}
+                onSelect={setSelectedAppt}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                onReCheckIn={async (id) => {
+                  await updateAppointmentStatus(id, 'CHECKED_IN')
+                  toast.success('Patient re-queued')
+                  refreshAll()
+                }}
+                isLoading={appointmentsLoading}
+              />
+            </div>
+
+            {/* Check-In Panel */}
+            <div className="hidden lg:flex w-[400px] border-l border-slate-200 bg-white flex-col">
+              <PatientCheckIn 
+                appointment={selectedAppt} 
+                onCheckInSuccess={() => { 
+                  refreshAll()
+                  setSelectedAppt(null)
+                  toast.success('Patient checked in successfully')
+                }}
+              />
+            </div>
+          </div>
+        </main>
       </div>
+
+      {/* Walk-In Modal */}
+      <WalkInModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)}
+        doctors={doctors}
+        defaultDoctorId={selectedDoctorId} 
+        onSuccess={() => { 
+          refreshAll()
+          toast.success('Walk-in appointment created')
+          setIsModalOpen(false)
+        }}
+      />
     </div>
   )
 }
