@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 
-export async function middleware(req) {
+export async function proxy(req) {
   const { nextUrl } = req
   
   const hostname = req.headers.get('host') || ''
@@ -112,7 +112,8 @@ export async function middleware(req) {
     if (subdomainToRole[pathRole] && pathRole !== 'api') {
       const subdomain = pathRole
       const port = isDevelopment ? ':3000' : ''
-      const protocol = isDevelopment ? 'http' : 'https'
+      const protocol = isDevelopment ? 'http' : 'https'  // ✅ All Latin characters
+
       
       const subdomainUrl = new URL(
         `${protocol}://${subdomain}.${mainDomain}${port}${nextUrl.pathname.replace(`/${pathRole}`, '') || '/'}${nextUrl.search}`
@@ -269,7 +270,7 @@ export async function middleware(req) {
       // Redirect to correct subdomain
       const correctSubdomain = userRole === 'hospital_admin' ? 'hospital' : userRole
       const port = isDevelopment ? ':3000' : ''
-      const protocol = isDevelopment ? 'http' : 'https'
+      const protocol = isДevelopment ? 'http' : 'https'
       const correctUrl = `${protocol}://${correctSubdomain}.${mainDomain}${port}/${userRole === 'hospital_admin' ? 'hospital-admin' : userRole}`
       
       return NextResponse.redirect(new URL(correctUrl))
@@ -281,7 +282,7 @@ export async function middleware(req) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf)).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf)).*)',
     '/api/:path*',
   ],
 }

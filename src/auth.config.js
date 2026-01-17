@@ -14,13 +14,6 @@ const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || 'localhost'
 // Only skip domain attribute for plain 'localhost'
 const shouldUseDomainCookie = mainDomain !== 'localhost'
 
-console.log('🔧 Auth Config:', { 
-  cookieDomain: shouldUseDomainCookie ? `.${mainDomain}` : undefined,
-  useSecureCookies: !isDevelopment,
-  mainDomain,
-  nodeEnv: process.env.NODE_ENV,
-  isLocalhost: mainDomain === 'localhost'
-})
 
 export const authOptions = {
   providers: [
