@@ -1,8 +1,8 @@
 'use client'
 
-import { signIn, useSession } from 'next-auth/react'
+import { signIn, useSession, getCsrfToken } from 'next-auth/react'
 import { useState, useEffect } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -47,7 +47,6 @@ const signInSchema = z.object({
 
 export default function SignInPage() {
   const searchParams = useSearchParams()
-  const router = useRouter()
   const { data: session, status } = useSession()
   const roleFromUrl = searchParams.get('role') || 'user'
   const redirectTo = searchParams.get('redirect')
@@ -63,7 +62,7 @@ export default function SignInPage() {
 
   const roles = {
     user: {
-      label: 'user',
+      label: 'Patient',
       description: 'Book appointments, access records, and manage health',
       icon: Users,
       gradient: 'from-blue-500 via-blue-600 to-violet-600',
@@ -103,8 +102,23 @@ export default function SignInPage() {
   const currentRole = roles[roleFromUrl] || roles.user
   const IconComponent = currentRole.icon
 
+  // ✅ Fetch CSRF token when component mounts
+  useEffect(() => {
+    const fetchCsrfToken = async () => {
+      try {
+        const token = await getCsrfToken()
+        console.log('✅ CSRF token loaded:', token ? 'present' : 'missing')
+      } catch (error) {
+        console.error('CSRF error:', error)
+      }
+    }
+    fetchCsrfToken()
+  }, [])
+
+  // Redirect authenticated users
   useEffect(() => {
     if (status === 'authenticated' && session?.user) {
+      console.log('✅ Already authenticated, redirecting...')
       const userRole = session.user.role
       const roleRoutes = {
         user: '/user',
@@ -114,34 +128,96 @@ export default function SignInPage() {
         sub_admin: '/sub-admin'
       }
       
-      const destination = redirectTo || roleRoutes[userRole] || '/'
-      router.replace(destination)
+      const destination = redirectTo || roleRoutes[userRole] || '/user'
+      console.log('🔀 Redirecting to:', destination)
+      window.location.href = destination
     }
-  }, [status, session, redirectTo, router])
+  }, [status, session, redirectTo])
 
   const onSubmit = async (data) => {
     setLoading(true)
     const loadingToast = toast.loading('Signing in...')
     
     try {
-      const callbackUrl = redirectTo || currentRole.redirectUrl
+      const currentOrigin = window.location.origin
       
-      // Use redirect-based sign-in to avoid fetch failures
+      let targetUrl
+      if (redirectTo) {
+        targetUrl = redirectTo.startsWith('http') 
+          ? redirectTo 
+          : `${currentOrigin}${redirectTo}`
+      } else {
+        targetUrl = `${currentOrigin}${currentRole.redirectUrl}`
+      }
+      
+      console.log('🔐 Signing in, target:', targetUrl)
+      
       const result = await signIn('credentials', {
         email: data.email,
         password: data.password,
-        redirect: true,
-        callbackUrl: callbackUrl
+        redirect: false,
+        callbackUrl: targetUrl
       })
 
-      // If we reach this point without redirecting, there was an error
       toast.dismiss(loadingToast)
+      
       if (result?.error) {
-        toast.error('Invalid email or password')
+        console.error('❌ Error:', result.error)
+        if (result.error === 'CredentialsSignin') {
+          toast.error('Invalid email or password')
+        } else if (result.error === 'MissingCSRF') {
+          // Auto-retry after refreshing CSRF token
+          toast.loading('Refreshing security token...', { id: 'csrf-refresh' })
+          const newToken = await getCsrfToken()
+          console.log('🔄 Refreshed CSRF token:', newToken ? 'success' : 'failed')
+          toast.dismiss('csrf-refresh')
+          
+          if (newToken) {
+            toast.loading('Retrying sign in...', { id: 'retry-signin' })
+            // Retry the sign-in with the new CSRF token
+            const retryResult = await signIn('credentials', {
+              email: data.email,
+              password: data.password,
+              redirect: false,
+              callbackUrl: targetUrl
+            })
+            
+            toast.dismiss('retry-signin')
+            
+            if (retryResult?.error) {
+              toast.error(retryResult.error === 'CredentialsSignin' ? 'Invalid email or password' : retryResult.error)
+              setLoading(false)
+              return
+            }
+            
+            if (retryResult?.ok) {
+              console.log('✅ Sign-in successful on retry!')
+              toast.success('Signed in successfully!')
+              // useEffect will handle redirect when session updates
+              return
+            }
+          } else {
+            toast.error('Could not refresh security token. Please refresh the page and try again.')
+            setLoading(false)
+            return
+          }
+        } else {
+          toast.error(result.error)
+        }
         setLoading(false)
         return
       }
+      
+      if (result?.ok) {
+        console.log('✅ Sign-in successful!')
+        toast.success('Signed in successfully!')
+        // useEffect will handle redirect when session updates
+      } else {
+        toast.error('Sign in failed. Please try again.')
+        setLoading(false)
+      }
     } catch (err) {
+      console.error('❌ Exception:', err)
       toast.dismiss(loadingToast)
       toast.error('An error occurred. Please try again.')
       setLoading(false)
@@ -154,8 +230,21 @@ export default function SignInPage() {
     
     toast.loading(`Connecting to ${providerNames[provider]}...`, { id: 'social-login' })
     
-    const callbackUrl = redirectTo || currentRole.redirectUrl
-    await signIn(provider, { callbackUrl: callbackUrl, redirect: true })
+    const currentOrigin = window.location.origin
+    
+    let targetUrl
+    if (redirectTo) {
+      targetUrl = redirectTo.startsWith('http') 
+        ? redirectTo 
+        : `${currentOrigin}${redirectTo}`
+    } else {
+      targetUrl = `${currentOrigin}${currentRole.redirectUrl}`
+    }
+    
+    await signIn(provider, { 
+      callbackUrl: targetUrl, 
+      redirect: true 
+    })
   }
 
   if (status === 'loading') {
@@ -164,6 +253,17 @@ export default function SignInPage() {
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
           <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (status === 'authenticated') {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-violet-50 dark:from-gray-950 dark:via-blue-950 dark:to-gray-900">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">Redirecting to dashboard...</p>
         </div>
       </div>
     )
@@ -484,7 +584,7 @@ export default function SignInPage() {
                     <p className="text-center text-xs text-gray-600 dark:text-gray-400">
                       Don't have an account?{' '}
                       <Link 
-                        href="/sign-up" 
+                        href={`/sign-up?role=${roleFromUrl}`}
                         className={`font-bold bg-gradient-to-r ${currentRole.gradient} bg-clip-text text-transparent hover:underline`}
                       >
                         Create account →

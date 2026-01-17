@@ -1,10 +1,106 @@
+// middleware.js
 import { NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 
 export async function middleware(req) {
   const { nextUrl } = req
-
-  // ✅ Public API routes that don't need authentication
+  
+  const hostname = req.headers.get('host') || ''
+  const hostnameWithoutPort = hostname.split(':')[0]
+  const parts = hostnameWithoutPort.split('.')
+  
+  let currentHost = 'main'
+  if (parts.length === 2 && parts[1] === 'localhost') {
+    currentHost = parts[0]
+  } else if (parts.length > 2) {
+    currentHost = parts[0]
+  }
+  
+  const isDevelopment = process.env.NODE_ENV === 'development'
+  const mainDomain = isDevelopment ? 'localhost' : 'qlinichealth.com'
+  const isMainDomain = currentHost === 'main' || currentHost === 'localhost'
+  
+  const subdomainToRole = {
+    'admin': 'admin',
+    'hospital': 'hospital_admin',
+    'doctor': 'doctor',
+    'user': 'user',
+    'api': 'api'
+  }
+  
+  // ✅ Get the request origin
+  const origin = req.headers.get('origin')
+  
+  // ✅ IMPORTANT: Skip middleware for NextAuth routes
+  if (nextUrl.pathname.startsWith('/api/auth')) {
+    return NextResponse.next()
+  }
+  
+  // ✅ CORS handling for API subdomain
+  if (currentHost === 'api') {
+    // Define allowed origins
+    const allowedOrigins = [
+      'http://user.localhost:3000',
+      'http://doctor.localhost:3000',
+      'http://admin.localhost:3000',
+      'http://hospital.localhost:3000',
+      'https://user.qlinichealth.com',
+      'https://doctor.qlinichealth.com',
+      'https://admin.qlinichealth.com',
+      'https://hospital.qlinichealth.com',
+    ]
+    
+    // ✅ Use specific origin instead of wildcard
+    const allowedOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0]
+    
+    // Handle OPTIONS preflight
+    if (req.method === 'OPTIONS') {
+      return new NextResponse(null, {
+        status: 200,
+        headers: {
+          'Access-Control-Allow-Origin': allowedOrigin,
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie',
+          'Access-Control-Allow-Credentials': 'true',
+        },
+      })
+    }
+    
+    const url = nextUrl.clone()
+    
+    if (nextUrl.pathname.startsWith('/api/')) {
+      url.pathname = nextUrl.pathname.replace('/api', '')
+    } else if (nextUrl.pathname !== '/' && !nextUrl.pathname.startsWith('/_next')) {
+      url.pathname = `/api${nextUrl.pathname}`
+    }
+    
+    // Add CORS headers with specific origin
+    const response = NextResponse.rewrite(url)
+    response.headers.set('Access-Control-Allow-Origin', allowedOrigin)
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS')
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie')
+    response.headers.set('Access-Control-Allow-Credentials', 'true')
+    
+    return response
+  }
+  
+  // Redirect from main domain
+  if (isMainDomain) {
+    const pathRole = nextUrl.pathname.split('/')[1]
+    
+    if (subdomainToRole[pathRole] && pathRole !== 'api') {
+      const subdomain = pathRole === 'hospital_admin' ? 'hospital' : pathRole
+      
+      const subdomainUrl = new URL(req.url)
+      subdomainUrl.hostname = `${subdomain}.${mainDomain}`
+      subdomainUrl.pathname = nextUrl.pathname.replace(`/${pathRole}`, '') || '/'
+      
+      return NextResponse.redirect(subdomainUrl)
+    }
+  }
+  
+  const roleFromSubdomain = subdomainToRole[currentHost]
+  
   const publicApiPaths = [
     '/api/auth',
     '/api/user/create',
@@ -15,23 +111,15 @@ export async function middleware(req) {
     '/api/home/stats'
   ]
 
-  // Check if current path is a public API route
-  const isPublicApi = publicApiPaths.some(path => 
-    nextUrl.pathname.startsWith(path)
-  )
-
-  if (isPublicApi) {
-   
+  if (publicApiPaths.some(path => nextUrl.pathname.startsWith(path))) {
     return NextResponse.next()
   }
 
-  // Get session token for protected routes
-  // Try to read token from all possible cookie names (Auth.js v5 + legacy next-auth)
   const cookieCandidates = [
-    '__Secure-authjs.session-token',
     'authjs.session-token',
-    '__Secure-next-auth.session-token',
+    '__Secure-authjs.session-token',
     'next-auth.session-token',
+    '__Secure-next-auth.session-token',
   ]
 
   let token = null
@@ -39,25 +127,23 @@ export async function middleware(req) {
     if (req.cookies.get(cookieName)) {
       token = await getToken({
         req,
-        secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+        secret: process.env.NEXTAUTH_SECRET,
         cookieName,
       })
       if (token) break
     }
   }
 
-  // Fallback to default resolution if not found by explicit cookie names
   if (!token) {
     token = await getToken({
       req,
-      secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+      secret: process.env.NEXTAUTH_SECRET,
     })
   }
   
   const isLoggedIn = !!token
-  const role = token?.role
+  const userRole = token?.role
 
-  // Public page routes
   const publicPaths = [
     '/',
     '/sign-in',
@@ -71,61 +157,74 @@ export async function middleware(req) {
     '/terms',
     '/unauthorized',
   ]
-  
+
   const isPublicPath = publicPaths.some(path => 
     nextUrl.pathname === path || nextUrl.pathname.startsWith(path + '/')
   )
   
-  if (isPublicPath) {
-    return NextResponse.next()
+  if (roleFromSubdomain && roleFromSubdomain !== 'api' && !isLoggedIn && !isPublicPath) {
+    const signInUrl = new URL('/sign-in', req.url)
+    signInUrl.searchParams.set('role', roleFromSubdomain)
+    signInUrl.searchParams.set('redirect', nextUrl.pathname)
+    return NextResponse.redirect(signInUrl)
   }
   
-  // Protected API routes - require authentication
+  if (roleFromSubdomain && roleFromSubdomain !== 'api' && isPublicPath && nextUrl.pathname === '/') {
+    if (!isLoggedIn) {
+      const signInUrl = new URL('/sign-in', req.url)
+      signInUrl.searchParams.set('role', roleFromSubdomain)
+      return NextResponse.redirect(signInUrl)
+    }
+  }
+  
+  if (isPublicPath && nextUrl.pathname !== '/') {
+    return NextResponse.next()
+  }
+
+  if (roleFromSubdomain && roleFromSubdomain !== 'api') {
+    const url = nextUrl.clone()
+    const rolePath = roleFromSubdomain === 'hospital_admin' ? 'hospital-admin' : roleFromSubdomain
+    
+    if (!url.pathname.startsWith(`/${rolePath}`)) {
+      url.pathname = `/${rolePath}${url.pathname === '/' ? '' : url.pathname}`
+      return NextResponse.rewrite(url)
+    }
+  }
+
   if (nextUrl.pathname.startsWith('/api')) {
     if (!isLoggedIn) {
-      console.log('❌ Unauthorized API access:', nextUrl.pathname)
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     return NextResponse.next()
   }
-  
-  // Protected page routes
+
   const isAdminRoute = nextUrl.pathname.startsWith('/admin')
-  const isSubAdminRoute = nextUrl.pathname.startsWith('/sub-admin')
   const isDoctorRoute = nextUrl.pathname.startsWith('/doctor')
-  const isuserRoute = nextUrl.pathname.startsWith('/user')
+  const isUserRoute = nextUrl.pathname.startsWith('/user')
   const isHospitalAdminRoute = nextUrl.pathname.startsWith('/hospital-admin')
 
-  // Redirect to sign-in if not logged in
-  if (!isLoggedIn && (isAdminRoute || isSubAdminRoute || isDoctorRoute || isuserRoute || isHospitalAdminRoute)) {
+  if (!isLoggedIn && (isAdminRoute || isDoctorRoute || isUserRoute || isHospitalAdminRoute)) {
     const signInUrl = new URL('/sign-in', nextUrl.origin)
     signInUrl.searchParams.set('redirect', nextUrl.pathname)
     return NextResponse.redirect(signInUrl)
   }
 
-  // Role-based access control
   if (isLoggedIn) {
-    if (isAdminRoute && role !== 'admin') {
+    if (isAdminRoute && userRole !== 'admin') {
       return NextResponse.redirect(new URL('/unauthorized', nextUrl))
     }
-
-    if (isSubAdminRoute && !['admin', 'sub_admin'].includes(role)) {
+    if (isDoctorRoute && userRole !== 'doctor') {
       return NextResponse.redirect(new URL('/unauthorized', nextUrl))
     }
-
-    if (isDoctorRoute && role !== 'doctor') {
+    if (isUserRoute && userRole !== 'user') {
       return NextResponse.redirect(new URL('/unauthorized', nextUrl))
     }
-
-    if (isuserRoute && role !== 'user') {
+    if (isHospitalAdminRoute && userRole !== 'hospital_admin') {
       return NextResponse.redirect(new URL('/unauthorized', nextUrl))
     }
-
-    if (isHospitalAdminRoute && role !== 'hospital_admin') {
-      return NextResponse.redirect(new URL('/unauthorized', nextUrl))
+    
+    if (roleFromSubdomain && roleFromSubdomain !== 'api' && userRole !== roleFromSubdomain) {
+      return NextResponse.redirect(new URL('/unauthorized', req.url))
     }
   }
 

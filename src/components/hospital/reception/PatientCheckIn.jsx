@@ -11,12 +11,12 @@ import { format } from 'date-fns'
 
 export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
   const [vitals, setVitals] = useState({
-    temperature: appointment?.vitals?.temperature || '',
-    weight: appointment?.vitals?.weight || '',
-    bpSystolic: appointment?.vitals?.bpSystolic || '',
-    bpDiastolic: appointment?.vitals?.bpDiastolic || '',
-    spo2: appointment?.vitals?.spo2 || '',
-    heartRate: appointment?.vitals?.heartRate || ''
+    temperature: '',
+    weight: '',
+    bpSystolic: '',
+    bpDiastolic: '',
+    spo2: '',
+    heartRate: ''
   })
   const [loading, setLoading] = useState(false)
 
@@ -80,108 +80,6 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
   }
 
   const isCheckedIn = appointment.status === 'CHECKED_IN' || appointment.status === 'IN_CONSULTATION'
-  const isCompleted = appointment.status === 'COMPLETED'
-
-  // Function to update vitals for completed appointments
-  const updateVitals = async () => {
-    setLoading(true)
-    
-    try {
-      const res = await fetch(`/api/appointment/${appointment._id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          vitals: {
-            temperature: vitals.temperature || undefined,
-            weight: vitals.weight || undefined,
-            bpSystolic: vitals.bpSystolic || undefined,
-            bpDiastolic: vitals.bpDiastolic || undefined,
-            spo2: vitals.spo2 || undefined,
-            heartRate: vitals.heartRate || undefined
-          }
-        })
-      })
-      
-      const data = await res.json()
-      
-      if (res.ok && data.success) {
-        toast.success('Vitals updated successfully!')
-        onCheckInSuccess?.() // Refresh the data
-      } else {
-        toast.error(data.error || 'Failed to update vitals')
-      }
-    } catch (err) {
-      console.error('Vitals update error:', err)
-      toast.error('Network error')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Function to re-check-in a completed appointment
-  const reCheckIn = async () => {
-    setLoading(true)
-    
-    try {
-      const res = await fetch('/api/appointment/check-in', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          appointmentId: appointment._id,
-          vitals: {
-            temperature: vitals.temperature || undefined,
-            weight: vitals.weight || undefined,
-            bpSystolic: vitals.bpSystolic || undefined,
-            bpDiastolic: vitals.bpDiastolic || undefined,
-            spo2: vitals.spo2 || undefined,
-            heartRate: vitals.heartRate || undefined
-          },
-          paymentStatus: 'PAID'
-        })
-      })
-      
-      const data = await res.json()
-      
-      if (res.ok && data.success) {
-        toast.success(`Re-checked In! Token #${data.tokenNumber}`)
-        onCheckInSuccess?.()
-        // Reset form
-        setVitals({
-          temperature: '',
-          weight: '',
-          bpSystolic: '',
-          bpDiastolic: '',
-          spo2: '',
-          heartRate: ''
-        })
-      } else {
-        toast.error(data.error || 'Re-check-in failed')
-      }
-    } catch (err) {
-      console.error('Re-check-in error:', err)
-      toast.error('Network error')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Don't show form for completed appointments
-  if (isCompleted) {
-    return (
-      <Card className="border-slate-200 shadow-sm h-full overflow-y-auto flex flex-col">
-        <CardHeader className="border-b pb-4 flex-shrink-0">
-          <CardTitle className="text-lg">Patient Details</CardTitle>
-        </CardHeader>
-        
-        <CardContent className="p-6 flex-1 flex flex-col justify-center items-center text-center">
-          <CheckCircle className="w-16 h-16 text-green-500 mb-4" />
-          <h3 className="text-lg font-semibold text-slate-800 mb-2">Appointment Completed</h3>
-          <p className="text-slate-600 mb-4">This appointment has been marked as completed and no further actions are available.</p>
-          <p className="text-sm text-slate-500">Status: <span className="font-semibold text-green-600">COMPLETED</span></p>
-        </CardContent>
-      </Card>
-    )
-  }
 
   return (
     <Card className="border-slate-200 shadow-sm h-full overflow-y-auto flex flex-col">
@@ -270,119 +168,6 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
                     </div>
                   )}
                 </div>
-              </div>
-            )}
-
-            {/* Re-check-in Form for Completed Appointments */}
-            {isCompleted && (
-              <div className="border-t pt-6 mt-4">
-                <h4 className="font-semibold text-slate-700 mb-4 flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-blue-600" /> Re-check-in Patient
-                </h4>
-                
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  {/* Temperature */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-slate-600 text-xs font-medium">
-                      <Thermometer className="w-3 h-3 text-orange-500" /> Temperature (°F)
-                    </Label>
-                    <Input 
-                      placeholder={appointment.vitals?.temperature || "98.6"} 
-                      type="number" 
-                      step="0.1" 
-                      value={vitals.temperature} 
-                      onChange={e => setVitals({...vitals, temperature: e.target.value})}
-                      className="h-10"
-                    />
-                  </div>
-
-                  {/* Weight */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-slate-600 text-xs font-medium">
-                      <Weight className="w-3 h-3 text-blue-500" /> Weight (kg)
-                    </Label>
-                    <Input 
-                      placeholder={appointment.vitals?.weight || "70"} 
-                      type="number" 
-                      step="0.1" 
-                      value={vitals.weight} 
-                      onChange={e => setVitals({...vitals, weight: e.target.value})}
-                      className="h-10"
-                    />
-                  </div>
-
-                  {/* BP Systolic */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-slate-600 text-xs font-medium">
-                      <Heart className="w-3 h-3 text-red-500" /> BP Systolic
-                    </Label>
-                    <Input 
-                      placeholder={appointment.vitals?.bpSystolic || "120"} 
-                      type="number" 
-                      value={vitals.bpSystolic} 
-                      onChange={e => setVitals({...vitals, bpSystolic: e.target.value})}
-                      className="h-10"
-                    />
-                  </div>
-
-                  {/* BP Diastolic */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-slate-600 text-xs font-medium">
-                      <Heart className="w-3 h-3 text-red-500" /> BP Diastolic
-                    </Label>
-                    <Input 
-                      placeholder={appointment.vitals?.bpDiastolic || "80"} 
-                      type="number" 
-                      value={vitals.bpDiastolic} 
-                      onChange={e => setVitals({...vitals, bpDiastolic: e.target.value})}
-                      className="h-10"
-                    />
-                  </div>
-
-                  {/* SpO2 */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-slate-600 text-xs font-medium">
-                      <Wind className="w-3 h-3 text-cyan-500" /> SpO2 (%)
-                    </Label>
-                    <Input 
-                      placeholder={appointment.vitals?.spo2 || "98"} 
-                      type="number" 
-                      value={vitals.spo2} 
-                      onChange={e => setVitals({...vitals, spo2: e.target.value})}
-                      className="h-10"
-                    />
-                  </div>
-
-                  {/* Heart Rate */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-slate-600 text-xs font-medium">
-                      <Heart className="w-3 h-3 text-pink-500" /> Heart Rate (bpm)
-                    </Label>
-                    <Input 
-                      placeholder={appointment.vitals?.heartRate || "72"} 
-                      type="number" 
-                      value={vitals.heartRate} 
-                      onChange={e => setVitals({...vitals, heartRate: e.target.value})}
-                      className="h-10"
-                    />
-                  </div>
-                </div>
-
-                <Button 
-                  type="button" 
-                  onClick={reCheckIn}
-                  disabled={loading} 
-                  className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base shadow-md shadow-blue-200 font-semibold"
-                >
-                  {loading ? (
-                    <>Processing Re-check-in...</>
-                  ) : (
-                    <>
-                      <Activity className="w-5 h-5 mr-2" />
-                      Re-check-in Patient
-                    </>
-                  )}
-                </Button>
               </div>
             )}
 
