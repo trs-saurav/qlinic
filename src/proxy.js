@@ -18,6 +18,12 @@ export async function proxy(req) {
   } else if (parts[0] === 'localhost') {
     currentHost = 'main' // Plain localhost -> main
   }
+
+  // Enforce subdomain isolation for 'user' subdomain
+  if (currentHost === 'user' && (nextUrl.pathname.startsWith('/doctor') || nextUrl.pathname.startsWith('/hospital'))) {
+    // Redirect to the user's dashboard or an unauthorized page
+    return NextResponse.redirect(new URL('/user', req.url));
+  }
   
   const isDevelopment = process.env.NODE_ENV === 'development'
   const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || 'localhost'
