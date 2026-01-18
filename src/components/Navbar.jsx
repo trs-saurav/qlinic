@@ -384,7 +384,7 @@ const Navbar = () => {
     {
       label: "Hospital Admin",
       icon: Building2,
-      href: "/hospital-admin",
+      href: "hospital",
       description: "Hospital management",
       gradient: "from-violet-500 to-purple-500",
     },
@@ -409,7 +409,7 @@ const Navbar = () => {
       case "doctor":
         return "/doctor";
       case "hospital_admin":
-        return "/hospital-admin";
+        return "/hospital";
       case "admin":
         return "/admin";
       case "sub_admin":

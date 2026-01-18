@@ -55,7 +55,7 @@ export const AppContextProvider = (props) => {
             [ROLES.USER]: '/user',
             [ROLES.PATIENT]: '/user',
             [ROLES.DOCTOR]: '/doctor',
-            [ROLES.HOSPITAL_ADMIN]: '/hospital-admin',
+            [ROLES.HOSPITAL_ADMIN]: '/hospital',
             [ROLES.ADMIN]: '/admin',
         }
         router.push(roleMap[userRole] || '/')

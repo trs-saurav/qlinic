@@ -84,7 +84,7 @@ export default function SignInPage() {
       description: 'Control operations, staff, and performance',
       icon: Building2,
       gradient: 'from-purple-500 via-purple-600 to-pink-600',
-      redirectUrl: '/hospital-admin',
+      redirectUrl: '/hospital',
       features: ['Staff management', 'Analytics', 'Operations'],
       bgGradient: 'from-purple-500/20 via-pink-500/20 to-rose-500/20'
     },
@@ -123,7 +123,7 @@ export default function SignInPage() {
       const roleRoutes = {
         user: '/user',
         doctor: '/doctor',
-        hospital_admin: '/hospital-admin',
+        hospital_admin: '/hospital',
         admin: '/admin',
         sub_admin: '/sub-admin'
       }
@@ -138,95 +138,141 @@ export default function SignInPage() {
     }
   }, [status, session, redirectTo])
 
-  const onSubmit = async (data) => {
-    setLoading(true)
-    const loadingToast = toast.loading('Signing in...')
-    
-    try {
-      const currentOrigin = window.location.origin
-      
-      let targetUrl
-      if (redirectTo) {
-        targetUrl = redirectTo.startsWith('http') 
-          ? redirectTo 
-          : `${currentOrigin}${redirectTo}`
-      } else {
-        targetUrl = `${currentOrigin}${currentRole.redirectUrl}`
-      }
-      
-      console.log('🔐 Signing in, target:', targetUrl)
-      
-      const result = await signIn('credentials', {
-        email: data.email,
-        password: data.password,
-        redirect: false,
-        callbackUrl: targetUrl
-      })
+const onSubmit = async (data) => {
+  setLoading(true)
+  
+  // ============ CLIENT-SIDE DEBUG START ============
+  console.log('\n' + '='.repeat(70))
+  console.log('🖥️  CLIENT-SIDE DEBUG - SIGN IN ATTEMPT')
+  console.log('='.repeat(70))
+  console.log('📍 Current URL:', window.location.href)
+  console.log('📍 Current hostname:', window.location.hostname)
+  console.log('📍 Current pathname:', window.location.pathname)
+  console.log('')
+  console.log('📥 Form data received:')
+  console.log('   Email:', data.email)
+  console.log('   Password:', data.password ? '***' + data.password.slice(-3) : 'MISSING')
+  console.log('')
+  console.log('🎭 Role information:')
+  console.log('   roleFromUrl:', roleFromUrl)
+  console.log('   Type:', typeof roleFromUrl)
+  console.log('   Is defined?', roleFromUrl !== undefined)
+  console.log('   Is null?', roleFromUrl === null)
+  console.log('   Is empty string?', roleFromUrl === '')
+  console.log('')
+  console.log('🎯 Target redirect:')
+  const currentOrigin = window.location.origin
+  let targetUrl
+  if (redirectTo) {
+    targetUrl = redirectTo.startsWith('http') 
+      ? redirectTo 
+      : `${currentOrigin}${redirectTo}`
+  } else {
+    targetUrl = `${currentOrigin}${currentRole.redirectUrl}`
+  }
+  console.log('   Target URL:', targetUrl)
+  console.log('   Current role config:', currentRole.label)
+  console.log('')
+  console.log('📤 About to send signIn request with:')
+  console.log('   email:', data.email)
+  console.log('   password: ***')
+  console.log('   role:', roleFromUrl, '<-- THIS MUST NOT BE UNDEFINED')
+  console.log('   redirect: false')
+  console.log('   callbackUrl:', targetUrl)
+  console.log('='.repeat(70))
+  console.log('')
+  // ============ CLIENT-SIDE DEBUG END ============
+  
+  const loadingToast = toast.loading('Signing in...')
+  
+  try {
+    const result = await signIn('credentials', {
+      email: data.email,
+      password: data.password,
+      role: roleFromUrl,  // ✅ Pass role
+      redirect: false,
+      callbackUrl: targetUrl
+    })
 
-      toast.dismiss(loadingToast)
+    // ============ CLIENT-SIDE RESULT DEBUG START ============
+    console.log('\n' + '='.repeat(70))
+    console.log('🖥️  CLIENT-SIDE DEBUG - SIGN IN RESULT')
+    console.log('='.repeat(70))
+    console.log('📥 SignIn result received:')
+    console.log('   result.ok:', result?.ok)
+    console.log('   result.error:', result?.error)
+    console.log('   result.status:', result?.status)
+    console.log('   result.url:', result?.url)
+    console.log('   Full result:', JSON.stringify(result, null, 2))
+    console.log('='.repeat(70))
+    console.log('')
+    // ============ CLIENT-SIDE RESULT DEBUG END ============
+
+    toast.dismiss(loadingToast)
+    
+    if (result?.error) {
+      console.error('❌ Sign-in failed with error:', result.error)
       
-      if (result?.error) {
-        console.error('❌ Error:', result.error)
-        if (result.error === 'CredentialsSignin') {
-          toast.error('Invalid email or password')
-        } else if (result.error === 'MissingCSRF') {
-          // Auto-retry after refreshing CSRF token
-          toast.loading('Refreshing security token...', { id: 'csrf-refresh' })
-          const newToken = await getCsrfToken()
-          console.log('🔄 Refreshed CSRF token:', newToken ? 'success' : 'failed')
-          toast.dismiss('csrf-refresh')
+      if (result.error === 'CredentialsSignin') {
+        toast.error('Invalid email, password, or you are trying to sign in with the wrong role')
+      } else if (result.error === 'MissingCSRF') {
+        toast.loading('Refreshing security token...', { id: 'csrf-refresh' })
+        const newToken = await getCsrfToken()
+        toast.dismiss('csrf-refresh')
+        
+        if (newToken) {
+          toast.loading('Retrying sign in...', { id: 'retry-signin' })
+          const retryResult = await signIn('credentials', {
+            email: data.email,
+            password: data.password,
+            role: roleFromUrl,
+            redirect: false,
+            callbackUrl: targetUrl
+          })
           
-          if (newToken) {
-            toast.loading('Retrying sign in...', { id: 'retry-signin' })
-            // Retry the sign-in with the new CSRF token
-            const retryResult = await signIn('credentials', {
-              email: data.email,
-              password: data.password,
-              redirect: false,
-              callbackUrl: targetUrl
-            })
-            
-            toast.dismiss('retry-signin')
-            
-            if (retryResult?.error) {
-              toast.error(retryResult.error === 'CredentialsSignin' ? 'Invalid email or password' : retryResult.error)
-              setLoading(false)
-              return
-            }
-            
-            if (retryResult?.ok) {
-              console.log('✅ Sign-in successful on retry!')
-              toast.success('Signed in successfully!')
-              // useEffect will handle redirect when session updates
-              return
-            }
-          } else {
-            toast.error('Could not refresh security token. Please refresh the page and try again.')
+          toast.dismiss('retry-signin')
+          
+          if (retryResult?.error) {
+            toast.error(retryResult.error === 'CredentialsSignin' 
+              ? 'Invalid email, password, or wrong role' 
+              : retryResult.error)
             setLoading(false)
             return
           }
+          
+          if (retryResult?.ok) {
+            console.log('✅ Sign-in successful on retry!')
+            toast.success('Signed in successfully!')
+            return
+          }
         } else {
-          toast.error(result.error)
+          toast.error('Could not refresh security token. Please refresh the page and try again.')
+          setLoading(false)
+          return
         }
-        setLoading(false)
-        return
-      }
-      
-      if (result?.ok) {
-        console.log('✅ Sign-in successful!')
-        toast.success('Signed in successfully!')
-        // useEffect will handle redirect when session updates
       } else {
-        toast.error('Sign in failed. Please try again.')
-        setLoading(false)
+        toast.error(result.error)
       }
-    } catch (err) {
-      console.error('❌ Exception:', err)
-      toast.dismiss(loadingToast)
-      toast.error('An error occurred. Please try again.')
+      setLoading(false)
+      return
+    }
+    
+    if (result?.ok) {
+      console.log('✅ Sign-in successful!')
+      toast.success('Signed in successfully!')
+    } else {
+      toast.error('Sign in failed. Please try again.')
       setLoading(false)
     }
+  } catch (err) {
+    console.error('❌ Exception during sign-in:', err)
+    console.error('Stack trace:', err.stack)
+    toast.dismiss(loadingToast)
+    toast.error('An error occurred. Please try again.')
+    setLoading(false)
   }
+}
+
 
   const handleSocialLogin = async (provider) => {
     setSocialLoading(provider)

@@ -78,7 +78,7 @@ const ProtectedRoute = ({
               router.push('/doctor')
               break
             case ROLES.HOSPITAL_ADMIN:
-              router.push('/hospital-admin')
+              router.push('/hospital')
               break
             case ROLES.ADMIN:
               router.push('/admin')

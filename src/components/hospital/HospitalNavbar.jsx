@@ -52,54 +52,54 @@ import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 
 const navigationTabs = [
-  { id: "OVERVIEW", label: "Overview", icon: Home, href: "/hospital-admin" },
+  { id: "OVERVIEW", label: "Overview", icon: Home, href: "/hospital" },
   {
     id: "RECEPTION",
     label: "Reception",
     icon: ClipboardList,
-    href: "/hospital-admin/reception",
+    href: "/hospital/reception",
   },
   {
     id: "APPOINTMENTS",
     label: "Appointments",
     icon: Calendar,
-    href: "/hospital-admin/appointments",
+    href: "/hospital/appointments",
   },
   {
     id: "STAFF",
     label: "Staff",
     icon: Stethoscope,
-    href: "/hospital-admin/staff",
+    href: "/hospital/staff",
   },
   {
     id: "PATIENTS",
     label: "Patients",
     icon: Users,
-    href: "/hospital-admin/patients",
+    href: "/hospital/patients",
   },
   {
     id: "INVENTORY",
     label: "Inventory",
     icon: Package,
-    href: "/hospital-admin/inventory",
+    href: "/hospital/inventory",
   },
   {
     id: "FEEDBACK",
     label: "Feedback",
     icon: MessageSquare,
-    href: "/hospital-admin/feedback",
+    href: "/hospital/feedback",
   },
   {
     id: "REPORTS",
     label: "Reports",
     icon: BarChart3,
-    href: "/hospital-admin/reports",
+    href: "/hospital/reports",
   },
   {
     id: "SETTINGS",
     label: "Settings",
     icon: Settings,
-    href: "/hospital-admin/settings",
+    href: "/hospital/settings",
   },
 ];
 
@@ -282,7 +282,7 @@ export default function HospitalNavbar() {
                           System Alerts
                         </p>
                         {lowStockItems?.length > 0 && (
-                          <Link href="/hospital-admin/inventory">
+                          <Link href="/hospital/inventory">
                             <DropdownMenuItem className="cursor-pointer p-3 rounded-lg">
                               <div className="flex items-start gap-3 w-full">
                                 <div className="w-8 h-8 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center flex-shrink-0">
@@ -302,7 +302,7 @@ export default function HospitalNavbar() {
                           </Link>
                         )}
                         {pendingDoctorRequests?.length > 0 && (
-                          <Link href="/hospital-admin/staff">
+                          <Link href="/hospital/staff">
                             <DropdownMenuItem className="cursor-pointer p-3 rounded-lg">
                               <div className="flex items-start gap-3 w-full">
                                 <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
@@ -392,7 +392,7 @@ export default function HospitalNavbar() {
                   {notifications?.length > 5 && (
                     <>
                       <DropdownMenuSeparator />
-                      <Link href="/hospital-admin/notifications">
+                      <Link href="/hospital/notifications">
                         <DropdownMenuItem className="cursor-pointer justify-center text-sm text-blue-600 dark:text-blue-400 font-medium py-3">
                           View all notifications
                         </DropdownMenuItem>
@@ -445,13 +445,13 @@ export default function HospitalNavbar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <Link href="/hospital-admin/profile">
+                  <Link href="/hospital/profile">
                     <DropdownMenuItem className="cursor-pointer">
                       <UserCircle className="mr-2 h-4 w-4" />
                       <span>Profile</span>
                     </DropdownMenuItem>
                   </Link>
-                  <Link href="/hospital-admin/settings">
+                  <Link href="/hospital/settings">
                     <DropdownMenuItem className="cursor-pointer">
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Settings</span>
@@ -572,7 +572,7 @@ export default function HospitalNavbar() {
             {/* Quick Actions - Desktop */}
             <div className="hidden lg:flex items-center gap-2">
               {lowStockItems?.length > 0 && (
-                <Link href="/hospital-admin/inventory">
+                <Link href="/hospital/inventory">
                   <Button
                     variant="outline"
                     size="sm"
@@ -584,7 +584,7 @@ export default function HospitalNavbar() {
                 </Link>
               )}
               {pendingDoctorRequests?.length > 0 && (
-                <Link href="/hospital-admin/staff">
+                <Link href="/hospital/staff">
                   <Button
                     variant="outline"
                     size="sm"
@@ -736,7 +736,7 @@ export default function HospitalNavbar() {
                       </p>
                       {lowStockItems?.length > 0 && (
                         <Link
-                          href="/hospital-admin/inventory"
+                          href="/hospital/inventory"
                           onClick={() => setMobileMenuOpen(false)}
                         >
                           <div className="flex items-center gap-3 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-100 dark:border-orange-900/50">
@@ -755,7 +755,7 @@ export default function HospitalNavbar() {
                       )}
                       {pendingDoctorRequests?.length > 0 && (
                         <Link
-                          href="/hospital-admin/staff"
+                          href="/hospital/staff"
                           onClick={() => setMobileMenuOpen(false)}
                         >
                           <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-900/50">

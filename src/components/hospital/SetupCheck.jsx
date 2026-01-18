@@ -21,7 +21,7 @@ export default function SetupCheck({ children }) {
         setHasHospital(true)
       } else {
         // No hospital, redirect to setup
-        router.push('/hospital-admin/setup')
+        router.push('/hospital/setup')
       }
     } catch (err) {
       console.error('Check failed:', err)

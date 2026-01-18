@@ -191,7 +191,7 @@ export default function HospitalAppointmentsPage() {
           <Button variant="outline" size="sm">
             <Download className="w-4 h-4 mr-2" /> Export
           </Button>
-          <Link href="/hospital-admin/reception">
+          <Link href="/hospital/reception">
             <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
               + New Walk-In
             </Button>

@@ -140,7 +140,7 @@ export default function HospitalDashboard() {
             color="blue"
             trend={stats.pendingAppointments}
             trendLabel="pending"
-            href="/hospital-admin/appointments"
+            href="/hospital/appointments"
             loading={statsLoading}
           />
         </motion.div>
@@ -153,7 +153,7 @@ export default function HospitalDashboard() {
             trend={12}
             trendLabel="new"
             trendUp
-            href="/hospital-admin/patients"
+            href="/hospital/patients"
             loading={statsLoading}
           />
         </motion.div>
@@ -165,7 +165,7 @@ export default function HospitalDashboard() {
             color="purple"
             trend={activeDoctorsCount}
             trendLabel="active"
-            href="/hospital-admin/staff"
+            href="/hospital/staff"
             loading={statsLoading}
           />
         </motion.div>
@@ -178,7 +178,7 @@ export default function HospitalDashboard() {
             trend={15}
             trendLabel="+15%"
             trendUp
-            href="/hospital-admin/reports"
+            href="/hospital/reports"
             loading={statsLoading}
           />
         </motion.div>
@@ -193,25 +193,25 @@ export default function HospitalDashboard() {
           <CardContent className="px-4 pb-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <QuickActionButton
-                href="/hospital-admin/reception"
+                href="/hospital/reception"
                 icon={UserPlus}
                 label="Walk-In"
                 color="blue"
               />
               <QuickActionButton
-                href="/hospital-admin/appointments"
+                href="/hospital/appointments"
                 icon={Calendar}
                 label="Appointments"
                 color="emerald"
               />
               <QuickActionButton
-                href="/hospital-admin/staff"
+                href="/hospital/staff"
                 icon={Stethoscope}
                 label="Staff"
                 color="purple"
               />
               <QuickActionButton
-                href="/hospital-admin/reports"
+                href="/hospital/reports"
                 icon={BarChart3}
                 label="Reports"
                 color="orange"
@@ -237,7 +237,7 @@ export default function HospitalDashboard() {
                   {todaySchedule.length} appointments
                 </p>
               </div>
-              <Link href="/hospital-admin/appointments">
+              <Link href="/hospital/appointments">
                 <Button variant="ghost" size="sm" className="gap-1 h-8 px-2">
                   <span className="text-xs sm:text-sm">All</span>
                   <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -352,7 +352,7 @@ export default function HospitalDashboard() {
                   {activeDoctorsCount} available now
                 </p>
               </div>
-              <Link href="/hospital-admin/staff">
+              <Link href="/hospital/staff">
                 <Button variant="ghost" size="sm" className="gap-1 h-8">
                   All
                   <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -513,7 +513,7 @@ export default function HospitalDashboard() {
                       </motion.div>
                     ))}
                   </div>
-                  <Link href="/hospital-admin/inventory">
+                  <Link href="/hospital/inventory">
                     <Button variant="outline" size="sm" className="w-full mt-3 h-8 text-xs sm:text-sm">
                       View All
                       <ArrowRight className="w-3 h-3 ml-1" />

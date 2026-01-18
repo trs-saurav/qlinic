@@ -96,7 +96,7 @@ export default function HospitalSetupPage() {
         
         // ✅ Use window.location for reliable redirect after data mutation
         setTimeout(() => {
-          window.location.href = data.redirect || '/hospital-admin'
+          window.location.href = data.redirect || '/hospital'
         }, 500)
       } else {
         // ✅ Handle server-side validation errors
