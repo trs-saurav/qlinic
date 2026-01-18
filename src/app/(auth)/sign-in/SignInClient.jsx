@@ -45,7 +45,7 @@ const signInSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 })
 
-export default function SignInPage() {
+export default function SignInClient() {
   const searchParams = useSearchParams()
   const { data: session, status } = useSession()
   const roleFromUrl = searchParams.get('role') || 'user'

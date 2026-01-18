@@ -303,11 +303,11 @@ export default async function middleware(req) {
   // 13. API ROUTE PROTECTION
   // ========================================
   
-  if (nextUrl.pathname.startsWith('/api') && !isPublicApiPath) {
-    if (!isLoggedIn) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-  }
+  // if (nextUrl.pathname.startsWith('/api') && !isPublicApiPath) {
+  //   if (!isLoggedIn) {
+  //     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  //   }
+  // }
   
   return NextResponse.next()
 }
