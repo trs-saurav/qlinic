@@ -53,10 +53,13 @@ export default async function middleware(req) {
   const roleFromSubdomain = subdomainToRole[currentHost]
   
   // ========================================
-  // 3. API SUBDOMAIN
+  // 3. API SUBDOMAIN - FIXED
   // ========================================
   
   if (currentHost === 'api') {
+    console.log('🔧 API subdomain detected')
+    console.log('   Pathname:', nextUrl.pathname)
+    
     const origin = req.headers.get('origin')
     const allowedOrigins = isDevelopment
       ? [
@@ -77,6 +80,7 @@ export default async function middleware(req) {
     
     const allowedOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0]
     
+    // Handle CORS preflight
     if (req.method === 'OPTIONS') {
       return new NextResponse(null, {
         status: 200,
@@ -91,11 +95,28 @@ export default async function middleware(req) {
       })
     }
     
+    // ✅ FIX: Handle api.localhost root - return API info
+    if (nextUrl.pathname === '/') {
+      return NextResponse.json({
+        status: 'ok',
+        message: 'Qlinic API',
+        version: '1.0.0',
+        timestamp: new Date().toISOString()
+      }, {
+        status: 200,
+        headers: {
+          'Access-Control-Allow-Origin': allowedOrigin,
+          'Access-Control-Allow-Credentials': 'true',
+          'Content-Type': 'application/json'
+        }
+      })
+    }
+    
+    // ✅ FIX: Only rewrite paths that don't already start with /api
     const url = nextUrl.clone()
-    if (nextUrl.pathname.startsWith('/api/')) {
-      url.pathname = nextUrl.pathname.replace('/api', '')
-    } else if (nextUrl.pathname !== '/' && !nextUrl.pathname.startsWith('/_next')) {
+    if (!nextUrl.pathname.startsWith('/api/')) {
       url.pathname = `/api${nextUrl.pathname}`
+      console.log('   Rewriting to:', url.pathname)
     }
     
     const response = NextResponse.rewrite(url)
@@ -138,7 +159,6 @@ export default async function middleware(req) {
       
       let subdomainUrl;
       
-      // Special handling for hospital -> redirect to hospital path
       if (pathRole === 'hospital' || pathRole === 'hospital-admin') {
         subdomainUrl = new URL(
           `${protocol}://${subdomain}.${mainDomain}${port}/hospital${nextUrl.search}`
@@ -151,9 +171,6 @@ export default async function middleware(req) {
       
       return NextResponse.redirect(subdomainUrl);
     }
-    
-    
-
     
     return NextResponse.next()
   }
@@ -176,11 +193,10 @@ export default async function middleware(req) {
   const userRole = token?.role
   
   // ========================================
-  // 7. SUBDOMAIN ROOT HANDLING (ENHANCED)
+  // 7. SUBDOMAIN ROOT HANDLING
   // ========================================
   
   if (roleFromSubdomain && roleFromSubdomain !== 'api' && nextUrl.pathname === '/') {
-    // Always redirect to the role-specific path on subdomain root
     const dashboardPath = roleFromSubdomain === 'hospital_admin' ? '/hospital' : `/${roleFromSubdomain}`
     return NextResponse.redirect(new URL(dashboardPath, req.url))
   }
@@ -198,16 +214,13 @@ export default async function middleware(req) {
         return NextResponse.redirect(new URL(dashboardPath, req.url), { status: 303 })
       }
       
-      // If user is logged in but trying to sign in for a different role, redirect to their dashboard
       if (requestedRole && requestedRole !== userRole) {
         const dashboardPath = userRole === 'hospital_admin' ? '/hospital' : `/${userRole}`
         return NextResponse.redirect(new URL(dashboardPath, req.url))
       }
     }
     
-    // Check if the user is attempting to sign in with a role that doesn't match the current subdomain
     if (!isLoggedIn && nextUrl.pathname === '/sign-in' && requestedRole && roleFromSubdomain && requestedRole !== roleFromSubdomain) {
-      // Redirect to the correct subdomain's sign-in page with the same role request
       const correctSubdomain = {
         'user': 'user',
         'doctor': 'doctor',
@@ -242,7 +255,6 @@ export default async function middleware(req) {
   // 10. AUTHENTICATION REQUIRED
   // ========================================
   
-  // Only redirect to sign-in if not on subdomain root (which gets handled above)
   if (!isLoggedIn && roleFromSubdomain && roleFromSubdomain !== 'api' && nextUrl.pathname !== '/') {
     const signInUrl = new URL('/sign-in', req.url)
     signInUrl.searchParams.set('role', roleFromSubdomain)
@@ -251,18 +263,15 @@ export default async function middleware(req) {
   }
   
   // ========================================
-  // 11. ROLE-BASED ACCESS CONTROL (FIXED)
+  // 11. ROLE-BASED ACCESS CONTROL
   // ========================================
   
   if (isLoggedIn && roleFromSubdomain && roleFromSubdomain !== 'api') {
-    // Check route-level permissions but don't force subdomain redirection
-    // Users can access their own role routes regardless of subdomain
     const isAdminRoute = nextUrl.pathname.startsWith('/admin')
     const isDoctorRoute = nextUrl.pathname.startsWith('/doctor')
     const isUserRoute = nextUrl.pathname.startsWith('/user')
     const isHospitalRoute = nextUrl.pathname.startsWith('/hospital')  
     
-    // Only restrict access based on user's role, not subdomain
     if ((isAdminRoute && userRole !== 'admin') ||
         (isDoctorRoute && userRole !== 'doctor') ||
         (isUserRoute && userRole !== 'user') ||
@@ -272,36 +281,23 @@ export default async function middleware(req) {
   }
   
   // ========================================
-  // 11.5. SUBDOMAIN PATH ISOLATION (NEW) - REMOVED TO ALLOW CROSS-SUBDOMAIN NAVIGATION
-  // ========================================
-  
-  // Removed subdomain path isolation to allow users to access their role routes from any subdomain
-  // Access is controlled by role permissions, not subdomain isolation
-  
-  // ========================================
   // 12. PATH REWRITING FOR SUBDOMAINS
   // ========================================
   
   if (roleFromSubdomain && roleFromSubdomain !== 'api' && !isPublicPath && !isAuthPath) {
     const rolePath = roleFromSubdomain === 'hospital_admin' ? 'hospital' : roleFromSubdomain
-  // ✅ NEVER rewrite NextAuth/Auth.js endpoints
-  const isAuthApiRoute =
-    nextUrl.pathname === '/api/auth' ||
-    nextUrl.pathname.startsWith('/api/auth/') ||
-    nextUrl.pathname.startsWith('/api/auth?')
-
-  // ✅ Never rewrite ANY api route (safe)
-  const isAnyApiRoute = nextUrl.pathname === '/api' || nextUrl.pathname.startsWith('/api/')
-
-  // ✅ If already prefixed, do nothing
-  const alreadyPrefixed = nextUrl.pathname.startsWith(`/${rolePath}`)
-
-  if (!isAuthApiRoute && !isAnyApiRoute && !alreadyPrefixed) {
-    const url = nextUrl.clone()
-    url.pathname = `/${rolePath}${nextUrl.pathname}`
-    return NextResponse.rewrite(url)
+    
+    // ✅ NEVER rewrite auth or API routes
+    const isAuthApiRoute = nextUrl.pathname.startsWith('/api/auth')
+    const isAnyApiRoute = nextUrl.pathname.startsWith('/api/')
+    const alreadyPrefixed = nextUrl.pathname.startsWith(`/${rolePath}`)
+    
+    if (!isAuthApiRoute && !isAnyApiRoute && !alreadyPrefixed) {
+      const url = nextUrl.clone()
+      url.pathname = `/${rolePath}${nextUrl.pathname}`
+      return NextResponse.rewrite(url)
+    }
   }
-}
   
   // ========================================
   // 13. API ROUTE PROTECTION
