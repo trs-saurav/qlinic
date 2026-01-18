@@ -48,8 +48,18 @@ const signInSchema = z.object({
 export default function SignInClient() {
   const searchParams = useSearchParams()
   const { data: session, status } = useSession()
-  const roleFromUrl = searchParams.get('role') || 'user'
-  const redirectTo = searchParams.get('redirect')
+  
+  // Safely get search parameters with fallbacks
+  let roleFromUrl, redirectTo
+  try {
+    roleFromUrl = searchParams.get('role') || 'user'
+    redirectTo = searchParams.get('redirect')
+  } catch (error) {
+    // Fallback values when searchParams is not available (during static generation)
+    roleFromUrl = 'user'
+    redirectTo = null
+  }
+  
   
   const [loading, setLoading] = useState(false)
   const [socialLoading, setSocialLoading] = useState(null)
@@ -320,7 +330,7 @@ const onSubmit = async (data) => {
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden relative bg-gradient-to-br from-gray-50 via-blue-50 to-violet-50 dark:from-gray-950 dark:via-blue-950/30 dark:to-gray-900">
+    <div className="h-screen w-screen overflow-hidden relative bg-gradient-to-br from-gray-50 via-blue-50 to-violet-50 dark:from-gray-950 dark:via-blue-950 dark:to-gray-900">
       
       {/* Animated background orbs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
