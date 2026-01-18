@@ -130,7 +130,11 @@ export default function SignInPage() {
       
       const destination = redirectTo || roleRoutes[userRole] || '/user'
       console.log('🔀 Redirecting to:', destination)
-      window.location.href = destination
+      // Use window.location.href only once to avoid loops
+      const timer = setTimeout(() => {
+        window.location.href = destination
+      }, 100)
+      return () => clearTimeout(timer)
     }
   }, [status, session, redirectTo])
 

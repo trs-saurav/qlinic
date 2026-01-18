@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -14,7 +15,9 @@ import { realtimeDb } from '@/config/firebase'
 
 export default function DashboardOverview() {
   const router = useRouter()
+  const { data: session, status } = useSession()
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [data, setData] = useState({ upcoming: [], activeAppointment: null })
   
   const [queueState, setQueueState] = useState({
@@ -24,7 +27,14 @@ export default function DashboardOverview() {
   const today = new Date()
   const formattedDate = today.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })
 
-  useEffect(() => { fetchDashboardData() }, [])
+  // ✅ Wait for session before fetching
+  useEffect(() => { 
+    if (status === 'authenticated') {
+      fetchDashboardData()
+    } else if (status === 'unauthenticated') {
+      router.push('/sign-in?role=user')
+    }
+  }, [status])
 
   useEffect(() => {
     if (!data.activeAppointment) return
@@ -47,8 +57,23 @@ export default function DashboardOverview() {
 
   const fetchDashboardData = async () => {
     try {
-      const appointmentsRes = await fetch('/api/patient/appointments')
+      setIsLoading(true)
+      setError(null)
+      
+      const appointmentsRes = await fetch('/api/patient/appointments', {
+        credentials: 'include', // ✅ Ensure cookies are sent
+      })
+      
+      if (!appointmentsRes.ok) {
+        if (appointmentsRes.status === 401) {
+          router.push('/sign-in?role=user')
+          return
+        }
+        throw new Error('Failed to fetch appointments')
+      }
+      
       const aptData = await appointmentsRes.json()
+      
       if (aptData.appointments) {
         const now = new Date()
         const upcoming = aptData.appointments.filter(a => 
@@ -59,10 +84,15 @@ export default function DashboardOverview() {
             const aptDate = new Date(a.scheduledTime).toDateString()
             return aptDate === now.toDateString() && ['BOOKED', 'CHECKED_IN', 'IN_CONSULTATION', 'SKIPPED'].includes(a.status)
         })
+        
         setData({ upcoming, activeAppointment: active })
       }
-    } catch (error) { console.error('Error:', error) } 
-    finally { setIsLoading(false) }
+    } catch (error) { 
+      console.error('Error fetching dashboard data:', error)
+      setError(error.message)
+    } finally { 
+      setIsLoading(false) 
+    }
   }
 
   const handleNavigate = (path) => router.push(`/user/${path}`) 
@@ -77,7 +107,25 @@ export default function DashboardOverview() {
       }
   }
 
-  if (isLoading) return <div className="h-[40vh] flex items-center justify-center"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div></div>
+  // ✅ Show loading state
+  if (status === 'loading' || isLoading) {
+    return (
+      <div className="h-[40vh] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  // ✅ Show error state
+  if (error) {
+    return (
+      <div className="h-[40vh] flex flex-col items-center justify-center gap-4">
+        <AlertCircle className="w-12 h-12 text-red-500" />
+        <p className="text-sm text-slate-600">{error}</p>
+        <Button onClick={fetchDashboardData}>Retry</Button>
+      </div>
+    )
+  }
 
   const myToken = data.activeAppointment?.tokenNumber || 0
   const currentToken = queueState.currentToken || 0
@@ -87,10 +135,9 @@ export default function DashboardOverview() {
   const statusMeta = getStatusDisplay(queueState.status)
 
   return (
-    // FIX: Using w-full and a flexible max-width so it adapts to any screen
     <div className="space-y-6 pb-20 p-4 font-sans text-slate-900 w-full max-w-3xl mx-auto">
       
-      {/* 1. Header (No Notification Bell) */}
+      {/* 1. Header */}
       <div className="flex flex-col">
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-sm text-slate-500 font-medium uppercase tracking-wider">{formattedDate}</p>
@@ -108,7 +155,7 @@ export default function DashboardOverview() {
                             <span className={`h-2.5 w-2.5 rounded-full ${statusMeta.color} ${statusMeta.pulse ? 'animate-pulse' : ''}`}></span>
                             <span className="text-xs font-bold uppercase opacity-90">{statusMeta.label}</span>
                         </div>
-                        <h3 className="font-bold text-lg md:text-xl truncate">Dr.{data.activeAppointment.doctorId?.firstName} {data.activeAppointment.doctorId?.lastName}</h3>
+                        <h3 className="font-bold text-lg md:text-xl truncate">Dr. {data.activeAppointment.doctorId?.firstName} {data.activeAppointment.doctorId?.lastName}</h3>
                         <p className="text-xs md:text-sm text-blue-100 truncate opacity-80">{data.activeAppointment.hospitalId?.name}</p>
                     </div>
                     <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 text-center min-w-[70px]">
@@ -117,7 +164,6 @@ export default function DashboardOverview() {
                     </div>
                 </div>
 
-                {/* Metrics Grid - Flex on mobile, wider on desktop */}
                 <div className="bg-black/20 rounded-xl p-3 flex items-center justify-between mb-4 text-sm gap-2">
                     <div className="text-center flex-1 border-r border-white/10 last:border-0">
                         <p className="text-[10px] text-blue-200 uppercase mb-0.5">Serving</p>
@@ -150,7 +196,7 @@ export default function DashboardOverview() {
         </div>
       )}
 
-      {/* 3. Icon Grid - Responsive Columns (4 cols mobile, 4 cols desktop but bigger) */}
+      {/* 3. Icon Grid */}
       <div className="grid grid-cols-4 gap-3 md:gap-4">
         {[
             { label: 'Book', icon: Calendar, action: 'search', bg: 'bg-blue-50', text: 'text-blue-600' },

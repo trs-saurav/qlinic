@@ -4,6 +4,7 @@ import  connectDB  from '@/config/db'
 import User from '@/models/user'
 import Appointment from '@/models/appointment'
 import FamilyMember from '@/models/familyMember'
+import Hospital from '@/models/hospital'
 
 export async function GET(req) {
   console.log('🔵 Patient Appointments GET called')
