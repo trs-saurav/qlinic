@@ -9,6 +9,14 @@ import {MongooseError} from "mongoose";
 // Regex to check if a string is a valid MongoDB ObjectId
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 
+// [Fix for Isolated Sessions]
+// If AUTH_URL is set to the main domain in environment variables, it forces all OAuth callbacks
+// to redirect to the main domain (e.g. www.qlinichealth.com).
+// This breaks authentication for subdomains (user., doctor.) because cookies are host-only.
+// We delete these variables to force Auth.js to use the request's host header (trustHost: true).
+if (process.env.AUTH_URL?.includes('qlinichealth.com')) delete process.env.AUTH_URL
+if (process.env.NEXTAUTH_URL?.includes('qlinichealth.com')) delete process.env.NEXTAUTH_URL
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...baseAuthConfig,
   trustHost: true,
