@@ -4,21 +4,6 @@ import AppleProvider from 'next-auth/providers/apple'
 
 const isDevelopment = process.env.NODE_ENV === 'development'
 
-const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || (isDevelopment ? 'localhost' : 'qlinichealth.com')
-
-// Use host-only cookies (undefined) to allow isolated sessions on each subdomain.
-// This enables you to be logged in as different users on 'user.', 'doctor.', etc. simultaneously.
-const cookieDomain = undefined
-
-// PKCE cookies need special handling in development for localhost subdomains
-const pkceCookieOptions = {
-  httpOnly: true,
-  sameSite: 'lax',
-  path: '/',
-  secure: !isDevelopment, // Only secure in production
-  maxAge: 900,
-}
-
 export const baseAuthConfig = {
   debug: isDevelopment, 
   providers: [
@@ -42,47 +27,6 @@ export const baseAuthConfig = {
       clientSecret: process.env.APPLE_CLIENT_SECRET,
     }),
   ],
-
-  cookies: {
-    sessionToken: {
-      name: isDevelopment ? 'authjs.session-token' : '__Secure-authjs.session-token',
-      options: {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        domain: cookieDomain,
-        secure: !isDevelopment,
-      },
-    },
-    pkceCodeVerifier: {
-      name: isDevelopment ? 'authjs.pkce.code_verifier' : '__Secure-authjs.pkce.code_verifier',
-      options: {
-        ...pkceCookieOptions,
-        domain: cookieDomain, // Apply the same domain logic
-      },
-    },
-    state: {
-      name: isDevelopment ? 'authjs.state' : '__Secure-authjs.state',
-      options: {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        domain: cookieDomain,
-        secure: !isDevelopment,
-        maxAge: 900,
-      },
-    },
-    callbackUrl: {
-      name: isDevelopment ? 'authjs.callback-url' : '__Secure-authjs.callback-url',
-      options: {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        domain: cookieDomain,
-        secure: !isDevelopment,
-      },
-    },
-  },
 
   pages: {
     signIn: '/sign-in',
