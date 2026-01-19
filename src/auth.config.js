@@ -6,9 +6,9 @@ const isDevelopment = process.env.NODE_ENV === 'development'
 
 const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || (isDevelopment ? 'localhost' : 'qlinichealth.com')
 
-// To allow authentication to work across subdomains (e.g. OAuth callback on root, session on user subdomain),
-// we set the cookie domain to the main domain in production.
-const cookieDomain = isDevelopment ? undefined : `.${mainDomain}`
+// Use host-only cookies (undefined) to allow isolated sessions on each subdomain.
+// This enables you to be logged in as different users on 'user.', 'doctor.', etc. simultaneously.
+const cookieDomain = undefined
 
 // PKCE cookies need special handling in development for localhost subdomains
 const pkceCookieOptions = {
