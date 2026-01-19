@@ -220,6 +220,36 @@ export default async function middleware(req) {
       }
     }
     
+    // Handle redirect to appropriate subdomain if user is accessing main domain sign-in
+    if (!isLoggedIn && nextUrl.pathname === '/sign-in' && !roleFromSubdomain) {
+      // If accessing main domain sign-in without role specified, redirect to user subdomain by default
+      // or respect the role parameter if provided
+      const targetRole = requestedRole || 'user';
+      const correctSubdomain = {
+        'user': 'user',
+        'doctor': 'doctor',
+        'admin': 'admin',
+        'hospital_admin': 'hospital'
+      }[targetRole];
+      
+      if (correctSubdomain) {
+        const port = isDevelopment ? ':3000' : ''
+        const protocol = isDevelopment ? 'http' : 'https'
+        
+        const correctSubdomainUrl = new URL(
+          `${protocol}://${correctSubdomain}.${mainDomain}${port}/sign-in?role=${targetRole}`
+        );
+        
+        // Preserve any redirect parameter
+        const redirectParam = nextUrl.searchParams.get('redirect');
+        if (redirectParam) {
+          correctSubdomainUrl.searchParams.set('redirect', redirectParam);
+        }
+        
+        return NextResponse.redirect(correctSubdomainUrl);
+      }
+    }
+    
     if (!isLoggedIn && nextUrl.pathname === '/sign-in' && requestedRole && roleFromSubdomain && requestedRole !== roleFromSubdomain) {
       const correctSubdomain = {
         'user': 'user',
