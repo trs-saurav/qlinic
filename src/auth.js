@@ -166,38 +166,89 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       console.log('============== AUTH.JS: redirect callback ==============');
       console.log({ url, baseUrl });
       
-      // In development with localhost, handle subdomain redirects properly
-      const isDevelopment = process.env.NODE_ENV === 'development';
-      
-      if (isDevelopment) {
-        // Allow redirects to subdomains of localhost in development
-        try {
-          const urlObj = new URL(url);
-          const baseUrlObj = new URL(baseUrl);
-          
-          // If both origins are localhost-based, allow the redirect
+      try {
+        // Ensure URLs are properly formatted with protocol before parsing
+        const normalizedUrl = url.startsWith('http') ? url : `${baseUrl.split('://')[0]}://${url}`;
+        const normalizedBaseUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
+        
+        const urlObj = new URL(normalizedUrl);
+        const baseUrlObj = new URL(normalizedBaseUrl);
+        
+        const isDevelopment = process.env.NODE_ENV === 'development';
+        const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || (isDevelopment ? 'localhost' : 'yourdomain.com');
+        
+        // In development with localhost, handle subdomain redirects properly
+        if (isDevelopment) {
+          // Handle localhost subdomain redirects in development
+          // Allow redirect to subdomain if base URL is localhost and target is a localhost subdomain
           if (baseUrlObj.hostname === 'localhost' && urlObj.hostname.endsWith('.localhost')) {
-            return url;
+            console.log(`[REDIRECT] Allowing redirect from localhost to subdomain: ${normalizedUrl}`);
+            return normalizedUrl;
           }
           
-          // If both are localhost subdomains, allow the redirect
+          // Allow redirect from localhost subdomain to another localhost subdomain
           if (baseUrlObj.hostname.endsWith('.localhost') && urlObj.hostname.endsWith('.localhost')) {
-            return url;
+            console.log(`[REDIRECT] Allowing redirect between localhost subdomains: ${normalizedUrl}`);
+            return normalizedUrl;
           }
           
-          // If both are the same localhost-based hostname, allow the redirect
+          // Allow redirect from localhost subdomain to same subdomain
           if (baseUrlObj.hostname === urlObj.hostname) {
-            return url;
+            console.log(`[REDIRECT] Allowing redirect to same hostname: ${normalizedUrl}`);
+            return normalizedUrl;
           }
-        } catch (e) {
-          console.warn('Could not parse URL in redirect callback:', e);
+          
+          // Allow redirect from localhost subdomain to main localhost
+          if (baseUrlObj.hostname.endsWith('.localhost') && urlObj.hostname === 'localhost') {
+            console.log(`[REDIRECT] Allowing redirect from subdomain to localhost: ${normalizedUrl}`);
+            return normalizedUrl;
+          }
+        } else {
+          // Production environment - handle real domain subdomains
+          // Remove protocol and www from main domain for comparison
+          const cleanMainDomain = mainDomain.replace(/^https?:\/\//, '').replace(/^www\./, '');
+          
+          // Allow redirect between subdomains of the same main domain
+          if (urlObj.hostname === cleanMainDomain || 
+              baseUrlObj.hostname === urlObj.hostname ||
+              (urlObj.hostname.endsWith('.' + cleanMainDomain) && 
+               baseUrlObj.hostname.endsWith('.' + cleanMainDomain))) {
+            console.log(`[REDIRECT] Allowing redirect in production: ${normalizedUrl}`);
+            return normalizedUrl;
+          }
+          
+          // Allow redirect from main domain to subdomain
+          if (baseUrlObj.hostname === cleanMainDomain && 
+              urlObj.hostname.endsWith('.' + cleanMainDomain)) {
+            console.log(`[REDIRECT] Allowing redirect from main domain to subdomain: ${normalizedUrl}`);
+            return normalizedUrl;
+          }
+          
+          // Allow redirect from subdomain to main domain
+          if (baseUrlObj.hostname.endsWith('.' + cleanMainDomain) && 
+              urlObj.hostname === cleanMainDomain) {
+            console.log(`[REDIRECT] Allowing redirect from subdomain to main domain: ${normalizedUrl}`);
+            return normalizedUrl;
+          }
         }
+      } catch (e) {
+        console.warn('Could not parse URL in redirect callback:', e);
+        // Fallback to original behavior
+        if (url.startsWith("/")) return `${baseUrl}${url}`
+        return baseUrl;
       }
       
       // Allows relative callback URLs
       if (url.startsWith("/")) return `${baseUrl}${url}`
-      // Allows callback URLs on the same domain
-      if (new URL(url).origin === new URL(baseUrl).origin) return url
+      
+      // Fallback: allow same origin
+      try {
+        const normalizedUrl = url.startsWith('http') ? url : `${baseUrl.split('://')[0]}://${url}`;
+        const normalizedBaseUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
+        if (new URL(normalizedUrl).origin === new URL(normalizedBaseUrl).origin) return normalizedUrl
+      } catch (e) {
+        console.warn('Could not parse URL in fallback redirect check:', e);
+      }
       
       console.log('======================================================');
       return baseUrl
