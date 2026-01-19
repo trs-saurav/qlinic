@@ -21,7 +21,8 @@ export default async function middleware(req) {
   // 2. CONTEXT & CONFIGURATION
   // =======================================================
   const isDevelopment = process.env.NODE_ENV === 'development'
-  const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || 'localhost'
+  
+  const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || (isDevelopment ? 'localhost' : 'qlinichealth.com')
   
   const hostnameWithoutPort = hostname.split(':')[0]
   const parts = hostnameWithoutPort.split('.')

@@ -3,12 +3,12 @@ import FacebookProvider from 'next-auth/providers/facebook'
 import AppleProvider from 'next-auth/providers/apple'
 
 const isDevelopment = process.env.NODE_ENV === 'development'
-const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || 'localhost'
 
-// To allow multiple sessions across different subdomains (e.g., hospital vs user),
-// we use host-only cookies by leaving the domain undefined.
-// This ensures that cookies set on one subdomain are not visible to others.
-const cookieDomain = undefined
+const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || (isDevelopment ? 'localhost' : 'qlinichealth.com')
+
+// To allow authentication to work across subdomains (e.g. OAuth callback on root, session on user subdomain),
+// we set the cookie domain to the main domain in production.
+const cookieDomain = isDevelopment ? undefined : `.${mainDomain}`
 
 // PKCE cookies need special handling in development for localhost subdomains
 const pkceCookieOptions = {
@@ -59,6 +59,17 @@ export const baseAuthConfig = {
       options: {
         ...pkceCookieOptions,
         domain: cookieDomain, // Apply the same domain logic
+      },
+    },
+    state: {
+      name: isDevelopment ? 'authjs.state' : '__Secure-authjs.state',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        domain: cookieDomain,
+        secure: !isDevelopment,
+        maxAge: 900,
       },
     },
     callbackUrl: {
