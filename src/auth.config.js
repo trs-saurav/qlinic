@@ -5,10 +5,10 @@ import AppleProvider from 'next-auth/providers/apple'
 const isDevelopment = process.env.NODE_ENV === 'development'
 const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || 'localhost'
 
-// For localhost subdomains in development, we need to handle cookies differently
-// Since localhost subdomains don't work with traditional cookie domains,
-// we leave the domain as undefined for development to allow browsers to handle it correctly.
-const cookieDomain = isDevelopment ? undefined : `.${mainDomain}`
+// To allow multiple sessions across different subdomains (e.g., hospital vs user),
+// we use host-only cookies by leaving the domain undefined.
+// This ensures that cookies set on one subdomain are not visible to others.
+const cookieDomain = undefined
 
 // PKCE cookies need special handling in development for localhost subdomains
 const pkceCookieOptions = {
