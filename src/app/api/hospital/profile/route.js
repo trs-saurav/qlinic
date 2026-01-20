@@ -9,7 +9,6 @@ import { getHospitalAdmin, handleHospitalAuthError } from '@/lib/hospitalAuth'
  */
 export async function GET() {
   try {
-    // ✅ Use hospitalAuth helper
     const authResult = await getHospitalAdmin()
     const error = handleHospitalAuthError(authResult, NextResponse)
     if (error) return error
@@ -45,44 +44,31 @@ export async function GET() {
 
 /**
  * PUT /api/hospital/profile
- * Update hospital profile with field-level permissions
+ * Update hospital profile with geospatial sync
  */
 export async function PUT(req) {
   try {
-    // ✅ Use hospitalAuth helper
     const authResult = await getHospitalAdmin()
     const error = handleHospitalAuthError(authResult, NextResponse)
     if (error) return error
 
-    const { user, hospital, hospitalId } = authResult
+    const { hospitalId } = authResult
 
     await connectDB()
 
-    // Fetch fresh hospital document for updating
     const hospitalDoc = await Hospital.findById(hospitalId)
 
     if (!hospitalDoc) {
-      console.log('❌ Hospital not found:', hospitalId)
-      return NextResponse.json(
-        { error: 'Hospital not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Hospital not found' }, { status: 404 })
     }
 
     const body = await req.json()
 
-    // ✅ Check if hospital is verified or verification is pending
+    // Permissions check
     const isVerified = hospitalDoc.isVerified
     const verificationPending = hospitalDoc.verificationRequest?.status === 'pending'
     const canEditBasicInfo = !isVerified && !verificationPending
 
-    console.log('🔒 Edit permissions:', {
-      isVerified,
-      verificationPending,
-      canEditBasicInfo,
-    })
-
-    // ✅ Fields that can ALWAYS be edited (even when verified)
     const alwaysEditableFields = [
       'totalBeds',
       'icuBeds',
@@ -91,7 +77,6 @@ export async function PUT(req) {
       'operatingHours',
     ]
 
-    // ✅ Fields that can ONLY be edited when NOT verified and NOT pending
     const basicInfoFields = [
       'name',
       'registrationNumber',
@@ -99,7 +84,7 @@ export async function PUT(req) {
       'established',
       'description',
       'contactDetails',
-      'address',
+      'address', // Contains coordinates for geospatial sync
       'consultationFee',
       'emergencyFee',
       'specialties',
@@ -115,10 +100,9 @@ export async function PUT(req) {
       'images',
     ]
 
-    // Track attempted edits to locked fields
     const attemptedLockedEdits = []
 
-    // Update always editable fields
+    // 1. Update Always Editable Fields
     alwaysEditableFields.forEach((field) => {
       if (body[field] !== undefined) {
         if (field === 'operatingHours' && typeof body[field] === 'object') {
@@ -132,23 +116,42 @@ export async function PUT(req) {
       }
     })
 
-    // Update basic info fields only if allowed
+    // 2. Update Basic Info Fields (Geospatial logic inside)
     if (canEditBasicInfo) {
       basicInfoFields.forEach((field) => {
         if (body[field] !== undefined) {
-          // ✅ Handle consultationFee specially (object type)
-          if (field === 'consultationFee' && typeof body[field] === 'object') {
+          
+          // Specialized handling for Address & Coordinates
+          if (field === 'address' && typeof body[field] === 'object') {
+            const newAddress = body[field];
+            
+            // Cast coordinates to Numbers to ensure the Model Hook works perfectly
+            if (newAddress.coordinates) {
+              if (newAddress.coordinates.latitude) 
+                newAddress.coordinates.latitude = Number(newAddress.coordinates.latitude);
+              if (newAddress.coordinates.longitude) 
+                newAddress.coordinates.longitude = Number(newAddress.coordinates.longitude);
+            }
+
+            hospitalDoc.address = {
+              ...(hospitalDoc.address?.toObject?.() || hospitalDoc.address || {}),
+              ...newAddress,
+            };
+          } 
+          // Handle consultationFee
+          else if (field === 'consultationFee' && typeof body[field] === 'object') {
             hospitalDoc[field] = {
               general: body[field].general || 0,
               specialist: body[field].specialist || 0,
               emergency: body[field].emergency || 0,
             }
-          } else if (
+          } 
+          // Standard Object Merge for other nested fields
+          else if (
             typeof body[field] === 'object' &&
             !Array.isArray(body[field]) &&
             body[field] !== null
           ) {
-            // Merge nested objects (contactDetails, address, insurance, etc.)
             hospitalDoc[field] = {
               ...(hospitalDoc[field]?.toObject?.() || hospitalDoc[field] || {}),
               ...body[field],
@@ -158,67 +161,34 @@ export async function PUT(req) {
           }
         }
       })
-
-      console.log('✅ Updated basic info fields')
     } else {
-      // Log attempted edits to locked fields
       basicInfoFields.forEach((field) => {
-        if (body[field] !== undefined) {
-          attemptedLockedEdits.push(field)
-        }
+        if (body[field] !== undefined) attemptedLockedEdits.push(field)
       })
-
-      if (attemptedLockedEdits.length > 0) {
-        console.log(
-          `⚠️ Attempted to edit locked fields: ${attemptedLockedEdits.join(', ')}`
-        )
-      }
     }
 
-    // Check and update profile completion
-    hospitalDoc.checkProfileCompletion()
-
-    // Save the updated hospital
+    // 3. Save triggers the Hospital Model 'pre-save' hook:
+    // - Converts address.coordinates -> location (GeoJSON)
+    // - Converts address.city -> city_slug
+    // - AUTOMATICALLY calls checkProfileCompletion() defined in your model
     await hospitalDoc.save()
 
-    console.log('✅ Hospital profile updated:', hospitalDoc.name)
+    return NextResponse.json({
+      success: true,
+      message: 'Hospital profile updated and geospatial data synced',
+      hospital: hospitalDoc.toObject(),
+      canEditBasicInfo,
+      attemptedLockedEdits: attemptedLockedEdits.length > 0 ? attemptedLockedEdits : undefined,
+    }, { status: 200 })
 
-    return NextResponse.json(
-      {
-        success: true,
-        message: 'Hospital profile updated successfully',
-        hospital: hospitalDoc.toObject(),
-        canEditBasicInfo,
-        lockedFields: !canEditBasicInfo ? basicInfoFields : [],
-        attemptedLockedEdits: attemptedLockedEdits.length > 0 ? attemptedLockedEdits : undefined,
-      },
-      { status: 200 }
-    )
   } catch (error) {
     console.error('❌ PUT hospital profile error:', error)
-    
-    // Handle validation errors
     if (error.name === 'ValidationError') {
       const errors = Object.keys(error.errors).map(key => ({
-        field: key,
-        message: error.errors[key].message
+        field: key, message: error.errors[key].message
       }))
-      
-      return NextResponse.json(
-        {
-          error: 'Validation failed',
-          details: errors,
-        },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Validation failed', details: errors }, { status: 400 })
     }
-
-    return NextResponse.json(
-      {
-        error: 'Failed to update hospital profile',
-        details: error.message,
-      },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }

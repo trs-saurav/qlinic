@@ -36,7 +36,8 @@ const LocationSelector = ({
         const { latitude, longitude } = position.coords;
         try {
           const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+            { credentials: "omit" }
           );
           const data = await response.json();
           const city =
@@ -92,7 +93,7 @@ const LocationSelector = ({
           addressdetails: "1",
           limit: "5",
         }).toString();
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      const res = await fetch(url, { headers: { Accept: "application/json" }, credentials: "omit" });
       const data = await res.json();
       setManualResults(Array.isArray(data) ? data : []);
       setActiveIndex(data.length ? 0 : -1);

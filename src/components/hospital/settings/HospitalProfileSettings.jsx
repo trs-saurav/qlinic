@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { indianStates } from "@/lib/indianStates"; // ✅ Added import
 import {
   Card,
   CardHeader,
@@ -32,6 +33,7 @@ import {
   Hash,
   Copy,
   Check,
+  MapPin, // ✅ Added MapPin icon
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -45,80 +47,29 @@ const HOSPITAL_TYPES = [
 ];
 
 const SPECIALTIES = [
-  "Cardiology",
-  "Neurology",
-  "Orthopedics",
-  "Pediatrics",
-  "Gynecology",
-  "Dermatology",
-  "ENT",
-  "Ophthalmology",
-  "Dentistry",
-  "General Surgery",
-  "Oncology",
-  "Psychiatry",
-  "Radiology",
-  "Anesthesiology",
-  "Urology",
-  "Nephrology",
-  "Gastroenterology",
-  "Pulmonology",
-  "Endocrinology",
-  "Rheumatology",
+  "Cardiology", "Neurology", "Orthopedics", "Pediatrics", "Gynecology",
+  "Dermatology", "ENT", "Ophthalmology", "Dentistry", "General Surgery",
+  "Oncology", "Psychiatry", "Radiology", "Anesthesiology", "Urology",
+  "Nephrology", "Gastroenterology", "Pulmonology", "Endocrinology", "Rheumatology",
 ];
 
 const FACILITIES = [
-  "ICU",
-  "NICU",
-  "Emergency",
-  "OT",
-  "Blood Bank",
-  "Pharmacy",
-  "Laboratory",
-  "X-Ray",
-  "CT Scan",
-  "MRI",
-  "Ultrasound",
-  "Dialysis",
-  "Physiotherapy",
-  "Ambulance Service",
-  "Oxygen Plant",
-  "Ventilator Support",
+  "ICU", "NICU", "Emergency", "OT", "Blood Bank", "Pharmacy", "Laboratory",
+  "X-Ray", "CT Scan", "MRI", "Ultrasound", "Dialysis", "Physiotherapy",
+  "Ambulance Service", "Oxygen Plant", "Ventilator Support",
 ];
 
 const AMENITIES = [
-  "Parking",
-  "Cafeteria",
-  "WiFi",
-  "ATM",
-  "Wheelchair Access",
-  "Waiting Room",
-  "Prayer Room",
-  "Pharmacy 24x7",
-  "AC Rooms",
-  "TV in Rooms",
-  "Visitor Lounge",
-  "Lift",
+  "Parking", "Cafeteria", "WiFi", "ATM", "Wheelchair Access", "Waiting Room",
+  "Prayer Room", "Pharmacy 24x7", "AC Rooms", "TV in Rooms", "Visitor Lounge", "Lift",
 ];
 
 const ACCREDITATIONS = [
-  "NABH",
-  "NABL",
-  "ISO 9001",
-  "JCI",
-  "AAAHC",
-  "IGBC Green",
-  "LEED Certified",
+  "NABH", "NABL", "ISO 9001", "JCI", "AAAHC", "IGBC Green", "LEED Certified",
 ];
 
 const DAYS = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
+  "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
 ];
 
 export default function HospitalProfileSettings() {
@@ -128,6 +79,9 @@ export default function HospitalProfileSettings() {
   const [hospital, setHospital] = useState(null);
   const [shortId, setShortId] = useState("");
   const [idCopied, setIdCopied] = useState(false);
+
+  // ✅ NEW: State for city dropdown
+  const [availableCities, setAvailableCities] = useState([]);
 
   const [form, setForm] = useState({
     name: "",
@@ -143,11 +97,12 @@ export default function HospitalProfileSettings() {
     state: "",
     pincode: "",
     country: "India",
+    latitude: "", // ✅ Added
+    longitude: "", // ✅ Added
     established: "",
     totalBeds: "",
     icuBeds: "",
     emergencyBeds: "",
-    // ✅ UPDATED: Three separate consultation fee fields
     consultationFeeGeneral: "",
     consultationFeeSpecialist: "",
     consultationFeeEmergency: "",
@@ -189,8 +144,13 @@ export default function HospitalProfileSettings() {
       const h = data.hospital || {};
       setHospital(h);
 
-      // Set short ID
       setShortId(h.shortId || h._id?.toString().slice(-8).toUpperCase());
+
+      // ✅ NEW: Pre-load available cities based on saved state
+      if (h.address?.state) {
+        const stateObj = indianStates.find(s => s.name === h.address.state);
+        if (stateObj) setAvailableCities(stateObj.cities);
+      }
 
       setForm({
         name: h.name || "",
@@ -206,26 +166,22 @@ export default function HospitalProfileSettings() {
         state: h.address?.state || "",
         pincode: h.address?.pincode || "",
         country: h.address?.country || "India",
+        
+        // ✅ UPDATED: Map coordinates
+        latitude: h.address?.coordinates?.latitude || "",
+        longitude: h.address?.coordinates?.longitude || "",
+
         established: h.established ? h.established.slice(0, 10) : "",
         totalBeds: h.totalBeds || "",
         icuBeds: h.icuBeds || "",
         emergencyBeds: h.emergencyBeds || "",
         
-        // ✅ UPDATED: Parse consultationFee object
         consultationFeeGeneral: h.consultationFee?.general || "",
         consultationFeeSpecialist: h.consultationFee?.specialist || "",
         consultationFeeEmergency: h.consultationFee?.emergency || "",
         
         isOpen24x7: h.operatingHours?.isOpen24x7 || false,
-        operatingHours: h.operatingHours || {
-          Monday: { open: "09:00", close: "18:00" },
-          Tuesday: { open: "09:00", close: "18:00" },
-          Wednesday: { open: "09:00", close: "18:00" },
-          Thursday: { open: "09:00", close: "18:00" },
-          Friday: { open: "09:00", close: "18:00" },
-          Saturday: { open: "09:00", close: "18:00" },
-          Sunday: { open: "09:00", close: "18:00" },
-        },
+        operatingHours: h.operatingHours || form.operatingHours,
         specialties: h.specialties || [],
         facilities: h.facilities || [],
         amenities: h.amenities || [],
@@ -237,6 +193,35 @@ export default function HospitalProfileSettings() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // ✅ NEW: Handle State Change
+  const handleStateChange = (stateName) => {
+    const stateObj = indianStates.find(s => s.name === stateName);
+    setAvailableCities(stateObj ? stateObj.cities : []);
+    setForm(prev => ({ ...prev, state: stateName, city: "" })); // Reset city
+  };
+
+  // ✅ NEW: Detect Location Handler
+  const detectLocation = () => {
+    if (!navigator.geolocation) return toast.error("Geolocation not supported by your browser");
+    
+    const tId = toast.loading("Detecting precise location...");
+    
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm(prev => ({ 
+          ...prev, 
+          latitude: pos.coords.latitude.toFixed(6), 
+          longitude: pos.coords.longitude.toFixed(6) 
+        }));
+        toast.success("Coordinates captured!", { id: tId });
+      },
+      (err) => {
+        console.error(err);
+        toast.error("Location access denied. Please enable GPS.", { id: tId });
+      }
+    );
   };
 
   const copyShortId = async () => {
@@ -308,10 +293,14 @@ export default function HospitalProfileSettings() {
             state: form.state,
             pincode: form.pincode,
             country: form.country,
+            // ✅ UPDATED: Send coordinates for geospatial search
+            coordinates: {
+              latitude: parseFloat(form.latitude) || null,
+              longitude: parseFloat(form.longitude) || null
+            }
           },
           established: form.established || null,
           
-          // ✅ UPDATED: Send consultationFee as object with 3 fields
           consultationFee: {
             general: parseInt(form.consultationFeeGeneral) || 0,
             specialist: parseInt(form.consultationFeeSpecialist) || 0,
@@ -354,7 +343,7 @@ export default function HospitalProfileSettings() {
       }
 
       console.log('✅ Update successful:', responseData);
-      toast.success("Hospital profile updated successfully");
+      toast.success("Hospital profile updated & search index synced");
       await fetchHospitalProfile();
     } catch (err) {
       console.error('❌ Submit error:', err);
@@ -669,15 +658,64 @@ export default function HospitalProfileSettings() {
           </CardContent>
         </Card>
 
-        {/* Address */}
-        <Card>
+        {/* Address Card with Geospatial Integration */}
+        <Card className="border-primary/20">
           <CardHeader>
-            <CardTitle className="text-base">Address</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-primary" />
+                Address & Location
+            </CardTitle>
             <CardDescription className="text-xs">
-              Physical location of the hospital
+              Precise location data enables the "Nearby Support" feature for patients.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {/* State Dropdown */}
+              <div>
+                <Label className="text-xs">State *</Label>
+                <Select value={form.state} onValueChange={handleStateChange} disabled={!canEditBasicInfo}>
+                  <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Select State" /></SelectTrigger>
+                  <SelectContent>
+                    {indianStates.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* City Dropdown - Dependent on State */}
+              <div>
+                <Label className="text-xs">City *</Label>
+                <Select 
+                  value={form.city} 
+                  onValueChange={(val) => setForm(p => ({...p, city: val}))} 
+                  disabled={!canEditBasicInfo || !form.state}
+                >
+                  <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Select City" /></SelectTrigger>
+                  <SelectContent>
+                    {availableCities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Coordinates & Pincode */}
+            <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1">
+                    <Label className="text-xs">Precise GPS Coordinates</Label>
+                    <div className="flex gap-2">
+                        <Input placeholder="Lat" value={form.latitude} readOnly className="h-9 bg-muted text-xs" />
+                        <Input placeholder="Lng" value={form.longitude} readOnly className="h-9 bg-muted text-xs" />
+                        <Button type="button" variant="outline" size="icon" onClick={detectLocation} disabled={!canEditBasicInfo} className="shrink-0" title="Detect Location">
+                            <MapPin className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </div>
+                <div>
+                    <Label className="text-xs">Pincode *</Label>
+                    <Input value={form.pincode} onChange={handleChange("pincode")} className="mt-1 h-9" required disabled={!canEditBasicInfo} />
+                </div>
+            </div>
+
             <div>
               <Label className="text-xs">Street Address *</Label>
               <Input
@@ -697,48 +735,14 @@ export default function HospitalProfileSettings() {
                 disabled={!canEditBasicInfo}
               />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label className="text-xs">City *</Label>
-                <Input
-                  value={form.city}
-                  onChange={handleChange("city")}
-                  className="mt-1 h-9"
-                  required
-                  disabled={!canEditBasicInfo}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">State *</Label>
-                <Input
-                  value={form.state}
-                  onChange={handleChange("state")}
-                  className="mt-1 h-9"
-                  required
-                  disabled={!canEditBasicInfo}
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label className="text-xs">Pincode *</Label>
-                <Input
-                  value={form.pincode}
-                  onChange={handleChange("pincode")}
-                  className="mt-1 h-9"
-                  required
-                  disabled={!canEditBasicInfo}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Country</Label>
-                <Input
-                  value={form.country}
-                  onChange={handleChange("country")}
-                  className="mt-1 h-9"
-                  disabled={!canEditBasicInfo}
-                />
-              </div>
+            <div>
+              <Label className="text-xs">Country</Label>
+              <Input
+                value={form.country}
+                onChange={handleChange("country")}
+                className="mt-1 h-9"
+                disabled={!canEditBasicInfo}
+              />
             </div>
           </CardContent>
         </Card>
@@ -791,7 +795,7 @@ export default function HospitalProfileSettings() {
               </div>
             </div>
             
-            {/* ✅ UPDATED: Three separate consultation fee inputs */}
+            {/* Consultation Fees */}
             <div>
               <Label className="text-sm font-medium mb-3 block">Consultation Fees</Label>
               <div className="grid gap-4 sm:grid-cols-3">
@@ -1074,10 +1078,10 @@ export default function HospitalProfileSettings() {
             {saving ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Saving...
+                Syncing Data...
               </>
             ) : (
-              "Save Changes"
+              "Save & Sync Search Data"
             )}
           </Button>
         </div>

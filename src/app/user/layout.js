@@ -1,6 +1,7 @@
 import PatientNavbar from '@/components/user/PatientNavbar1' // Updated to your new Navbar name
 import ProtectedRoute from '@/components/ProtectedRoute'
 import {  UserProvider } from '@/context/UserContext'
+import UserNavbar from '@/components/user/PatientNavbar1'
 
 export const metadata = {
   title: 'Patient Portal - Qlinic',
@@ -12,7 +13,7 @@ export default function PatientLayout({ children }) {
     <ProtectedRoute requiredRole="user"> {/* Changed "user" to "patient" to match your schema role */}
       <UserProvider>
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-          <PatientNavbar />
+          <UserNavbar/>
           {/* Removed max-w-7xl to allow full width usage as per your navbar change */}
           <main className="w-full"> 
             {children}

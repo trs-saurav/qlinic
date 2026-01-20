@@ -84,7 +84,8 @@ const HomePage = () => {
 
         try {
           const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+            { credentials: "omit" }
           )
           const data = await response.json()
           const city = data.address?.city || data.address?.town || 'Your Location'
@@ -528,7 +529,11 @@ const HomePage = () => {
                           <div className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
                             <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-600" />
                             <span className="line-clamp-2">
-                              {hospital.address || hospital.city || hospital.location || 'Location not available'}
+                              {hospital.fullAddress || 
+                                (typeof hospital.address === 'object' && hospital.address !== null
+                                  ? [hospital.address.street, hospital.address.city, hospital.address.state].filter(Boolean).join(', ')
+                                  : hospital.address) || 
+                                hospital.city || hospital.location || 'Location not available'}
                             </span>
                           </div>
 

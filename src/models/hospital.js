@@ -76,131 +76,71 @@ const hospitalSchema = new mongoose.Schema(
         default: 'India',
       },
       pincode: String,
+      // Keep your existing structure for simple display
       coordinates: {
-        latitude: {
-          type: Number,
-          min: -90,
-          max: 90
-        },
-        longitude: {
-          type: Number,
-          min: -180,
-          max: 180
-        }
+        latitude: { type: Number, min: -90, max: 90 },
+        longitude: { type: Number, min: -180, max: 180 }
       },
     },
 
+    // ✅ FIXED: Removed 'required: true' to allow draft saves
+    location: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        index: '2dsphere'
+      }
+    },
+
+    // ✅ NEW: City slug for reliable whole-city fallback
+    city_slug: {
+      type: String,
+      lowercase: true,
+      trim: true,
+      index: true,
+    },
+
     // Media
-    logo: {
-      type: String,
-      default: null
-    },
-    
-    coverPhoto: {
-      type: String,
-      default: null
-    },
-    
+    logo: { type: String, default: null },
+    coverPhoto: { type: String, default: null },
     images: {
       type: [String],
       default: [],
       validate: {
-        validator: function(v) {
-          return v.length <= 10
-        },
+        validator: function(v) { return v.length <= 10 },
         message: 'Maximum 10 images allowed'
       }
     },
 
     // Operating Hours
     operatingHours: {
-      Monday: { 
-        open: { type: String, default: '09:00' }, 
-        close: { type: String, default: '18:00' }, 
-        isOpen: { type: Boolean, default: true } 
-      },
-      Tuesday: { 
-        open: { type: String, default: '09:00' }, 
-        close: { type: String, default: '18:00' }, 
-        isOpen: { type: Boolean, default: true } 
-      },
-      Wednesday: { 
-        open: { type: String, default: '09:00' }, 
-        close: { type: String, default: '18:00' }, 
-        isOpen: { type: Boolean, default: true } 
-      },
-      Thursday: { 
-        open: { type: String, default: '09:00' }, 
-        close: { type: String, default: '18:00' }, 
-        isOpen: { type: Boolean, default: true } 
-      },
-      Friday: { 
-        open: { type: String, default: '09:00' }, 
-        close: { type: String, default: '18:00' }, 
-        isOpen: { type: Boolean, default: true } 
-      },
-      Saturday: { 
-        open: { type: String, default: '09:00' }, 
-        close: { type: String, default: '18:00' }, 
-        isOpen: { type: Boolean, default: true } 
-      },
-      Sunday: { 
-        open: { type: String, default: '09:00' }, 
-        close: { type: String, default: '18:00' }, 
-        isOpen: { type: Boolean, default: false } 
-      },
-      isOpen24x7: {
-        type: Boolean,
-        default: false,
-      },
+      Monday: { open: { type: String, default: '09:00' }, close: { type: String, default: '18:00' }, isOpen: { type: Boolean, default: true } },
+      Tuesday: { open: { type: String, default: '09:00' }, close: { type: String, default: '18:00' }, isOpen: { type: Boolean, default: true } },
+      Wednesday: { open: { type: String, default: '09:00' }, close: { type: String, default: '18:00' }, isOpen: { type: Boolean, default: true } },
+      Thursday: { open: { type: String, default: '09:00' }, close: { type: String, default: '18:00' }, isOpen: { type: Boolean, default: true } },
+      Friday: { open: { type: String, default: '09:00' }, close: { type: String, default: '18:00' }, isOpen: { type: Boolean, default: true } },
+      Saturday: { open: { type: String, default: '09:00' }, close: { type: String, default: '18:00' }, isOpen: { type: Boolean, default: true } },
+      Sunday: { open: { type: String, default: '09:00' }, close: { type: String, default: '18:00' }, isOpen: { type: Boolean, default: false } },
+      isOpen24x7: { type: Boolean, default: false },
     },
 
     // Capacity & Fees
-    totalBeds: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    icuBeds: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    emergencyBeds: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    availableBeds: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
+    totalBeds: { type: Number, default: 0, min: 0 },
+    icuBeds: { type: Number, default: 0, min: 0 },
+    emergencyBeds: { type: Number, default: 0, min: 0 },
+    availableBeds: { type: Number, default: 0, min: 0 },
     
-    // ✅ FIX: consultationFee as object with nested fields
     consultationFee: {
-      general: {
-        type: Number,
-        default: 0,
-        min: 0,
-      },
-      specialist: {
-        type: Number,
-        default: 0,
-        min: 0,
-      },
-      emergency: {
-        type: Number,
-        default: 0,
-        min: 0,
-      },
+      general: { type: Number, default: 0, min: 0 },
+      specialist: { type: Number, default: 0, min: 0 },
+      emergency: { type: Number, default: 0, min: 0 },
     },
     
-    emergencyFee: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
+    emergencyFee: { type: Number, default: 0, min: 0 },
 
     // Services & Facilities
     departments: [
@@ -219,45 +159,15 @@ const hospitalSchema = new mongoose.Schema(
       index: true,
     },
     
-    facilities: {
-      type: [String],
-      default: [],
-    },
-    
-    amenities: {
-      type: [String],
-      default: [],
-    },
-    
-    accreditations: {
-      type: [String],
-      default: [],
-    },
-
-    // ✅ FIX: emergencyServices as array of strings or objects
-    emergencyServices: {
-      type: [String],
-      default: [],
-    },
-    
-    // OR if you need more detail:
-    // emergencyServices: [{
-    //   name: String,
-    //   available: { type: Boolean, default: true },
-    //   contact: String,
-    //   description: String,
-    // }],
+    facilities: { type: [String], default: [] },
+    amenities: { type: [String], default: [] },
+    accreditations: { type: [String], default: [] },
+    emergencyServices: { type: [String], default: [] },
 
     // Insurance
     insurance: {
-      accepted: {
-        type: Boolean,
-        default: false,
-      },
-      providers: {
-        type: [String],
-        default: [],
-      },
+      accepted: { type: Boolean, default: false },
+      providers: { type: [String], default: [] },
     },
 
     // Additional Info
@@ -271,31 +181,12 @@ const hospitalSchema = new mongoose.Schema(
       index: true,
     },
     
-    adminUsers: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-      },
-    ],
-
-    // ✅ REMOVED: adminClerkId (not needed with Auth.js)
+    adminUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 
     // Status
-    isActive: {
-      type: Boolean,
-      default: true,
-      index: true,
-    },
-    isVerified: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-    isProfileComplete: {
-      type: Boolean,
-      default: false,
-    },
-    
+    isActive: { type: Boolean, default: true, index: true },
+    isVerified: { type: Boolean, default: false, index: true },
+    isProfileComplete: { type: Boolean, default: false },
     status: {
       type: String,
       enum: ['active', 'inactive', 'pending', 'suspended'],
@@ -305,44 +196,24 @@ const hospitalSchema = new mongoose.Schema(
     
     // Verification System
     verificationRequest: {
-      status: {
-        type: String,
-        enum: ['none', 'pending', 'approved', 'rejected'],
-        default: 'none',
-        index: true,
-      },
+      status: { type: String, enum: ['none', 'pending', 'approved', 'rejected'], default: 'none', index: true },
       requestedAt: Date,
       reviewedAt: Date,
-      reviewedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-      },
+      reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       rejectionReason: String,
       documents: [
         {
           name: String,
           url: String,
-          type: String, // e.g., 'registration', 'license', 'tax'
-          uploadedAt: {
-            type: Date,
-            default: Date.now,
-          },
+          type: String,
+          uploadedAt: { type: Date, default: Date.now },
         },
       ],
     },
 
     // Ratings
-    rating: {
-      type: Number,
-      default: 0,
-      min: 0,
-      max: 5,
-    },
-    totalReviews: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
+    rating: { type: Number, default: 0, min: 0, max: 5 },
+    totalReviews: { type: Number, default: 0, min: 0 },
     
     // Statistics
     stats: {
@@ -359,67 +230,37 @@ const hospitalSchema = new mongoose.Schema(
   }
 )
 
-// ✅ Indexes for better query performance
+// ✅ INDEXES
 hospitalSchema.index({ name: 'text', description: 'text', specialties: 'text' })
-hospitalSchema.index({ 'address.city': 1, 'address.state': 1 })
+hospitalSchema.index({ city_slug: 1, isActive: 1 })
 hospitalSchema.index({ 'address.city': 1, isActive: 1, isVerified: 1 })
-hospitalSchema.index({ type: 1, isActive: 1 })
-hospitalSchema.index({ isActive: 1, rating: -1 })
-hospitalSchema.index({ adminUsers: 1 })
+// This index is vital for the geospatial search
+hospitalSchema.index({ 'location': '2dsphere' })
 
-// ✅ Geospatial index for location-based search
-hospitalSchema.index({ 'address.coordinates': '2dsphere' })
-
-// ✅ Virtual: Short ID
+// ✅ Virtuals
 hospitalSchema.virtual('shortId').get(function () {
   return this._id ? this._id.toString().slice(-8).toUpperCase() : null
 })
 
-// ✅ Virtual: Full address
 hospitalSchema.virtual('fullAddress').get(function () {
   const addr = this.address
   if (!addr) return ''
-  
-  const parts = [
-    addr.street,
-    addr.landmark,
-    addr.city,
-    addr.state,
-    addr.pincode,
-    addr.country
-  ].filter(Boolean)
-  
+  const parts = [addr.street, addr.landmark, addr.city, addr.state, addr.pincode, addr.country].filter(Boolean)
   return parts.join(', ')
 })
 
-// ✅ Virtual: Is currently open
 hospitalSchema.virtual('isCurrentlyOpen').get(function () {
   if (this.operatingHours?.isOpen24x7) return true
-  
   const now = new Date()
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
   const today = dayNames[now.getDay()]
-  
   const todayHours = this.operatingHours?.[today]
   if (!todayHours || !todayHours.isOpen) return false
-  
   const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-  
   return currentTime >= todayHours.open && currentTime <= todayHours.close
 })
 
-// ✅ Virtual: Check if hospital can be edited
-hospitalSchema.virtual('canEditBasicInfo').get(function () {
-  return !this.isVerified && this.verificationRequest?.status !== 'pending'
-})
-
-// ✅ Virtual: Available bed percentage
-hospitalSchema.virtual('bedAvailabilityPercentage').get(function () {
-  if (!this.totalBeds || this.totalBeds === 0) return 0
-  return Math.round((this.availableBeds / this.totalBeds) * 100)
-})
-
-// ✅ Method: Check profile completeness
+// ✅ UPDATED: Profile Completion Check
 hospitalSchema.methods.checkProfileCompletion = function () {
   const requiredFields = [
     this.name,
@@ -430,178 +271,100 @@ hospitalSchema.methods.checkProfileCompletion = function () {
     this.address?.city,
     this.address?.state,
     this.address?.pincode,
+    // We enforce coordinates here for completion, but NOT in schema for saving
+    this.address?.coordinates?.latitude,
+    this.address?.coordinates?.longitude,
     this.type,
     this.totalBeds > 0,
     this.specialties?.length > 0,
     this.facilities?.length > 0,
   ]
 
-  const filledFields = requiredFields.filter(Boolean).length
+  const filledFields = requiredFields.filter(field => {
+    if (typeof field === 'number') return true; 
+    return Boolean(field);
+  }).length;
+
   const completionPercentage = (filledFields / requiredFields.length) * 100
-  
   this.isProfileComplete = completionPercentage >= 80
 
   return {
     isComplete: this.isProfileComplete,
-    percentage: Math.round(completionPercentage),
-    filledFields,
-    totalFields: requiredFields.length,
-    missingFields: requiredFields.reduce((acc, field, index) => {
-      const fieldNames = [
-        'name', 'registrationNumber', 'phone', 'email', 
-        'street', 'city', 'state', 'pincode', 'type',
-        'totalBeds', 'specialties', 'facilities'
-      ]
-      if (!field) acc.push(fieldNames[index])
-      return acc
-    }, [])
+    percentage: Math.round(completionPercentage)
   }
 }
 
-// ✅ Method: Update rating
-hospitalSchema.methods.updateRating = async function (newRating) {
-  if (newRating < 0 || newRating > 5) {
-    throw new Error('Rating must be between 0 and 5')
-  }
-  
-  const currentTotal = this.rating * this.totalReviews
-  this.totalReviews += 1
-  this.rating = Number(((currentTotal + newRating) / this.totalReviews).toFixed(2))
-  
-  return await this.save()
-}
-
-// ✅ Method: Update statistics
-hospitalSchema.methods.updateStats = async function () {
-  const User = mongoose.model('User')
-  const Appointment = mongoose.model('Appointment')
-
-  try {
-    const [doctors, appointments, patients] = await Promise.all([
-      User.countDocuments({ 
-        'doctorProfile.affiliatedHospitals': this._id,
-        role: 'doctor',
-        isActive: true
-      }),
-      Appointment.countDocuments({ hospitalId: this._id }),
-      Appointment.distinct('patientId', { hospitalId: this._id })
-    ])
-
-    this.stats.totalDoctors = doctors
-    this.stats.totalAppointments = appointments
-    this.stats.totalPatients = patients.length
-
-    await this.save()
-    return this.stats
-  } catch (error) {
-    console.error('Error updating hospital stats:', error)
-    throw error
-  }
-}
-
-// ✅ Static: Find nearby hospitals
-hospitalSchema.statics.findNearby = function (latitude, longitude, maxDistance = 10000, filters = {}) {
-  const query = {
-    'address.coordinates': {
+// ✅ Static: Tiered Nearby + City Fallback Search
+hospitalSchema.statics.findNearbyPerfect = async function (latitude, longitude, cityName, maxDistance = 5000) {
+  // Tier 1: Hyper-Local Search (Nearby GPS)
+  let results = await this.find({
+    'location': {
       $near: {
         $geometry: {
           type: 'Point',
-          coordinates: [longitude, latitude]
+          coordinates: [longitude, latitude] // [lng, lat]
         },
-        $maxDistance: maxDistance
+        $maxDistance: maxDistance // Default 5km
       }
     },
-    isActive: true,
-    ...filters
+    isActive: true
+  }).limit(15)
+
+  // Tier 2: Expansion Fallback (Whole City)
+  if (results.length === 0 && cityName) {
+    const slug = cityName.toLowerCase().replace(/\s+/g, '-')
+    results = await this.find({
+      $or: [
+        { city_slug: slug },
+        { 'address.city': new RegExp(cityName, 'i') }
+      ],
+      isActive: true
+    })
+    .sort({ isVerified: -1, rating: -1 })
+    .limit(20)
   }
   
-  return this.find(query).limit(20)
+  return results
 }
 
-// ✅ Static: Search hospitals
+// ✅ Existing Statics
 hospitalSchema.statics.searchHospitals = function (query, filters = {}) {
-  const searchQuery = {
-    isActive: true,
-    ...filters
-  }
-
-  if (query) {
-    searchQuery.$text = { $search: query }
-  }
-
+  const searchQuery = { isActive: true, ...filters }
+  if (query) searchQuery.$text = { $search: query }
   return this.find(searchQuery)
     .select('-verificationRequest.documents -stats')
     .sort({ isVerified: -1, rating: -1, totalReviews: -1 })
     .limit(filters.limit || 20)
-    .skip(filters.skip || 0)
-}
-
-// ✅ Static: Find by city
-hospitalSchema.statics.findByCity = function (city, options = {}) {
-  const query = {
-    'address.city': new RegExp(city, 'i'),
-    isActive: true,
-  }
-
-  if (options.isVerified !== undefined) {
-    query.isVerified = options.isVerified
-  }
-
-  return this.find(query)
-    .sort({ rating: -1 })
-    .limit(options.limit || 20)
-}
-
-// ✅ Static: Get hospital statistics
-hospitalSchema.statics.getHospitalStats = async function (filters = {}) {
-  const query = { isActive: true, ...filters }
-  
-  return await this.aggregate([
-    { $match: query },
-    {
-      $group: {
-        _id: '$type',
-        count: { $sum: 1 },
-        avgRating: { $avg: '$rating' },
-        totalBeds: { $sum: '$totalBeds' },
-        verified: {
-          $sum: { $cond: ['$isVerified', 1, 0] }
-        }
-      }
-    },
-    { $sort: { count: -1 } }
-  ])
 }
 
 // ✅ Pre-save hook
-hospitalSchema.pre('save', function () {
+hospitalSchema.pre('save', function (next) {
   try {
-    // Check profile completion
+    // 1. Check profile completion (Now safely handles missing coords)
     this.checkProfileCompletion()
     
-    // Ensure availableBeds doesn't exceed totalBeds
-    if (this.availableBeds > this.totalBeds) {
-      this.availableBeds = this.totalBeds
+    // 2. Normalize City Slug for whole-city search
+    if (this.address?.city) {
+      this.city_slug = this.address.city.toLowerCase().replace(/\s+/g, '-')
     }
-    
-    // Ensure ICU and emergency beds don't exceed total
+
+    // 3. Sync GeoJSON 'location' with 'address.coordinates'
+    if (this.address?.coordinates?.latitude && this.address?.coordinates?.longitude) {
+      const { latitude, longitude } = this.address.coordinates
+      this.location = {
+        type: 'Point',
+        coordinates: [longitude, latitude] // MongoDB standard: [lng, lat]
+      }
+    }
+
+    // 4. Existing logic: Bed validation
+    if (this.availableBeds > this.totalBeds) this.availableBeds = this.totalBeds
     if (this.icuBeds + this.emergencyBeds > this.totalBeds) {
       this.icuBeds = 0
       this.emergencyBeds = 0
     }
     
-    // Validate coordinates if provided
-    if (this.address?.coordinates?.latitude && this.address?.coordinates?.longitude) {
-      const { latitude, longitude } = this.address.coordinates
-      if (
-        latitude < -90 || latitude > 90 || 
-        longitude < -180 || longitude > 180 ||
-        isNaN(latitude) || isNaN(longitude)
-      ) {
-        this.address.coordinates = { latitude: null, longitude: null }
-      }
-    }
-    
+ 
   } catch (error) {
     next(error)
   }
