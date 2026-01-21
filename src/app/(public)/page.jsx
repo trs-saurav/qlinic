@@ -7,7 +7,7 @@ import {
   ArrowRight, Zap, Shield, Star, TrendingUp, CheckCircle, 
   Sparkles, Activity, Heart, Stethoscope, ChevronRight, MapPin,
   Building2, Navigation, Clock, Phone, Award, Users, Calendar,
-  Loader2, Search, TrendingDown, Lock
+  Loader2, Search, TrendingDown, Lock, Pill, TestTube, User
 } from 'lucide-react'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Card, CardContent } from '@/components/ui/card'
@@ -21,7 +21,7 @@ const Marquee = ({ children, reverse, duration = 20, pauseOnHover = true, classN
   const isInView = useInView(containerRef, { once: false, margin: '-100px' });
   
   return (
-    <div ref={containerRef} className={`flex flex-nowrap overflow-hidden ${className}`}>
+    <div ref={containerRef} className={`flex flex-nowrap overflow-hidden ${className} hidden sm:flex`}>
       <motion.div
         className="flex flex-nowrap gap-8" // Increased gap for bigger spacing
         animate={isInView ? {
@@ -50,6 +50,40 @@ const Marquee = ({ children, reverse, duration = 20, pauseOnHover = true, classN
   );
 };
 
+// Vertical Marquee Component for Mobile
+const VerticalMarquee = ({ children, reverse, duration = 20, pauseOnHover = true, className = '' }) => {
+  const containerRef = React.useRef(null);
+  const isInView = useInView(containerRef, { once: false, margin: '-100px' });
+  
+  return (
+    <div ref={containerRef} className={`flex flex-col overflow-hidden ${className} sm:hidden`}>
+      <motion.div
+        className="flex flex-col gap-4" // Smaller gap for mobile
+        animate={isInView ? {
+          y: [reverse ? 100 : -100, reverse ? -100 : 100],
+        } : {
+          y: reverse ? 100 : -100
+        }}
+        transition={{
+          duration: duration,
+          ease: "linear",
+          repeat: isInView ? Infinity : 0,
+          repeatType: "loop",
+        }}
+        style={{ height: 'max-content' }}
+        initial={{
+          y: reverse ? 100 : -100
+        }}
+        whileHover={{
+          animationPlayState: pauseOnHover ? "paused" : "running"
+        }}
+      >
+        {children}
+      </motion.div>
+    </div>
+  );
+};
+
 const HomePage = () => {
   const router = useRouter()
   const [hydrated, setHydrated] = useState(false)
@@ -62,6 +96,84 @@ const HomePage = () => {
   const [locationLoading, setLocationLoading] = useState(false)
   const [userLocation, setUserLocation] = useState(null)
   const [locationName, setLocationName] = useState('')
+
+  // Sample doctors fallback for the homepage carousel
+  const sampleDoctors = [
+    {
+      _id: 'doc-1',
+      firstName: 'Ananya',
+      lastName: 'Roy',
+      profileImage: 'https://images.unsplash.com/photo-1550831107-1553da8c8464?w=600&h=600&fit=crop&crop=face',
+      doctorProfile: { specialization: 'Cardiologist', rating: 4.9, reviews: 128, experience: 18, patients: 2000 },
+      hospitalName: 'Apollo Hospitals',
+      location: 'MG Road, Bengaluru'
+    },
+    {
+      _id: 'doc-2',
+      firstName: 'Rohan',
+      lastName: 'Mehta',
+      profileImage: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&h=600&fit=crop&crop=face',
+      doctorProfile: { specialization: 'Pediatrician', rating: 4.8, reviews: 98, experience: 12, patients: 1500 },
+      hospitalName: 'Cloud Nine Clinic',
+      location: 'Indiranagar, Bengaluru'
+    },
+    {
+      _id: 'doc-3',
+      firstName: 'Sneha',
+      lastName: 'Gupta',
+      profileImage: 'https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=600&h=600&fit=crop&crop=face',
+      doctorProfile: { specialization: 'Dermatologist', rating: 4.7, reviews: 76, experience: 10, patients: 900 },
+      hospitalName: 'GreenCare Hospital',
+      location: 'Koramangala, Bengaluru'
+    },
+    {
+      _id: 'doc-4',
+      firstName: 'Arjun',
+      lastName: 'Kumar',
+      profileImage: 'https://images.unsplash.com/photo-1595152772835-219674b2a8a6?w=600&h=600&fit=crop&crop=face',
+      doctorProfile: { specialization: 'Orthopedist', rating: 4.8, reviews: 110, experience: 15, patients: 1700 },
+      hospitalName: 'Swasthya Center',
+      location: 'Whitefield, Bengaluru'
+    }
+  ]
+
+  const displayDoctors = (topDoctors && topDoctors.length > 0) ? topDoctors : sampleDoctors
+  const carouselRef = React.useRef(null)
+  const rafRef = React.useRef(null)
+  const [isPaused, setIsPaused] = useState(false)
+  const [activeDot, setActiveDot] = useState(0)
+
+  // Auto-scroll loop: gentle continuous scroll that resets when reaching the end
+  useEffect(() => {
+    const el = carouselRef.current
+    if (!el) return
+
+    const speed = 0.6 // pixels per frame
+    let running = true
+
+    const step = () => {
+      if (!running) return
+      if (!isPaused) {
+        el.scrollLeft += speed
+        if (el.scrollLeft >= el.scrollWidth - el.clientWidth - 1) {
+          el.scrollLeft = 0
+        }
+        // update active dot based on nearest card
+        const card = el.querySelector('[data-doctor-card]')
+        if (card) {
+          const cardW = card.clientWidth + parseInt(getComputedStyle(card).marginRight || 0)
+          setActiveDot(Math.round(el.scrollLeft / cardW) % displayDoctors.length)
+        }
+      }
+      rafRef.current = requestAnimationFrame(step)
+    }
+
+    rafRef.current = requestAnimationFrame(step)
+    return () => {
+      running = false
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
+  }, [isPaused, displayDoctors.length])
 
 
   useEffect(() => {
@@ -191,7 +303,7 @@ const HomePage = () => {
     <div className="min-h-screen bg-white dark:bg-gray-950" suppressHydrationWarning>
 
       {/* Hero Section */}
-      <section className="relative bg-gradient-to-br from-blue-50 via-white to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 pt-24 sm:pt-32 pb-16 sm:pb-20 overflow-hidden">
+      <section className="relative qlinic-hero pt-24 sm:pt-32 pb-16 sm:pb-20 overflow-hidden">
         {/* Animated Background */}
         <div className="absolute inset-0 opacity-30">
           <motion.div
@@ -225,24 +337,24 @@ const HomePage = () => {
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-100 dark:bg-blue-900/30 rounded-full mb-4 sm:mb-6"
+                className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-[var(--qlinic-primary-soft)] rounded-full mb-4 sm:mb-6"
               >
-                <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600 dark:text-blue-400" />
-                <span className="text-xs sm:text-sm font-semibold text-blue-700 dark:text-blue-400">
+                <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 text-[var(--qlinic-primary)]" />
+                <span className="text-xs sm:text-sm font-semibold text-[var(--qlinic-primary)]">
                   India's #1 Healthcare Platform
                 </span>
               </motion.div>
 
 
-              <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-gray-900 dark:text-white mb-4 sm:mb-6 leading-tight">
+              <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-[var(--qlinic-text)] mb-4 sm:mb-6 leading-tight">
                 Your Health,
-                <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-blue-600">
+                <span className="block text-transparent bg-clip-text bg-gradient-to-r from-[var(--qlinic-primary)] to-[var(--qlinic-primary)]">
                   Instantly Connected
                 </span>
               </h1>
 
 
-              <p className="text-base sm:text-xl text-gray-600 dark:text-gray-300 mb-6 sm:mb-8 leading-relaxed">
+              <p className="text-base sm:text-xl text-[var(--qlinic-text-muted)] mb-6 sm:mb-8 leading-relaxed">
                 Book appointments with top doctors, get instant consultations, and access your health records - all in one place.
               </p>
 
@@ -253,7 +365,7 @@ const HomePage = () => {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => router.push('/sign-up')}
-                  className="px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold rounded-2xl shadow-lg shadow-blue-500/30 text-base sm:text-lg flex items-center justify-center gap-2"
+                  className="btn-primary px-6 sm:px-8 py-3 sm:py-4 rounded-2xl shadow-lg text-base sm:text-lg flex items-center justify-center gap-2"
                 >
                   Get Started Free
                   <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -264,7 +376,8 @@ const HomePage = () => {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => router.push('/aboutus')}
-                  className="px-6 sm:px-8 py-3 sm:py-4 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-white font-bold rounded-2xl border-2 border-gray-200 dark:border-gray-700 text-base sm:text-lg"
+                  className="px-6 sm:px-8 py-3 sm:py-4 rounded-2xl border-2 text-base sm:text-lg"
+                  style={{ borderColor: 'var(--qlinic-primary)', color: 'var(--qlinic-text)' }}
                 >
                   Learn More
                 </motion.button>
@@ -316,10 +429,10 @@ const HomePage = () => {
                   initial={{ opacity: 0, x: 50 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.4 }}
-                  className="absolute -right-4 top-20 bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-4 border border-gray-200 dark:border-gray-700"
+                  className="absolute -right-4 top-20 qlinic-card shadow-xl p-4"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, var(--qlinic-primary), var(--qlinic-accent))' }}>
                       <Zap className="w-5 h-5 text-white" />
                     </div>
                     <div>
@@ -333,10 +446,10 @@ const HomePage = () => {
                   initial={{ opacity: 0, x: -50 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.6 }}
-                  className="absolute -left-4 bottom-20 bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-4 border border-gray-200 dark:border-gray-700"
+                  className="absolute -left-4 bottom-20 qlinic-card shadow-xl p-4"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-lg flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, var(--qlinic-accent), var(--qlinic-primary))' }}>
                       <Shield className="w-5 h-5 text-white" />
                     </div>
                     <div>
@@ -369,7 +482,46 @@ const HomePage = () => {
               <div className="flex justify-center w-full">
                 <div className="flex justify-center w-full">
                   <div className="relative w-full max-w-4xl overflow-hidden">
-                    <Marquee pauseOnHover={true} duration={5}>
+                    <div className="hidden sm:block">
+                      <Marquee pauseOnHover={true} duration={5}>
+                        {[
+                          { icon: '🩺', title: 'Find Doctors', subtitle: '500+ specialists', color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-500' },
+                          { icon: '🏥', title: 'Hospitals', subtitle: 'Verified centers', color: 'from-violet-500 to-violet-600', bgColor: 'bg-violet-500' },
+                          { icon: '💊', title: 'Medicines', subtitle: 'Order online', color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-500' },
+                          { icon: '🩹', title: 'Lab Tests', subtitle: 'At home', color: 'from-orange-500 to-orange-600', bgColor: 'bg-orange-500' }
+                        ].map((service, idx) => (
+                          <motion.button
+                            key={idx}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                              if(service.link) {
+                                router.push(service.link);
+                              } else {
+                                // Handle default routing for services
+                                if(service.title === 'Find Doctors') {
+                                  router.push('/user/doctors');
+                                } else if(service.title === 'Hospitals') {
+                                  router.push('/user/hospitals');
+                                } else if(service.title === 'Medicines') {
+                                  router.push('/user/medicines');
+                                } else if(service.title === 'Lab Tests') {
+                                  router.push('/user/lab-tests');
+                                }
+                              }
+                            }}
+                            className="flex-shrink-0 w-full sm:w-64 p-6 sm:p-8 qlinic-card sm:rounded-3xl shadow-lg sm:shadow-xl transition-all text-left group"
+                          >
+                            <div className={`w-20 h-20 bg-gradient-to-br ${service.color} rounded-2xl flex items-center justify-center text-3xl mb-4`}>
+                              {service.icon}
+                            </div>
+                            <p className="font-bold text-lg text-[var(--qlinic-text)] mb-2">{service.title}</p>
+                            <p className="text-base text-[var(--qlinic-text-muted)]">{service.subtitle}</p>
+                          </motion.button>
+                        ))}
+                      </Marquee>
+                    </div>
+                    <div className="flex flex-col gap-4 sm:hidden">
                       {[
                         { icon: '🩺', title: 'Find Doctors', subtitle: '500+ specialists', color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-500' },
                         { icon: '🏥', title: 'Hospitals', subtitle: 'Verified centers', color: 'from-violet-500 to-violet-600', bgColor: 'bg-violet-500' },
@@ -380,21 +532,166 @@ const HomePage = () => {
                           key={idx}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          onClick={() => router.push(service.link)}
-                          className="flex-shrink-0 p-8 bg-white dark:bg-gray-800 rounded-3xl shadow-xl border-2 border-gray-200 dark:border-gray-700 transition-all text-left group"
+                          onClick={() => {
+                            if(service.link) {
+                              router.push(service.link);
+                            } else {
+                              // Handle default routing for services
+                              if(service.title === 'Find Doctors') {
+                                router.push('/user/doctors');
+                              } else if(service.title === 'Hospitals') {
+                                router.push('/user/hospitals');
+                              } else if(service.title === 'Medicines') {
+                                router.push('/user/medicines');
+                              } else if(service.title === 'Lab Tests') {
+                                router.push('/user/lab-tests');
+                              }
+                            }
+                          }}
+                          className="w-full p-6 qlinic-card shadow-lg transition-all text-left group"
                         >
                           <div className={`w-20 h-20 bg-gradient-to-br ${service.color} rounded-2xl flex items-center justify-center text-3xl mb-4`}>
                             {service.icon}
                           </div>
-                          <p className="font-bold text-lg text-gray-900 dark:text-white mb-2">{service.title}</p>
-                          <p className="text-base text-gray-500 dark:text-gray-400">{service.subtitle}</p>
+                          <p className="font-bold text-lg text-[var(--qlinic-text)] mb-2">{service.title}</p>
+                          <p className="text-base text-[var(--qlinic-text-muted)]">{service.subtitle}</p>
                         </motion.button>
                       ))}
-                    </Marquee>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+
+      {/* Section Separator */}
+      <div className="h-px bg-gray-200 dark:bg-gray-800 w-full max-w-7xl mx-auto"></div>
+
+
+      {/* Clinics/Patients mini-banner removed */}
+
+
+      {/* How It Works Section */}
+      <section className="py-12 sm:py-16 bg-white dark:bg-gray-950">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white mb-4 flex items-center gap-3">
+              <Activity className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+              How It Works
+            </h2>
+            <p className="text-lg text-gray-600 dark:text-gray-400">
+              Simple steps to connect with healthcare
+            </p>
+          </motion.div>
+          
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              { 
+                icon: Search, 
+                title: 'Search', 
+                description: 'Find doctors, hospitals, or book appointments',
+                color: 'blue'
+              },
+              { 
+                icon: Stethoscope, 
+                title: 'Choose', 
+                description: 'Select your preferred doctor or hospital',
+                color: 'violet'
+              },
+              { 
+                icon: Calendar, 
+                title: 'Book & Consult', 
+                description: 'Schedule appointment and get treated',
+                color: 'green'
+              }
+            ].map((step, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: idx * 0.2 }}
+                className="text-center"
+              >
+                <div className={`w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-${step.color}-500 to-${step.color}-600 rounded-2xl flex items-center justify-center`}>
+                  <step.icon className="w-10 h-10 text-white" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
+                  {step.title}
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  {step.description}
+                </p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+
+      {/* Section Separator */}
+      <div className="h-px bg-gray-200 dark:bg-gray-800 w-full max-w-7xl mx-auto"></div>
+
+
+      {/* Specialties Section */}
+      <section className="py-12 sm:py-16 bg-gradient-to-br from-violet-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white mb-4 flex items-center gap-3">
+              <Stethoscope className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+              Popular Specialties
+            </h2>
+            <p className="text-lg text-gray-600 dark:text-gray-400">
+              Find doctors in your preferred specialty
+            </p>
+          </motion.div>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
+            {[
+              { name: 'Cardiology', icon: Heart, color: 'red' },
+              { name: 'Dermatology', icon: Activity, color: 'amber' },
+              { name: 'Pediatrics', icon: Users, color: 'emerald' },
+              { name: 'Orthopedics', icon: Shield, color: 'blue' },
+              { name: 'Neurology', icon: Activity, color: 'violet' },
+              { name: 'Gynecology', icon: Users, color: 'pink' },
+              { name: 'Dentistry', icon: Shield, color: 'gray' },
+              { name: 'Ophthalmology', icon: Activity, color: 'cyan' },
+              { name: 'ENT', icon: Activity, color: 'orange' },
+              { name: 'Psychiatry', icon: Sparkles, color: 'purple' },
+              { name: 'General Medicine', icon: Stethoscope, color: 'indigo' },
+              { name: 'Diabetology', icon: Activity, color: 'sky' }
+            ].map((specialty, idx) => (
+              <motion.div
+                key={specialty.name}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: idx * 0.1 }}
+                whileHover={{ y: -10, scale: 1.02 }}
+                onClick={() => router.push(`/search?q=${specialty.name.toLowerCase()}`)}
+                className="qlinic-card p-6 shadow-lg hover:shadow-xl cursor-pointer transition-all text-center group card-hover"
+              >
+                <div className={`w-12 h-12 mx-auto mb-4 bg-gradient-to-br from-${specialty.color}-500 to-${specialty.color}-600 rounded-xl flex items-center justify-center`}>
+                  <specialty.icon className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="font-bold text-[var(--qlinic-text)] group-hover:text-[var(--qlinic-primary)] transition-colors">
+                  {specialty.name}
+                </h3>
+              </motion.div>
+            ))}
           </div>
         </div>
       </section>
@@ -409,7 +706,8 @@ const HomePage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 sm:mb-8">
             <div>
-              <h2 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white mb-2">
+              <h2 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+                <Building2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                 Hospitals Near You
               </h2>
               {locationName && (
@@ -442,10 +740,10 @@ const HomePage = () => {
               ) : nearbyHospitals.length > 0 && (
                 <button 
                   onClick={() => router.push('/user/hospitals')}
-                  className="text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-2 hover:gap-3 transition-all"
+                  className="inline-flex items-center gap-2 px-4 py-2 text-blue-600 dark:text-blue-400 font-medium hover:text-blue-700 dark:hover:text-blue-300 transition-colors group"
                 >
                   View All
-                  <ChevronRight className="w-5 h-5" />
+                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                 </button>
               )}
             </div>
@@ -768,137 +1066,98 @@ const HomePage = () => {
       <div className="h-px bg-gray-200 dark:bg-gray-800 w-full max-w-7xl mx-auto"></div>
 
 
-      {/* Top Doctors */}
-      {topDoctors.length > 0 && (
-        <section className="py-12 sm:py-16 bg-white dark:bg-gray-950">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between mb-6 sm:mb-8">
-              <h2 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white">
-                Top Rated Doctors
-              </h2>
-              <button 
-                onClick={() => router.push('/user/doctors')}
-                className="text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-2 hover:gap-3 transition-all text-sm sm:text-base"
+      {/* Top rated doctors near you */}
+      <section className="py-12 sm:py-16 bg-white dark:bg-gray-950">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between mb-6 sm:mb-8">
+            <h2 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white flex items-center gap-3">
+              <Stethoscope className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              Top rated doctors near you
+            </h2>
+            <div className="flex items-center gap-2">
+              <button
+                aria-label="Previous"
+                onClick={() => {
+                  const el = carouselRef.current
+                  if (!el) return
+                  el.scrollBy({ left: -Math.round(el.clientWidth / 3), behavior: 'smooth' })
+                }}
+                className="p-2 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md"
               >
-                View All
-                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                <ChevronRight className="w-5 h-5 rotate-180 text-gray-700 dark:text-gray-300" />
+              </button>
+              <button
+                aria-label="Next"
+                onClick={() => {
+                  const el = carouselRef.current
+                  if (!el) return
+                  el.scrollBy({ left: Math.round(el.clientWidth / 3), behavior: 'smooth' })
+                }}
+                className="p-2 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md"
+              >
+                <ChevronRight className="w-5 h-5 text-gray-700 dark:text-gray-300" />
               </button>
             </div>
+          </div>
 
-
-            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory -mx-4 px-4">
-              {[
-                {
-                  _id: 'doc-1',
-                  firstName: 'Rajesh',
-                  lastName: 'Kumar',
-                  profileImage: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=400&h=400&fit=crop&crop=face',
-                  doctorProfile: {
-                    specialization: 'Cardiology',
-                    rating: 4.8,
-                    experience: 15,
-                    consultationFee: 800
-                  }
-                },
-                {
-                  _id: 'doc-2',
-                  firstName: 'Priya',
-                  lastName: 'Sharma',
-                  profileImage: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=400&h=400&fit=crop&crop=face',
-                  doctorProfile: {
-                    specialization: 'Pediatrics',
-                    rating: 4.9,
-                    experience: 12,
-                    consultationFee: 600
-                  }
-                },
-                {
-                  _id: 'doc-3',
-                  firstName: 'Amit',
-                  lastName: 'Patel',
-                  profileImage: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400&h=400&fit=crop&crop=face',
-                  doctorProfile: {
-                    specialization: 'Orthopedics',
-                    rating: 4.7,
-                    experience: 18,
-                    consultationFee: 900
-                  }
-                },
-                {
-                  _id: 'doc-4',
-                  firstName: 'Sneha',
-                  lastName: 'Gupta',
-                  profileImage: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1f?w=400&h=400&fit=crop&crop=face',
-                  doctorProfile: {
-                    specialization: 'Dermatology',
-                    rating: 4.6,
-                    experience: 10,
-                    consultationFee: 700
-                  }
-                }
-              ].map((doctor, idx) => (
-                <motion.div
-                  key={doctor._id}
-                  initial={{ opacity: 0, x: 50 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: idx * 0.1 }}
-                  whileHover={{ y: -10 }}
-                  className="flex-shrink-0 w-72 sm:w-80 snap-center"
-                >
-                  <Card className="h-full hover:shadow-2xl transition-shadow border-2 border-blue-500">
-                    <CardContent className="p-5 sm:p-6">
-                      <div className="flex items-start gap-3 sm:gap-4 mb-4">
-                        <Avatar className="w-14 h-14 sm:w-16 sm:h-16 border-4 border-blue-500 flex-shrink-0">
-                          <AvatarImage src={doctor.profileImage} />
-                          <AvatarFallback className="text-lg sm:text-xl font-bold bg-gradient-to-br from-blue-400 to-blue-600 text-white">
-                            {doctor.firstName?.[0]}{doctor.lastName?.[0]}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-base sm:text-lg text-gray-900 dark:text-white truncate">
-                            Dr. {doctor.firstName} {doctor.lastName}
-                          </h3>
-                          <p className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 mb-2 truncate">
-                            {doctor.doctorProfile?.specialization}
-                          </p>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <div className="flex items-center gap-1 px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-                              <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" />
-                              <span className="text-xs font-bold text-yellow-700 dark:text-yellow-400">
-                                {doctor.doctorProfile?.rating?.toFixed(1)}
-                              </span>
+          <div
+            ref={carouselRef}
+            onMouseEnter={() => setIsPaused(true)}
+            onMouseLeave={() => setIsPaused(false)}
+            className="relative overflow-hidden"
+          >
+            <div className="flex gap-4 py-2 px-2 md:px-4 overflow-x-auto scrollbar-hide items-stretch" style={{scrollBehavior: 'smooth'}}>
+              {displayDoctors.map((doc, idx) => (
+                <article key={doc._id || idx} data-doctor-card className="flex-shrink-0 w-72 sm:w-80 lg:w-80" >
+                  <motion.div whileHover={{ scale: 1.03 }} className="h-full">
+                    <Card className="h-full border border-gray-200 dark:border-gray-700 shadow-sm">
+                      <CardContent className="p-4 sm:p-5">
+                        <div className="flex items-start gap-4">
+                          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center overflow-hidden border border-gray-100">
+                            <Image src={doc.profileImage} alt={`${doc.firstName} ${doc.lastName}`} width={80} height={80} className="object-cover w-20 h-20 rounded-full" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-sm sm:text-base text-gray-900 dark:text-white truncate">Dr. {doc.firstName} {doc.lastName}</h3>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 truncate">{doc.doctorProfile?.specialization}</p>
+                            <div className="flex items-center gap-2 mt-2">
+                              <div className="flex items-center gap-1 text-sm text-yellow-600">
+                                <Star className="w-4 h-4" />
+                                <span className="font-bold">{(doc.doctorProfile?.rating || 4.8).toFixed(1)}</span>
+                              </div>
+                              <span className="text-xs text-gray-500">({doc.doctorProfile?.reviews || 120} reviews)</span>
                             </div>
-                            <span className="text-xs text-gray-500">
-                              {doctor.doctorProfile?.experience}+ years
-                            </span>
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 truncate">{doc.hospitalName} – {doc.location}</p>
+                            <p className="text-xs text-gray-500 mt-2">{doc.doctorProfile?.experience}+ years experience • Trusted by {doc.doctorProfile?.patients?.toLocaleString?.() || '2,000+'} patients</p>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
-                        <div>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">Consultation</p>
-                          <p className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
-                            ₹{doctor.doctorProfile?.consultationFee}
-                          </p>
+                        <div className="mt-4 flex items-center gap-3">
+                          <Button onClick={() => router.push(`/user/doctors/${doc._id}`)} className="flex-1 bg-blue-600 hover:bg-blue-700">Book Appointment</Button>
+                          <button onClick={() => router.push(`/user/doctors/${doc._id}`)} className="text-sm text-gray-600 dark:text-gray-300 underline">View Profile</button>
                         </div>
-                        <Button 
-                          size="sm" 
-                          className="bg-blue-600 hover:bg-blue-700"
-                          onClick={() => router.push(`/user/doctors/${doctor._id}`)}
-                        >
-                          Book Now
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                </article>
+              ))}
+            </div>
+
+            {/* Dots */}
+            <div className="absolute left-1/2 transform -translate-x-1/2 bottom-2 flex items-center gap-2">
+              {displayDoctors.map((_, i) => (
+                <button key={i} onClick={() => {
+                  const el = carouselRef.current
+                  const card = el?.querySelector('[data-doctor-card]')
+                  if (el && card) {
+                    const cardW = card.clientWidth + parseInt(getComputedStyle(card).marginRight || 0)
+                    el.scrollTo({ left: i * cardW, behavior: 'smooth' })
+                  }
+                }} className={`w-2 h-2 rounded-full ${i === activeDot ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`} aria-label={`Go to slide ${i+1}`} />
               ))}
             </div>
           </div>
-        </section>
-      )}
+        </div>
+      </section>
 
 
       {/* Social Proof - Testimonials */}
@@ -910,7 +1169,8 @@ const HomePage = () => {
             viewport={{ once: true }}
             className="text-center mb-12"
           >
-            <h2 className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white mb-4">
+            <h2 className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white mb-4 flex items-center gap-3">
+              <Heart className="w-8 h-8 text-blue-600 dark:text-blue-400" />
               Trusted by Thousands
             </h2>
             <p className="text-lg text-gray-600 dark:text-gray-400">
@@ -949,15 +1209,15 @@ const HomePage = () => {
                 viewport={{ once: true }}
                 transition={{ delay: idx * 0.2 }}
                 whileHover={{ y: -10 }}
-                className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-200 dark:border-gray-700"
+                className="qlinic-card p-6 shadow-lg"
               >
                 <div className="flex items-center mb-4">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg mr-4">
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg mr-4" style={{ background: 'linear-gradient(135deg, var(--qlinic-primary), #6D28D9)' }}>
                     {testimonial.avatar}
                   </div>
                   <div>
-                    <h4 className="font-bold text-gray-900 dark:text-white">{testimonial.name}</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <h4 className="font-bold text-[var(--qlinic-text)]">{testimonial.name}</h4>
+                    <p className="text-sm text-[var(--qlinic-text-muted)]">
                       {testimonial.role} • {testimonial.location}
                     </p>
                   </div>
@@ -1064,15 +1324,15 @@ const HomePage = () => {
                 viewport={{ once: true }}
                 transition={{ delay: idx * 0.1 }}
                 whileHover={{ y: -10, scale: 1.02 }}
-                className="p-6 sm:p-8 bg-white dark:bg-gray-800 rounded-2xl sm:rounded-3xl border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 transition-all"
+                className="p-6 sm:p-8 qlinic-card sm:rounded-3xl hover:border-[var(--qlinic-primary)] transition-all card-hover"
               >
                 <div className={`w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-${feature.color}-500 to-${feature.color}-600 rounded-xl sm:rounded-2xl flex items-center justify-center mb-4 sm:mb-6`}>
                   <feature.icon className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                 </div>
-                <h3 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                <h3 className="text-lg sm:text-2xl font-bold text-[var(--qlinic-text)] mb-2">
                   {feature.title}
                 </h3>
-                <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">{feature.desc}</p>
+                <p className="text-sm sm:text-base text-[var(--qlinic-text-muted)]">{feature.desc}</p>
               </motion.div>
             ))}
           </div>

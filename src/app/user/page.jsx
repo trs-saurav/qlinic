@@ -1,10 +1,9 @@
-// app/patient/page.jsx
+// app/user/page.jsx
 import DashboardOverview from '@/components/user/DashboardOverview'
 
-export default function PatientDashboard() {
+export default function UserDashboard() {
   return (
     <>
-
       <DashboardOverview />
     </>
   )
