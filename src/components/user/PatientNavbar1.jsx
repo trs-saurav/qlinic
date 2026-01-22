@@ -440,17 +440,25 @@ export default function UserNavbar() {
       </motion.nav>
 
       {/* Location Modal */}
-      {showLocationModal && (
-        <LocationSelector
-          locationName={locationName} setLocationName={setLocationName} setUserLocation={setUserLocation}
-          locationStatus={locationStatus} setLocationStatus={setLocationStatus}
-          showLocationModal={showLocationModal} setShowLocationModal={setShowLocationModal}
-          onLocationSelect={(location) => {
-            setUserLocation(location); setLocationName(location.name);
-            if (searchExpanded && !isMobile) fetchNearbyHospitals(location);
-          }}
-        />
-      )}
+     {showLocationModal && (
+  <LocationSelector
+    locationName={locationName}
+    setLocationName={setLocationName}
+    setUserLocation={setUserLocation}
+    locationStatus={locationStatus}
+    setLocationStatus={setLocationStatus}
+    showLocationModal={showLocationModal}
+    setShowLocationModal={setShowLocationModal}
+    // ✅ THIS IS THE CRITICAL PART:
+    onLocationSelect={(location) => {
+      setUserLocation(location);
+      setLocationName(location.name);
+      // Trigger search if bar is open or if we want to refresh "nearby" results
+      if (searchExpanded) fetchNearbyHospitals(location);
+    }}
+  />
+)}
+        
     </>
   )
 }

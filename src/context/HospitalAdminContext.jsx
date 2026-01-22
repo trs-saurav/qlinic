@@ -152,7 +152,10 @@ export const HospitalAdminProvider = ({ children }) => {
       setStatsLoading(true)
       const { res, data } = await apiFetch('/api/hospital/dashboard/stats')
       if (res.ok && data?.stats) setStats(data.stats)
-    } catch (err) { } finally { setStatsLoading(false) }
+    } catch (err) { } finally { 
+      setStatsLoading(false);
+      setLastRefresh(Date.now());
+    }
   }, [apiFetch, hospital?._id])
 
   const fetchAppointments = useCallback(
@@ -185,6 +188,7 @@ export const HospitalAdminProvider = ({ children }) => {
         toast.error('Failed to load appointments')
       } finally {
         setAppointmentsLoading(false)
+        setLastRefresh(Date.now());
       }
     },
     [apiFetch, handleErrorToast, hospital?._id, selectedDate]
@@ -231,7 +235,10 @@ export const HospitalAdminProvider = ({ children }) => {
         setDoctors(normalizedDocs)
         setPendingDoctorRequests(data?.pendingRequests || [])
       }
-    } catch (err) { console.error(err) } finally { setDoctorsLoading(false) }
+    } catch (err) { console.error(err) } finally { 
+      setDoctorsLoading(false);
+      setLastRefresh(Date.now());
+    }
   }, [apiFetch, hospital?._id])
 
   const fetchPatients = useCallback(async () => {
@@ -243,7 +250,10 @@ export const HospitalAdminProvider = ({ children }) => {
         setPatients(data?.patients || [])
         setTodayPatients(data?.todayPatients || [])
       }
-    } catch (err) { } finally { setPatientsLoading(false) }
+    } catch (err) { } finally { 
+      setPatientsLoading(false);
+      setLastRefresh(Date.now());
+    }
   }, [apiFetch, hospital?._id])
 
   const fetchStaff = useCallback(async () => {
@@ -252,7 +262,10 @@ export const HospitalAdminProvider = ({ children }) => {
       setStaffLoading(true)
       const { res, data } = await apiFetch('/api/hospital/staff')
       if (res.ok) setStaff(data?.staff || [])
-    } catch (err) { } finally { setStaffLoading(false) }
+    } catch (err) { } finally { 
+      setStaffLoading(false);
+      setLastRefresh(Date.now());
+    }
   }, [apiFetch, hospital?._id])
 
   const fetchInventoryStats = useCallback(async () => {
@@ -262,6 +275,7 @@ export const HospitalAdminProvider = ({ children }) => {
       const { res, data } = await apiFetch(`/api/hospital/inventory/stats?${params}`)
       if (res.ok && data?.stats) setInventoryStats(data.stats)
     } catch (err) { }
+    setLastRefresh(Date.now());
   }, [apiFetch, hospital?._id])
 
   const fetchInventory = useCallback(async (filters) => {
@@ -282,7 +296,10 @@ export const HospitalAdminProvider = ({ children }) => {
            if (filters) setInventoryFilters(filters)
            setLowStockItems((data?.items || []).filter(i => ['low-stock','out-of-stock'].includes(i.status)))
         }
-      } catch (err) {} finally { setInventoryLoading(false) }
+      } catch (err) {} finally { 
+        setInventoryLoading(false);
+        setLastRefresh(Date.now());
+      }
   }, [apiFetch, hospital?._id, inventoryFilters])
 
   const fetchNotifications = useCallback(async () => {
@@ -294,6 +311,7 @@ export const HospitalAdminProvider = ({ children }) => {
         setUnreadCount(data?.unreadCount || 0)
       }
     } catch (err) { }
+    setLastRefresh(Date.now());
   }, [apiFetch, hospital?._id])
 
   // Actions
@@ -340,6 +358,7 @@ export const HospitalAdminProvider = ({ children }) => {
       fetchInventoryStats(),
       fetchNotifications(),
     ])
+    setLastRefresh(Date.now());
   }, [hospital?._id, appointmentsFilter, selectedDate, fetchStats, fetchAppointments, fetchDoctors, fetchPatients, fetchInventoryStats, fetchNotifications])
 
   // Effects
@@ -366,16 +385,24 @@ export const HospitalAdminProvider = ({ children }) => {
     return () => off(queuesRef)
   }, [hospital?._id])
 
-  // POLLING
+  // MANUAL REFRESH WITH 30-MINUTE FALLBACK
+  const [lastRefresh, setLastRefresh] = useState(Date.now())
+
+  // Check every minute if 30 minutes have passed since last refresh
   useEffect(() => {
     if (!hospital?._id) return
     const interval = setInterval(() => {
+      const timeSinceLastRefresh = Date.now() - lastRefresh;
+      if (timeSinceLastRefresh >= 30 * 60 * 1000) { // 30 minutes
         fetchAppointments(appointmentsFilter, selectedDate)
         fetchNotifications()
-        fetchStats() 
-    }, 30000) 
-    return () => clearInterval(interval)
-  }, [hospital?._id, fetchAppointments, fetchNotifications, fetchStats, appointmentsFilter, selectedDate])
+        fetchStats()
+        setLastRefresh(Date.now());
+      }
+    }, 60 * 1000); // Check every minute
+    
+    return () => clearInterval(interval);
+  }, [hospital?._id, fetchAppointments, fetchNotifications, fetchStats, appointmentsFilter, selectedDate, lastRefresh])
 
   // Redirect
   useEffect(() => {

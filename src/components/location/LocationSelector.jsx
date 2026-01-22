@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Navigation, X, Search } from "lucide-react";
+import { MapPin, Navigation, X, Search, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Input } from "@/components/ui/input";
 
@@ -14,13 +14,39 @@ const LocationSelector = ({
   setLocationStatus,
   showLocationModal,
   setShowLocationModal,
+  onLocationSelect, // 👈 Added this prop
   buttonClassName,
 }) => {
   const [manualQuery, setManualQuery] = useState("");
-  const [manualResults, setManualResults] = useState([]); // array of Nominatim results
+  const [manualResults, setManualResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const manualRef = useRef(null);
+
+  // Helper to handle final selection
+  const confirmLocation = (loc) => {
+    // 1. Update Local Storage
+    localStorage.setItem("userLocation", JSON.stringify(loc));
+    
+    // 2. Trigger Parent Callback (This updates the Search Bar & API)
+    if (onLocationSelect) {
+      onLocationSelect(loc);
+    } else {
+      // Fallback if no callback provided
+      setUserLocation(loc);
+      setLocationName(loc.name);
+    }
+
+    // 3. UI Feedback
+    setLocationStatus("success");
+    toast.success(`Location set to ${loc.name}`);
+    setShowLocationModal(false);
+    
+    // 4. Reset Search State
+    setManualQuery("");
+    setManualResults([]);
+    setActiveIndex(-1);
+  };
 
   const handleLocationRequest = () => {
     setLocationStatus("loading");
@@ -51,31 +77,29 @@ const LocationSelector = ({
             name,
             timestamp: new Date().toISOString(),
           };
-          setUserLocation(loc);
-          setLocationName(name);
-          setLocationStatus("success");
-          localStorage.setItem("userLocation", JSON.stringify(loc));
-          setShowLocationModal(false);
-          toast.success(`Location set to ${name}`);
+          
+          confirmLocation(loc); // ✅ Use helper
+
         } catch (err) {
-          setLocationStatus("success");
-          setUserLocation({
+          // Fallback if reverse geocoding fails
+          const loc = {
             latitude,
             longitude,
-            name: "Your Location",
+            name: "Current Location",
             timestamp: new Date().toISOString(),
-          });
-          setShowLocationModal(false);
+          };
+          confirmLocation(loc);
         }
       },
-      () => {
-        toast.error("Unable to get location");
+      (err) => {
+        console.error(err);
+        toast.error("Unable to get location. Please enable GPS.");
         setLocationStatus("error");
-      }
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
     );
   };
 
-  // Global location search with Nominatim
   const searchManualLocations = async () => {
     const q = manualQuery.trim();
     if (!q) {
@@ -110,7 +134,7 @@ const LocationSelector = ({
       place.address?.town ||
       place.address?.village ||
       place.display_name?.split(",")[0] ||
-      "Your Location";
+      "Selected Location";
     const state = place.address?.state || "";
     const name = `${city}${state ? ", " + state : ""}`;
 
@@ -121,47 +145,36 @@ const LocationSelector = ({
       timestamp: new Date().toISOString(),
     };
 
-    setUserLocation(loc);
-    setLocationName(name);
-    setLocationStatus("success");
-    localStorage.setItem("userLocation", JSON.stringify(loc));
-    toast.success(`Location set to ${name}`);
-    setShowLocationModal(false);
-    setManualQuery("");
-    setManualResults([]);
-    setActiveIndex(-1);
+    confirmLocation(loc); // ✅ Use helper
   };
 
-  // keyboard navigation for manual list
   const handleManualKeyDown = async (e) => {
+    if (!manualResults.length && e.key === "Enter") {
+        e.preventDefault();
+        searchManualLocations();
+        return;
+    }
     if (!manualResults.length) return;
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((prev) =>
-        prev < manualResults.length - 1 ? prev + 1 : 0
-      );
+      setActiveIndex((prev) => (prev < manualResults.length - 1 ? prev + 1 : 0));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex((prev) =>
-        prev > 0 ? prev - 1 : manualResults.length - 1
-      );
+      setActiveIndex((prev) => (prev > 0 ? prev - 1 : manualResults.length - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (activeIndex >= 0 && manualResults[activeIndex]) {
         handleSelectManual(manualResults[activeIndex]);
-      } else {
-        await searchManualLocations();
       }
     }
   };
 
-  // close dropdown on outside click of manual list
+  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e) => {
       if (manualRef.current && !manualRef.current.contains(e.target)) {
         setManualResults([]);
-        setActiveIndex(-1);
       }
     };
     if (manualResults.length) document.addEventListener("mousedown", handler);
@@ -170,149 +183,103 @@ const LocationSelector = ({
 
   return (
     <>
-      {/* Trigger button - only render if showLocationModal is not controlled by parent */}
-      {showLocationModal === undefined && (
-        <button
-          type="button"
-          onClick={() => setShowLocationModal(true)}
-          className={
-            buttonClassName ??
-            "flex items-center gap-1.5 px-2 py-1 rounded-full bg-blue-50/50 " +
-              "dark:bg-blue-900/20 text-xs font-medium text-gray-700 " +
-              "dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30"
-          }
-        >
-          <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-          <span className="truncate max-w-[80px]">
-            {locationName || "Location"}
-          </span>
-        </button>
-      )}
-
-      {/* Modal */}
+      {/* Modal Overlay */}
       <AnimatePresence>
         {showLocationModal && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
             onClick={() => setShowLocationModal(false)}
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
+              exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl border-2 border-blue-200/50 dark:border-blue-800/50 overflow-hidden shadow-2xl"
+              className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden"
             >
-              <div className="p-6 space-y-5">
+              <div className="p-6 space-y-6">
+                
+                {/* Header */}
                 <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    Choose Location
-                  </h2>
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900 dark:text-white">Select Location</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Find nearby hospitals & doctors</p>
+                  </div>
                   <button
                     onClick={() => setShowLocationModal(false)}
-                    className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-colors"
                   >
-                    <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                    <X className="w-4 h-4 text-slate-500" />
                   </button>
                 </div>
-                <p className="text-gray-600 dark:text-gray-400">
-                  We'll show you doctors and hospitals in your area
-                </p>
 
-                {/* Use current location */}
+                {/* GPS Button */}
                 <button
                   onClick={handleLocationRequest}
                   disabled={locationStatus === "loading"}
-                  className="w-full flex items-center gap-4 p-4 bg-gradient-to-r from-blue-50 to-teal-50 dark:from-blue-900/20 dark:to-teal-900/20 hover:from-blue-100 hover:to-teal-100 dark:hover:from-blue-900/30 dark:hover:to-teal-900/30 rounded-2xl border-2 border-blue-200 dark:border-blue-800 transition-all"
+                  className="w-full flex items-center gap-4 p-4 rounded-2xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-900/10 hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-all group"
                 >
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-md shadow-blue-200 dark:shadow-none group-hover:scale-105 transition-transform">
                     {locationStatus === "loading" ? (
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{
-                          duration: 1,
-                          repeat: Infinity,
-                          ease: "linear",
-                        }}
-                      >
-                        <Navigation className="w-6 h-6 text-white" />
-                      </motion.div>
+                      <Loader2 className="w-5 h-5 text-white animate-spin" />
                     ) : (
-                      <Navigation className="w-6 h-6 text-white" />
+                      <Navigation className="w-5 h-5 text-white" />
                     )}
                   </div>
-                  <div className="text-left flex-1">
-                    <p className="font-bold text-gray-900 dark:text-white">
-                      Use current location
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {locationStatus === "loading"
-                        ? "Detecting..."
-                        : "Using GPS"}
-                    </p>
+                  <div className="text-left">
+                    <p className="font-semibold text-slate-900 dark:text-white text-sm">Use Current Location</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Using GPS</p>
                   </div>
                 </button>
 
-                {/* Divider text */}
+                {/* Divider */}
                 <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-blue-100 dark:bg-blue-900/60" />
-                  <span className="text-[11px] uppercase tracking-wide text-gray-400">
-                    Or search anywhere
-                  </span>
-                  <div className="h-px flex-1 bg-blue-100 dark:bg-blue-900/60" />
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Or search manually</span>
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
                 </div>
 
-                {/* Manual global search */}
-                <div ref={manualRef} className="space-y-2">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500" />
-                    <Input
-                      type="text"
-                      placeholder="Search any city, area or place in the world..."
-                      value={manualQuery}
-                      onChange={(e) => setManualQuery(e.target.value)}
-                      onKeyDown={handleManualKeyDown}
-                      className="w-full pl-10 pr-20 h-10 rounded-2xl border-blue-200/70 dark:border-blue-800/70 focus:border-blue-500 dark:focus:border-blue-500 text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={searchManualLocations}
-                      disabled={isSearching}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60"
-                    >
-                      {isSearching ? "Searching..." : "Search"}
-                    </button>
-                  </div>
-
+                {/* Manual Search */}
+                <div className="relative" ref={manualRef}>
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    type="text"
+                    placeholder="Search city, area, or pincode..."
+                    value={manualQuery}
+                    onChange={(e) => setManualQuery(e.target.value)}
+                    onKeyDown={handleManualKeyDown}
+                    className="pl-10 h-11 rounded-xl bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500"
+                  />
+                  
+                  {/* Results Dropdown */}
                   {manualResults.length > 0 && (
-                    <div className="mt-1 max-h-52 overflow-auto rounded-2xl border border-blue-100 dark:border-blue-800 bg-blue-50/40 dark:bg-blue-950/40">
-                      <ul className="divide-y divide-blue-100/70 dark:divide-blue-900/70 text-sm">
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg max-h-60 overflow-y-auto z-10">
+                      <ul className="py-1">
                         {manualResults.map((place, idx) => (
                           <li
                             key={place.place_id}
                             onClick={() => handleSelectManual(place)}
-                            className={`px-3 py-2.5 cursor-pointer hover:bg-blue-100/80 dark:hover:bg-blue-900/50 ${
+                            className={`px-4 py-3 cursor-pointer transition-colors flex items-center gap-3 ${
                               idx === activeIndex
-                                ? "bg-blue-100/80 dark:bg-blue-900/60"
-                                : ""
+                                ? "bg-blue-50 dark:bg-slate-800"
+                                : "hover:bg-slate-50 dark:hover:bg-slate-800"
                             }`}
                           >
-                            <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
-                              {place.display_name}
-                            </p>
-                            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                              {parseFloat(place.lat).toFixed(3)},{" "}
-                              {parseFloat(place.lon).toFixed(3)}
-                            </p>
+                            <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                            <div className="min-w-0">
+                                <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{place.display_name.split(',')[0]}</p>
+                                <p className="text-xs text-slate-500 truncate">{place.display_name}</p>
+                            </div>
                           </li>
                         ))}
                       </ul>
                     </div>
                   )}
                 </div>
+
               </div>
             </motion.div>
           </motion.div>

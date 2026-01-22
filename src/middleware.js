@@ -101,7 +101,7 @@ export default async function middleware(req) {
   // =======================================================
   // 5. PATH DEFINITIONS (STRICT PRIVACY)
   // =======================================================
-  const authPaths = ['/sign-in', '/sign-up', '/auth/error', '/unauthorized']
+  const authPaths = ['/sign-in', '/sign-up', '/auth/error', '/unauthorized', '/forgot-password', '/reset-password']
   const publicPaths = ['/', ...authPaths, '/about', '/contact-us', '/privacy', '/terms']
   
   const isAuthPath = authPaths.some(path => nextUrl.pathname.startsWith(path))

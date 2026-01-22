@@ -18,9 +18,7 @@ import {
   Mail,
   Lock,
   Chrome,
-  Check,
-  Sparkles,
-  Zap
+  Check
 } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -28,7 +26,6 @@ import toast from 'react-hot-toast'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Form,
   FormControl,
@@ -38,7 +35,6 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Separator } from '@/components/ui/separator'
-import { Badge } from '@/components/ui/badge'
 
 const signInSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -49,17 +45,14 @@ export default function SignInClient() {
   const searchParams = useSearchParams()
   const { data: session, status } = useSession()
   
-  // Safely get search parameters with fallbacks
   let roleFromUrl, redirectTo
   try {
     roleFromUrl = searchParams.get('role') || 'user'
     redirectTo = searchParams.get('redirect')
   } catch (error) {
-    // Fallback values when searchParams is not available (during static generation)
     roleFromUrl = 'user'
     redirectTo = null
   }
-  
   
   const [loading, setLoading] = useState(false)
   const [socialLoading, setSocialLoading] = useState(null)
@@ -75,44 +68,35 @@ export default function SignInClient() {
       label: 'Patient',
       description: 'Book appointments, access records, and manage health',
       icon: Users,
-      gradient: 'from-blue-500 via-blue-600 to-violet-600',
       redirectUrl: '/user',
-      features: ['Instant booking', 'Medical records', 'Family profiles'],
-      bgGradient: 'from-blue-500/20 via-violet-500/20 to-purple-500/20'
+      features: ['Instant booking', 'Medical records', 'Family profiles']
     },
     doctor: {
       label: 'Doctor',
       description: 'Manage consultations, patients, and your practice',
       icon: Stethoscope,
-      gradient: 'from-emerald-500 via-emerald-600 to-teal-600',
       redirectUrl: '/doctor',
-      features: ['Consultations', 'Patient history', 'Availability'],
-      bgGradient: 'from-emerald-500/20 via-teal-500/20 to-green-500/20'
+      features: ['Consultations', 'Patient history', 'Availability']
     },
     hospital_admin: {
       label: 'Hospital Admin',
       description: 'Control operations, staff, and performance',
       icon: Building2,
-      gradient: 'from-purple-500 via-purple-600 to-pink-600',
       redirectUrl: '/hospital',
-      features: ['Staff management', 'Analytics', 'Operations'],
-      bgGradient: 'from-purple-500/20 via-pink-500/20 to-rose-500/20'
+      features: ['Staff management', 'Analytics', 'Operations']
     },
     admin: {
       label: 'Admin',
       description: 'Full platform control and system management',
       icon: Shield,
-      gradient: 'from-red-500 via-red-600 to-orange-600',
       redirectUrl: '/admin',
-      features: ['System control', 'User management', 'Analytics'],
-      bgGradient: 'from-red-500/20 via-orange-500/20 to-amber-500/20'
+      features: ['System control', 'User management', 'Analytics']
     }
   }
 
   const currentRole = roles[roleFromUrl] || roles.user
   const IconComponent = currentRole.icon
 
-  // ✅ Fetch CSRF token when component mounts
   useEffect(() => {
     const fetchCsrfToken = async () => {
       try {
@@ -125,10 +109,8 @@ export default function SignInClient() {
     fetchCsrfToken()
   }, [])
 
-  // Redirect authenticated users
   useEffect(() => {
     if (status === 'authenticated' && session?.user) {
-      console.log('✅ Already authenticated, redirecting...')
       const userRole = session.user.role
       const roleRoutes = {
         user: '/user',
@@ -139,8 +121,6 @@ export default function SignInClient() {
       }
       
       const destination = redirectTo || roleRoutes[userRole] || '/user'
-      console.log('🔀 Redirecting to:', destination)
-      // Use window.location.href only once to avoid loops
       const timer = setTimeout(() => {
         window.location.href = destination
       }, 100)
@@ -148,150 +128,11 @@ export default function SignInClient() {
     }
   }, [status, session, redirectTo])
 
-const onSubmit = async (data) => {
-  setLoading(true)
-  
-  // ============ CLIENT-SIDE DEBUG START ============
-  console.log('\n' + '='.repeat(70))
-  console.log('🖥️  CLIENT-SIDE DEBUG - SIGN IN ATTEMPT')
-  console.log('='.repeat(70))
-  console.log('📍 Current URL:', window.location.href)
-  console.log('📍 Current hostname:', window.location.hostname)
-  console.log('📍 Current pathname:', window.location.pathname)
-  console.log('')
-  console.log('📥 Form data received:')
-  console.log('   Email:', data.email)
-  console.log('   Password:', data.password ? '***' + data.password.slice(-3) : 'MISSING')
-  console.log('')
-  console.log('🎭 Role information:')
-  console.log('   roleFromUrl:', roleFromUrl)
-  console.log('   Type:', typeof roleFromUrl)
-  console.log('   Is defined?', roleFromUrl !== undefined)
-  console.log('   Is null?', roleFromUrl === null)
-  console.log('   Is empty string?', roleFromUrl === '')
-  console.log('')
-  console.log('🎯 Target redirect:')
-  const currentOrigin = window.location.origin
-  let targetUrl
-  if (redirectTo) {
-    targetUrl = redirectTo.startsWith('http') 
-      ? redirectTo 
-      : `${currentOrigin}${redirectTo}`
-  } else {
-    targetUrl = `${currentOrigin}${currentRole.redirectUrl}`
-  }
-  console.log('   Target URL:', targetUrl)
-  console.log('   Current role config:', currentRole.label)
-  console.log('')
-  console.log('📤 About to send signIn request with:')
-  console.log('   email:', data.email)
-  console.log('   password: ***')
-  console.log('   role:', roleFromUrl, '<-- THIS MUST NOT BE UNDEFINED')
-  console.log('   redirect: false')
-  console.log('   callbackUrl:', targetUrl)
-  console.log('='.repeat(70))
-  console.log('')
-  // ============ CLIENT-SIDE DEBUG END ============
-  
-  const loadingToast = toast.loading('Signing in...')
-  
-  try {
-    const result = await signIn('credentials', {
-      email: data.email,
-      password: data.password,
-      role: roleFromUrl,  // ✅ Pass role
-      redirect: false,
-      callbackUrl: targetUrl
-    })
-
-    // ============ CLIENT-SIDE RESULT DEBUG START ============
-    console.log('\n' + '='.repeat(70))
-    console.log('🖥️  CLIENT-SIDE DEBUG - SIGN IN RESULT')
-    console.log('='.repeat(70))
-    console.log('📥 SignIn result received:')
-    console.log('   result.ok:', result?.ok)
-    console.log('   result.error:', result?.error)
-    console.log('   result.status:', result?.status)
-    console.log('   result.url:', result?.url)
-    console.log('   Full result:', JSON.stringify(result, null, 2))
-    console.log('='.repeat(70))
-    console.log('')
-    // ============ CLIENT-SIDE RESULT DEBUG END ============
-
-    toast.dismiss(loadingToast)
-    
-    if (result?.error) {
-      console.error('❌ Sign-in failed with error:', result.error)
-      
-      if (result.error === 'CredentialsSignin') {
-        toast.error('Invalid email, password, or you are trying to sign in with the wrong role')
-      } else if (result.error === 'MissingCSRF') {
-        toast.loading('Refreshing security token...', { id: 'csrf-refresh' })
-        const newToken = await getCsrfToken()
-        toast.dismiss('csrf-refresh')
-        
-        if (newToken) {
-          toast.loading('Retrying sign in...', { id: 'retry-signin' })
-          const retryResult = await signIn('credentials', {
-            email: data.email,
-            password: data.password,
-            role: roleFromUrl,
-            redirect: false,
-            callbackUrl: targetUrl
-          })
-          
-          toast.dismiss('retry-signin')
-          
-          if (retryResult?.error) {
-            toast.error(retryResult.error === 'CredentialsSignin' 
-              ? 'Invalid email, password, or wrong role' 
-              : retryResult.error)
-            setLoading(false)
-            return
-          }
-          
-          if (retryResult?.ok) {
-            console.log('✅ Sign-in successful on retry!')
-            toast.success('Signed in successfully!')
-            return
-          }
-        } else {
-          toast.error('Could not refresh security token. Please refresh the page and try again.')
-          setLoading(false)
-          return
-        }
-      } else {
-        toast.error(result.error)
-      }
-      setLoading(false)
-      return
-    }
-    
-    if (result?.ok) {
-      console.log('✅ Sign-in successful!')
-      toast.success('Signed in successfully!')
-    } else {
-      toast.error('Sign in failed. Please try again.')
-      setLoading(false)
-    }
-  } catch (err) {
-    console.error('❌ Exception during sign-in:', err)
-    console.error('Stack trace:', err.stack)
-    toast.dismiss(loadingToast)
-    toast.error('An error occurred. Please try again.')
-    setLoading(false)
-  }
-}
-
-
-  const handleSocialLogin = async (provider) => {
-    setSocialLoading(provider)
-    const providerNames = { google: 'Google', facebook: 'Facebook', apple: 'Apple' }
-    
-    toast.loading(`Connecting to ${providerNames[provider]}...`, { id: 'social-login' })
+  const onSubmit = async (data) => {
+    setLoading(true)
+    const loadingToast = toast.loading('Signing in...')
     
     const currentOrigin = window.location.origin
-    
     let targetUrl
     if (redirectTo) {
       targetUrl = redirectTo.startsWith('http') 
@@ -301,6 +142,92 @@ const onSubmit = async (data) => {
       targetUrl = `${currentOrigin}${currentRole.redirectUrl}`
     }
     
+    try {
+      const result = await signIn('credentials', {
+        email: data.email,
+        password: data.password,
+        role: roleFromUrl,
+        redirect: false,
+        callbackUrl: targetUrl
+      })
+
+      toast.dismiss(loadingToast)
+      
+      if (result?.error) {
+        if (result.error === 'CredentialsSignin') {
+          toast.error('Invalid email, password, or you are trying to sign in with the wrong role')
+        } else if (result.error === 'MissingCSRF') {
+          toast.loading('Refreshing security token...', { id: 'csrf-refresh' })
+          const newToken = await getCsrfToken()
+          toast.dismiss('csrf-refresh')
+          
+          if (newToken) {
+            const retryResult = await signIn('credentials', {
+              email: data.email,
+              password: data.password,
+              role: roleFromUrl,
+              redirect: false,
+              callbackUrl: targetUrl
+            })
+            
+            if (retryResult?.error) {
+              toast.error(retryResult.error === 'CredentialsSignin' 
+                ? 'Invalid email, password, or wrong role' 
+                : retryResult.error)
+              setLoading(false)
+              return
+            }
+            
+            if (retryResult?.ok) {
+              toast.success('Signed in successfully!')
+              return
+            }
+          } else {
+            toast.error('Could not refresh security token. Please refresh the page and try again.')
+            setLoading(false)
+            return
+          }
+        } else {
+          toast.error(result.error)
+        }
+        setLoading(false)
+        return
+      }
+      
+      if (result?.ok) {
+        toast.success('Signed in successfully!')
+      } else {
+        toast.error('Sign in failed. Please try again.')
+        setLoading(false)
+      }
+    } catch (err) {
+      console.error('❌ Exception during sign-in:', err)
+      toast.dismiss(loadingToast)
+      toast.error('An error occurred. Please try again.')
+      setLoading(false)
+    }
+  }
+
+  const handleSocialLogin = async (provider) => {
+    setSocialLoading(provider)
+    
+    const currentOrigin = window.location.origin
+    let targetUrl
+    if (redirectTo) {
+      targetUrl = redirectTo.startsWith('http') 
+        ? redirectTo 
+        : `${currentOrigin}${redirectTo}`
+    } else {
+      targetUrl = `${currentOrigin}${currentRole.redirectUrl}`
+    }
+
+    const cookieData = JSON.stringify({
+      role: roleFromUrl,
+      timestamp: Date.now()
+    })
+    
+    document.cookie = `oauth_role_token=${cookieData}; path=/; max-age=300; SameSite=Lax;`
+
     await signIn(provider, { 
       callbackUrl: targetUrl, 
       redirect: true 
@@ -309,10 +236,10 @@ const onSubmit = async (data) => {
 
   if (status === 'loading') {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-violet-50 dark:from-gray-950 dark:via-blue-950 dark:to-gray-900">
+      <div className="h-screen w-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#020617]">
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+          <p className="text-slate-600 dark:text-slate-400">Loading...</p>
         </div>
       </div>
     )
@@ -320,343 +247,326 @@ const onSubmit = async (data) => {
 
   if (status === 'authenticated') {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-violet-50 dark:from-gray-950 dark:via-blue-950 dark:to-gray-900">
+      <div className="h-screen w-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#020617]">
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">Redirecting to dashboard...</p>
+          <p className="text-slate-600 dark:text-slate-400">Redirecting to dashboard...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden relative bg-gradient-to-br from-gray-50 via-blue-50 to-violet-50 dark:from-gray-950 dark:via-blue-950 dark:to-gray-900">
-      
-      {/* Animated background orbs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+    <div className="h-screen w-screen    overflow-hidden relative bg-[#F8FAFC] dark:bg-[#020617] flex self-center items-center  justify-center lg:pt-20">
+      {/* Animated background */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <motion.div
-          animate={{
-            scale: [1, 1.3, 1],
-            x: [0, 100, 0],
-            y: [0, -100, 0],
-          }}
-          transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
-          className={`absolute -top-1/4 -right-1/4 w-[800px] h-[800px] bg-gradient-to-br ${currentRole.bgGradient} rounded-full blur-3xl opacity-30`}
+          animate={{ scale: [1, 1.1, 1], x: [0, 50, 0], y: [0, -50, 0] }}
+          transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute top-[-20%] right-[-10%] w-[80vw] h-[80vw] bg-blue-400/10 dark:bg-blue-600/10 rounded-full blur-[100px]"
         />
         <motion.div
-          animate={{
-            scale: [1, 1.2, 1],
-            x: [0, -100, 0],
-            y: [0, 100, 0],
-          }}
-          transition={{ duration: 30, repeat: Infinity, ease: "easeInOut" }}
-          className={`absolute -bottom-1/4 -left-1/4 w-[600px] h-[600px] bg-gradient-to-tr ${currentRole.bgGradient} rounded-full blur-3xl opacity-30`}
+          animate={{ scale: [1, 1.2, 1], x: [0, -50, 0], y: [0, 50, 0] }}
+          transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute bottom-[-20%] left-[-10%] w-[70vw] h-[70vw] bg-indigo-400/10 dark:bg-indigo-600/10 rounded-full blur-[100px]"
         />
       </div>
 
-      {/* Grid pattern */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]" />
-
-      <div className="relative z-10 h-full flex flex-col items-center justify-center px-4">
-        <div className="w-full max-w-6xl">
+      {/* Main Container */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+        className="relative z-10 w-full max-w-5xl h-full max-h-[90vh] overflow-y-auto"
+      >
+        {/* Glassmorphism Card */}
+        <div className="border-0 bg-white/40 dark:bg-slate-900/40 backdrop-blur-2xl shadow-2xl rounded-2xl md:rounded-3xl overflow-hidden">
+          {/* Gradient Top Border - Single Blue */}
+          <div className="h-1 bg-gradient-to-r from-blue-500 to-blue-600" />
           
-          {/* Header with Logo - Compact */}
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-6"
-          >
-            <Link href="/" className="inline-block group">
-              <div className="flex items-center gap-3 justify-center">
-                {/* Logo */}
-                <motion.div
-                  whileHover={{ scale: 1.05, rotate: 5 }}
-                  className="relative"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-violet-600 rounded-2xl blur-lg opacity-50 group-hover:opacity-70 transition-opacity" />
-                  <div className="relative w-12 h-12 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center shadow-2xl border-2 border-blue-100 dark:border-blue-900">
-                    <Image 
-                      src="/logo.png" 
-                      alt="Qlinic" 
-                      width={40} 
-                      height={40}
-                      className="w-8 h-8"
-                    />
-                  </div>
-                </motion.div>
-                
-                {/* Brand Name */}
-                <div className="text-left">
-                  <h1 className="text-2xl md:text-3xl font-black flex items-center gap-1">
-                    <span className="bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 bg-clip-text text-transparent">
-                      QLINIC
-                    </span>
-                    <Sparkles className="w-5 h-5 text-violet-500 group-hover:rotate-12 transition-transform" />
-                  </h1>
-                  <p className="text-[10px] text-gray-600 dark:text-gray-400 font-medium flex items-center gap-1">
-                    <Zap className="w-3 h-3 text-blue-500" />
-                    Healthcare made simple
-                  </p>
-                </div>
+          {/* Logo Section */}
+          <div className="flex justify-center pt-6 pb-4 px-4 md:px-6">
+            <Link href="/" className="inline-flex items-center gap-2 md:gap-3 group">
+              <div className="relative w-10 h-10 md:w-12 md:h-12 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center shadow-lg">
+                <Image 
+                  src="/logo.png" 
+                  alt="Qlinic" 
+                  width={40} 
+                  height={40}
+                  className="w-6 h-6 md:w-8 md:h-8"
+                />
+              </div>
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+                  Qlinic
+                </h1>
+                <p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400">
+                  Healthcare made simple
+                </p>
               </div>
             </Link>
-          </motion.div>
+          </div>
 
-          {/* Two Column Grid Layout - Compact */}
-          <div className="grid lg:grid-cols-2 gap-6 items-center">
+          {/* Main Content - Two Columns */}
+          <div className="grid lg:grid-cols-2 gap-0 px-4 md:px-6 pb-6 items-center">
             
-            {/* Left Side - Role Info */}
-            <motion.div
-              initial={{ opacity: 0, x: -50 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5 }}
-              className="hidden lg:block"
-            >
-              {/* Role Card - Compact */}
-              <Card className="border-0 backdrop-blur-2xl bg-white/60 dark:bg-gray-900/60 shadow-2xl overflow-hidden">
-                <div className={`h-1 bg-gradient-to-r ${currentRole.gradient}`} />
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className={`w-14 h-14 bg-gradient-to-br ${currentRole.gradient} rounded-2xl flex items-center justify-center shadow-lg`}>
-                      <IconComponent className="w-7 h-7 text-white" strokeWidth={2.5} />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                        {currentRole.label}
-                      </h2>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">Portal Access</p>
-                    </div>
+            {/* Left Side - Portal Details */}
+            <div className="hidden lg:flex flex-col justify-center pr-6 border-r border-slate-200/50 dark:border-slate-700/50">
+              <div className="space-y-5">
+                {/* Role Header */}
+                <div className="flex items-center gap-3">
+                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <IconComponent className="w-7 h-7 text-white" strokeWidth={2} />
                   </div>
-                  
-                  <p className="text-sm text-gray-700 dark:text-gray-300 mb-4 leading-relaxed">
-                    {currentRole.description}
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                      {currentRole.label}
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Portal Access</p>
+                  </div>
+                </div>
+
+                {/* Description */}
+                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                  {currentRole.description}
+                </p>
+
+                {/* Features */}
+                <div className="space-y-2.5">
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                    Key Features
                   </p>
-                  
-                  <div className="space-y-2">
-                    {currentRole.features.map((feature, idx) => (
-                      <motion.div
-                        key={idx}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.1 * idx }}
-                        className="flex items-center gap-2"
-                      >
-                        <div className={`w-6 h-6 bg-gradient-to-br ${currentRole.gradient} rounded-lg flex items-center justify-center flex-shrink-0 shadow`}>
-                          <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
-                        </div>
-                        <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">{feature}</span>
-                      </motion.div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                  {currentRole.features.map((feature, idx) => (
+                    <motion.div
+                      key={idx}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 * idx }}
+                      className="flex items-center gap-2.5"
+                    >
+                      <div className="w-5 h-5 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0 shadow">
+                        <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
+                      </div>
+                      <span className="text-sm text-slate-700 dark:text-slate-300 font-medium">
+                        {feature}
+                      </span>
+                    </motion.div>
+                  ))}
+                </div>
 
-              {/* Switch Role - Compact */}
-              <p className="text-xs text-gray-600 dark:text-gray-400 text-center mt-4">
-                Not a {currentRole.label.toLowerCase()}?{' '}
-                <Link 
-                  href="/"
-                  className={`font-bold bg-gradient-to-r ${currentRole.gradient} bg-clip-text text-transparent hover:underline`}
-                >
-                  Select role →
-                </Link>
-              </p>
-            </motion.div>
+                {/* Change Role Link */}
+                <div className="pt-3">
+                  <Link 
+                    href="/"
+                    className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline inline-flex items-center gap-1"
+                  >
+                    Not a {currentRole.label.toLowerCase()}? Select different role →
+                  </Link>
+                </div>
+              </div>
+            </div>
 
-            {/* Right Side - Sign In Form - Compact */}
-            <motion.div
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5 }}
-            >
+            {/* Right Side - Sign In Form */}
+            <div className="flex flex-col justify-center lg:pl-6 w-full">
               {/* Mobile Role Badge */}
               <div className="lg:hidden mb-4 flex justify-center">
-                <Badge 
-                  className={`px-4 py-2 bg-gradient-to-r ${currentRole.gradient} text-white border-0 shadow-lg text-sm font-semibold`}
-                >
-                  <IconComponent className="w-4 h-4 mr-2" />
-                  {currentRole.label}
-                </Badge>
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                  <IconComponent className="w-4 h-4 text-blue-600" />
+                  <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                    {currentRole.label} Portal
+                  </span>
+                </div>
               </div>
 
-              {/* Glassmorphism Card - Compact */}
-              <Card className="border-0 backdrop-blur-3xl bg-white/70 dark:bg-gray-900/70 shadow-2xl overflow-hidden">
-                <div className={`h-1 bg-gradient-to-r ${currentRole.gradient}`} />
-                
-                <CardHeader className="space-y-1 pb-4 pt-6 px-6">
-                  <CardTitle className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
+              <div className="space-y-4 w-full">
+                {/* Header */}
+                <div className="text-center lg:text-left">
+                  <h2 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 mb-1">
                     Welcome back
-                  </CardTitle>
-                  <CardDescription className="text-sm text-gray-600 dark:text-gray-400">
+                  </h2>
+                  <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">
                     Sign in to your dashboard
-                  </CardDescription>
-                </CardHeader>
-                
-                <CardContent className="space-y-4 px-6 pb-6">
-                  
-                  {/* Social Login - Compact */}
-                  <div className="grid grid-cols-3 gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => handleSocialLogin('google')}
-                      disabled={socialLoading !== null || loading}
-                      className="h-10 border-2 border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all group backdrop-blur-xl"
-                    >
-                      {socialLoading === 'google' ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Chrome className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
-                      )}
-                    </Button>
+                  </p>
+                </div>
 
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => handleSocialLogin('facebook')}
-                      disabled={socialLoading !== null || loading}
-                      className="h-10 border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all group backdrop-blur-xl"
-                    >
-                      {socialLoading === 'facebook' ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <svg className="w-4 h-4 text-[#1877F2] group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 3.667h-3.533v7.98H9.101z"/>
-                        </svg>
-                      )}
-                    </Button>
+                {/* Social Login */}
+                <div className="grid grid-cols-3 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleSocialLogin('google')}
+                    disabled={socialLoading !== null || loading}
+                    className="h-10 border-2 border-slate-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all group bg-white/60 dark:bg-slate-800/60"
+                  >
+                    {socialLoading === 'google' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Chrome className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
+                    )}
+                  </Button>
 
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => handleSocialLogin('apple')}
-                      disabled={socialLoading !== null || loading}
-                      className="h-10 border-2 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all group backdrop-blur-xl"
-                    >
-                      {socialLoading === 'apple' ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <svg className="w-4 h-4 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
-                        </svg>
-                      )}
-                    </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleSocialLogin('facebook')}
+                    disabled={socialLoading !== null || loading}
+                    className="h-10 border-2 border-slate-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all group bg-white/60 dark:bg-slate-800/60"
+                  >
+                    {socialLoading === 'facebook' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <svg className="w-4 h-4 text-[#1877F2] group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 3.667h-3.533v7.98H9.101z"/>
+                      </svg>
+                    )}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleSocialLogin('apple')}
+                    disabled={socialLoading !== null || loading}
+                    className="h-10 border-2 border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all group bg-white/60 dark:bg-slate-800/60"
+                  >
+                    {socialLoading === 'apple' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <svg className="w-4 h-4 text-slate-800 dark:text-white group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+                      </svg>
+                    )}
+                  </Button>
+                </div>
+
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <Separator className="bg-slate-300 dark:bg-slate-600" />
                   </div>
-
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <Separator className="bg-gray-300 dark:bg-gray-600" />
-                    </div>
-                    <div className="relative flex justify-center text-[10px] font-medium">
-                      <span className="bg-white dark:bg-gray-900 px-2 text-gray-500 dark:text-gray-400">
-                        Or with email
-                      </span>
-                    </div>
+                  <div className="relative flex justify-center text-[10px] md:text-xs font-medium">
+                    <span className="bg-white/40 dark:bg-slate-900/40 px-3 text-slate-500 dark:text-slate-400 backdrop-blur-xl">
+                      Or with email
+                    </span>
                   </div>
+                </div>
 
-                  <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-                      <FormField
-                        control={form.control}
-                        name="email"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs font-semibold text-gray-700 dark:text-gray-300">Email</FormLabel>
-                            <FormControl>
-                              <div className="relative group">
-                                <Mail className="absolute left-3 top-2.5 h-4 w-4 text-gray-400 group-focus-within:text-blue-600 transition-colors pointer-events-none" />
-                                <Input
-                                  type="email"
-                                  placeholder="name@example.com"
-                                  className="pl-9 h-10 text-sm border-2 border-gray-200 dark:border-gray-700 focus-visible:ring-2 focus-visible:ring-blue-600 rounded-lg backdrop-blur-xl bg-white/50 dark:bg-gray-800/50"
-                                  disabled={loading}
-                                  {...field}
-                                />
-                              </div>
-                            </FormControl>
-                            <FormMessage className="text-xs" />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="password"
-                        render={({ field }) => (
-                          <FormItem>
-                            <div className="flex items-center justify-between mb-1">
-                              <FormLabel className="text-xs font-semibold text-gray-700 dark:text-gray-300">Password</FormLabel>
-                              <Link
-                                href="/forgot-password"
-                                className={`text-xs font-semibold bg-gradient-to-r ${currentRole.gradient} bg-clip-text text-transparent hover:underline`}
-                              >
-                                Forgot?
-                              </Link>
+                {/* Email Form */}
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs md:text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            Email
+                          </FormLabel>
+                          <FormControl>
+                            <div className="relative group">
+                              <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 group-focus-within:text-blue-600 transition-colors pointer-events-none" />
+                              <Input
+                                type="email"
+                                placeholder="name@example.com"
+                                className="pl-9 h-10 text-sm border-2 border-slate-200 dark:border-slate-700 focus-visible:ring-2 focus-visible:ring-blue-600 rounded-xl bg-white/50 dark:bg-slate-800/50"
+                                disabled={loading}
+                                {...field}
+                              />
                             </div>
-                            <FormControl>
-                              <div className="relative group">
-                                <Lock className="absolute left-3 top-2.5 h-4 w-4 text-gray-400 group-focus-within:text-blue-600 transition-colors pointer-events-none" />
-                                <Input
-                                  type={showPassword ? 'text' : 'password'}
-                                  placeholder="••••••••••"
-                                  className="pl-9 pr-9 h-10 text-sm border-2 border-gray-200 dark:border-gray-700 focus-visible:ring-2 focus-visible:ring-blue-600 rounded-lg backdrop-blur-xl bg-white/50 dark:bg-gray-800/50"
-                                  disabled={loading}
-                                  {...field}
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => setShowPassword(!showPassword)}
-                                  className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                                  disabled={loading}
-                                >
-                                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                </button>
-                              </div>
-                            </FormControl>
-                            <FormMessage className="text-xs" />
-                          </FormItem>
-                        )}
-                      />
+                          </FormControl>
+                          <FormMessage className="text-[10px]" />
+                        </FormItem>
+                      )}
+                    />
 
-                      <Button
-                        type="submit"
-                        disabled={loading || socialLoading !== null}
-                        className={`w-full h-11 bg-gradient-to-r ${currentRole.gradient} hover:opacity-90 text-white font-bold shadow-xl hover:shadow-2xl transition-all text-sm rounded-lg relative overflow-hidden group mt-4`}
-                      >
-                        <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform" />
-                        {loading ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin relative z-10" />
-                            <span className="relative z-10">Signing in...</span>
-                          </>
-                        ) : (
-                          <span className="relative z-10 flex items-center gap-2 justify-center">
-                            Sign In
-                            <Sparkles className="w-3.5 h-3.5" />
-                          </span>
-                        )}
-                      </Button>
-                    </form>
-                  </Form>
+                    <FormField
+                      control={form.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <div className="flex items-center justify-between mb-1">
+                            <FormLabel className="text-xs md:text-sm font-semibold text-slate-700 dark:text-slate-300">
+                              Password
+                            </FormLabel>
+                            <Link
+                              href="/forgot-password"
+                              className="text-xs md:text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                            >
+                              Forgot?
+                            </Link>
+                          </div>
+                          <FormControl>
+                            <div className="relative group">
+                              <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 group-focus-within:text-blue-600 transition-colors pointer-events-none" />
+                              <Input
+                                type={showPassword ? 'text' : 'password'}
+                                placeholder="••••••••••"
+                                className="pl-9 pr-9 h-10 text-sm border-2 border-slate-200 dark:border-slate-700 focus-visible:ring-2 focus-visible:ring-blue-600 rounded-xl bg-white/50 dark:bg-slate-800/50"
+                                disabled={loading}
+                                {...field}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                                disabled={loading}
+                              >
+                                {showPassword ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </button>
+                            </div>
+                          </FormControl>
+                          <FormMessage className="text-[10px]" />
+                        </FormItem>
+                      )}
+                    />
 
-                  <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
-                    <p className="text-center text-xs text-gray-600 dark:text-gray-400">
-                      Don't have an account?{' '}
-                      <Link 
-                        href={`/sign-up?role=${roleFromUrl}`}
-                        className={`font-bold bg-gradient-to-r ${currentRole.gradient} bg-clip-text text-transparent hover:underline`}
-                      >
-                        Create account →
-                      </Link>
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
+                    <Button
+                      type="submit"
+                      disabled={loading || socialLoading !== null}
+                      className="w-full h-10 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold shadow-lg hover:shadow-xl transition-all rounded-xl relative overflow-hidden group text-sm"
+                    >
+                      <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform" />
+                      {loading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin relative z-10" />
+                          <span className="relative z-10">Signing in...</span>
+                        </>
+                      ) : (
+                        <span className="relative z-10">Sign In</span>
+                      )}
+                    </Button>
+                  </form>
+                </Form>
+
+                {/* Sign Up Link */}
+                <div className="text-center pt-3 border-t border-slate-200/50 dark:border-slate-700/50">
+                  <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400">
+                    Don't have an account?{' '}
+                    <Link 
+                      href={`/sign-up?role=${roleFromUrl}`}
+                      className="font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                    >
+                      Create account →
+                    </Link>
+                  </p>
+                </div>
+
+                {/* Mobile - Change Role Link */}
+                <div className="lg:hidden text-center">
+                  <Link 
+                    href="/"
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                  >
+                    Not a {currentRole.label.toLowerCase()}? Select different role →
+                  </Link>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   )
 }

@@ -12,10 +12,25 @@ export default function DoctorAppointmentsPage() {
   const { appointments, fetchAppointments, updateAppointmentStatus, appointmentsLoading } = useDoctor()
   const [activeTab, setActiveTab] = useState('queue')
   const [currentPatient, setCurrentPatient] = useState(null)
+  const [lastRefresh, setLastRefresh] = useState(Date.now())
 
   useEffect(() => {
     fetchAppointments('today')
+    setLastRefresh(Date.now())
   }, []) // eslint-disable-line
+
+  // 30-minute fallback refresh effect
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const timeSinceLastRefresh = Date.now() - lastRefresh;
+      if (timeSinceLastRefresh >= 30 * 60 * 1000) { // 30 minutes
+        fetchAppointments('today');
+        setLastRefresh(Date.now());
+      }
+    }, 60 * 1000); // Check every minute
+    
+    return () => clearInterval(interval);
+  }, [lastRefresh, fetchAppointments]);
 
   // Sync active patient from appointments list
   useEffect(() => {
@@ -36,21 +51,43 @@ export default function DoctorAppointmentsPage() {
     .filter(a => ['COMPLETED', 'CANCELLED', 'SKIPPED'].includes(a.status))
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchAppointments('today');
+    setLastRefresh(Date.now());
+    setIsRefreshing(false);
+  };
+
   return (
-    <div className="h-[calc(100vh-80px)] p-4 bg-slate-50 gap-4 grid grid-cols-1 lg:grid-cols-12">
+    <div className="h-[calc(100vh-80px)] p-4 bg-background gap-4 grid grid-cols-1 lg:grid-cols-12">
       
       {/* LEFT COLUMN: Queue & History (30% width) */}
-      <Card className="lg:col-span-4 xl:col-span-3 flex flex-col h-full border-0 shadow-sm overflow-hidden">
-        <div className="p-4 border-b bg-white">
-           <h2 className="text-lg font-bold flex items-center gap-2">
+      <Card className="lg:col-span-4 xl:col-span-3 flex flex-col h-full border border-slate-200 shadow-sm overflow-hidden bg-card">
+        <div className="p-4 border-b bg-background flex justify-between items-center">
+           <h2 className="text-lg font-bold flex items-center gap-2 text-blue-900">
              <Clock className="w-5 h-5 text-blue-600" /> Appointments
            </h2>
+           <Button 
+             variant="outline" 
+             size="sm" 
+             onClick={handleManualRefresh}
+             disabled={appointmentsLoading || isRefreshing}
+             className="h-8 w-8 p-0"
+           >
+             {isRefreshing ? (
+               <RefreshCw className="w-4 h-4 animate-spin" />
+             ) : (
+               <RefreshCw className="w-4 h-4" />
+             )}
+           </Button>
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
           <div className="px-4 pt-2">
-            <TabsList className="w-full grid grid-cols-2">
-              <TabsTrigger value="queue">Queue ({queueList.length})</TabsTrigger>
-              <TabsTrigger value="history">History</TabsTrigger>
+            <TabsList className="w-full grid grid-cols-2 bg-transparent border border-slate-200 rounded-lg p-1">
+              <TabsTrigger value="queue" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:shadow-none">Queue ({queueList.length})</TabsTrigger>
+              <TabsTrigger value="history" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:shadow-none">History</TabsTrigger>
             </TabsList>
           </div>
           

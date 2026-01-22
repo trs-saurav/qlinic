@@ -77,6 +77,14 @@ export default function HospitalAppointmentsPage() {
     }
   }
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchAppointments();
+    setIsRefreshing(false);
+  };
+
   // Filtering Logic
   const filteredAppointments = useMemo(() => {
     return appointments.filter(apt => {
@@ -185,8 +193,16 @@ export default function HospitalAppointmentsPage() {
           <p className="text-muted-foreground mt-1">Manage patient flow and consultations</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => fetchAppointments()}>
-            <RefreshCw className="w-4 h-4 mr-2" /> Refresh
+          <Button variant="outline" size="sm" onClick={handleManualRefresh} disabled={isRefreshing}>
+            {isRefreshing ? (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Updating...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2" /> Refresh
+              </>
+            )}
           </Button>
           <Button variant="outline" size="sm">
             <Download className="w-4 h-4 mr-2" /> Export

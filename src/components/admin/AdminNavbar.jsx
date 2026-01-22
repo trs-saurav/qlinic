@@ -1,197 +1,237 @@
+// components/admin/Navbar.jsx
 'use client'
-import { useSession, signOut } from 'next-auth/react'
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import Image from 'next/image'
-import { cn } from '@/lib/utils'
-import { 
-  LayoutDashboard, 
-  Users, 
-  Building2, 
-  UserCog, 
-  TrendingUp, 
-  Settings,
-  Menu,
-  X,
-  LogOut,
-  User as UserIcon
-} from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import { ModeToggle } from '@/components/extra/ModeToggle'
+
 import { useState } from 'react'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { usePathname } from 'next/navigation'
+import { 
+  Search, 
+  Bell, 
+  Plus, 
+  Moon, 
+  Sun, 
+  User, 
+  Settings, 
+  LogOut,
+  Activity,
+  ChevronDown,
+  ExternalLink
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { signOut } from 'next-auth/react'
 
-const navItems = [
-  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/admin/users', label: 'Users', icon: Users },
-  { href: '/admin/hospitals', label: 'Hospitals', icon: Building2 },
-  { href: '/admin/doctors', label: 'Doctors', icon: UserCog },
-  { href: '/admin/analytics', label: 'Analytics', icon: TrendingUp },
-  { href: '/admin/settings', label: 'Settings', icon: Settings },
-]
-
-export default function AdminNavbar() {
+export default function AdminNavbar({ theme, setTheme, user }) {
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const [showQuickActions, setShowQuickActions] = useState(false)
   const pathname = usePathname()
-  const { data: session } = useSession()
-  const [open, setOpen] = useState(false)
 
-  const handleSignOut = async () => {
-    await signOut({ callbackUrl: '/' })
-  }
+  // Generate breadcrumb from pathname
+  const breadcrumbs = pathname
+    .split('/')
+    .filter(Boolean)
+    .map((segment, index, array) => ({
+      label: segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, ' '),
+      href: '/' + array.slice(0, index + 1).join('/'),
+      isLast: index === array.length - 1
+    }))
 
-  const NavLinks = ({ mobile = false }) => (
-    <>
-      {navItems.map((item) => {
-        const Icon = item.icon
-        const isActive = pathname === item.href
-        
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={() => mobile && setOpen(false)}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100'
-                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
-            )}
-          >
-            <Icon className="w-4 h-4" />
-            {item.label}
-          </Link>
-        )
-      })}
-    </>
-  )
+  const notifications = [
+    { id: 1, type: 'doctor', message: '3 new doctor verification requests', time: '5m ago', unread: true },
+    { id: 2, type: 'support', message: '2 urgent support tickets', time: '15m ago', unread: true },
+    { id: 3, type: 'system', message: 'Database backup completed', time: '1h ago', unread: false }
+  ]
+
+  const unreadCount = notifications.filter(n => n.unread).length
 
   return (
-    <nav className="sticky top-0 z-50 border-b bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link href="/admin" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">Q</span>
-            </div>
-            <div className="hidden sm:block">
-              <span className="text-xl font-bold text-slate-900 dark:text-slate-100">
-                Qlinic
+    <header className="fixed top-0 right-0 left-64 z-30 h-16 border-b bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+      <div className="flex items-center justify-between h-full px-6">
+        {/* Left: Breadcrumb */}
+        <div className="flex items-center gap-2 text-sm">
+          {breadcrumbs.map((crumb, index) => (
+            <div key={crumb.href} className="flex items-center gap-2">
+              {index > 0 && (
+                <span className="text-gray-400 dark:text-gray-600">/</span>
+              )}
+              <span
+                className={cn(
+                  crumb.isLast
+                    ? 'text-gray-900 dark:text-gray-100 font-medium'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer'
+                )}
+              >
+                {crumb.label}
               </span>
-              <span className="ml-2 text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100 px-2 py-0.5 rounded-full font-semibold">
-                ADMIN
-              </span>
             </div>
-          </Link>
+          ))}
+        </div>
 
-          {/* Desktop Navigation */}
-          <div className="hidden lg:flex items-center gap-2">
-            <NavLinks />
+        {/* Right: Actions */}
+        <div className="flex items-center gap-3">
+          {/* Global Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search... (Ctrl+K)"
+              className={cn(
+                'w-64 pl-10 pr-4 py-2 text-sm rounded-lg border',
+                'bg-gray-50 dark:bg-gray-800',
+                'border-gray-200 dark:border-gray-700',
+                'text-gray-900 dark:text-gray-100',
+                'placeholder:text-gray-500 dark:placeholder:text-gray-400',
+                'focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent'
+              )}
+            />
           </div>
 
-          {/* Right Section */}
-          <div className="flex items-center gap-3">
-            <ModeToggle />
+          {/* Quick Actions */}
+          <div className="relative">
+            <button
+              onClick={() => setShowQuickActions(!showQuickActions)}
+              className={cn(
+                'p-2 rounded-lg transition-colors',
+                'hover:bg-gray-100 dark:hover:bg-gray-800',
+                'text-gray-600 dark:text-gray-400'
+              )}
+            >
+              <Plus className="w-5 h-5" />
+            </button>
             
-            {/* ✅ Auth.js User Menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="rounded-full w-9 h-9 relative"
-                >
-                  {session?.user?.image ? (
-                    <Image
-                      src={session.user.image}
-                      alt={session.user.name || 'Admin'}
-                      width={36}
-                      height={36}
-                      className="rounded-full"
-                    />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center">
-                      <UserIcon className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">
-                      {session?.user?.name || 'Admin'}
-                    </p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {session?.user?.email}
-                    </p>
-                    <p className="text-xs leading-none text-emerald-600 font-semibold mt-1">
-                      Admin Account
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/admin/settings" className="cursor-pointer">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={handleSignOut}
-                  className="cursor-pointer text-red-600 focus:text-red-600"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Sign out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {showQuickActions && (
+              <div className="absolute right-0 mt-2 w-56 rounded-lg shadow-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 py-1">
+                <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
+                  Add User
+                </button>
+                <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
+                  Create Support Ticket
+                </button>
+                <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
+                  Send Announcement
+                </button>
+              </div>
+            )}
+          </div>
 
-            {/* Mobile Menu */}
-            <Sheet open={open} onOpenChange={setOpen}>
-              <SheetTrigger asChild className="lg:hidden">
-                <Button variant="ghost" size="icon">
-                  <Menu className="w-5 h-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-64">
-                <div className="flex flex-col gap-4 mt-8">
-                  <div className="px-4 pb-4 border-b">
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      Admin Panel
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Platform Management
-                    </p>
-                  </div>
-                  <NavLinks mobile />
-                  
-                  {/* Mobile Sign Out */}
-                  <div className="px-4 pt-4 border-t mt-auto">
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
-                      onClick={handleSignOut}
-                    >
-                      <LogOut className="mr-2 h-4 w-4" />
-                      Sign Out
-                    </Button>
-                  </div>
+          {/* Notifications */}
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className={cn(
+                'relative p-2 rounded-lg transition-colors',
+                'hover:bg-gray-100 dark:hover:bg-gray-800',
+                'text-gray-600 dark:text-gray-400'
+              )}
+            >
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-semibold rounded-full flex items-center justify-center">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+
+            {showNotifications && (
+              <div className="absolute right-0 mt-2 w-80 rounded-lg shadow-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
                 </div>
-              </SheetContent>
-            </Sheet>
+                <div className="max-h-96 overflow-y-auto">
+                  {notifications.map(notif => (
+                    <div
+                      key={notif.id}
+                      className={cn(
+                        'px-4 py-3 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer',
+                        notif.unread && 'bg-blue-50 dark:bg-blue-900/10'
+                      )}
+                    >
+                      <p className="text-sm text-gray-900 dark:text-gray-100">{notif.message}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{notif.time}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700">
+                  <button className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
+                    View all notifications
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* System Status */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50 dark:bg-green-900/20">
+            <Activity className="w-4 h-4 text-green-600 dark:text-green-400" />
+            <span className="text-xs font-medium text-green-600 dark:text-green-400">
+              All Systems Operational
+            </span>
+          </div>
+
+          {/* Theme Toggle */}
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className={cn(
+              'p-2 rounded-lg transition-colors',
+              'hover:bg-gray-100 dark:hover:bg-gray-800',
+              'text-gray-600 dark:text-gray-400'
+            )}
+          >
+            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
+
+          {/* Profile Menu */}
+          <div className="relative">
+            <button
+              onClick={() => setShowProfileMenu(!showProfileMenu)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                <span className="text-white text-sm font-semibold">
+                  {user?.name?.charAt(0) || 'A'}
+                </span>
+              </div>
+              <div className="text-left hidden lg:block">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {user?.name || 'Admin User'}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {user?.role || 'Super Admin'}
+                </p>
+              </div>
+              <ChevronDown className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            </button>
+
+            {showProfileMenu && (
+              <div className="absolute right-0 mt-2 w-56 rounded-lg shadow-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 py-1">
+                <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  My Profile
+                </button>
+                <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                  <Settings className="w-4 h-4" />
+                  Account Settings
+                </button>
+                <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                  <Activity className="w-4 h-4" />
+                  My Activity
+                </button>
+                <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                  <ExternalLink className="w-4 h-4" />
+                  Switch to User Portal
+                </button>
+                <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                <button 
+                  onClick={() => signOut({ callbackUrl: '/sign-in?role=admin' })}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-red-600 dark:text-red-400 flex items-center gap-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
-    </nav>
+    </header>
   )
 }

@@ -12,6 +12,69 @@ const toMinutes = (time) => {
   return h * 60 + m
 }
 
+// Function to check for overlapping schedules across hospitals
+async function checkCrossHospitalOverlap(doctorId, currentAffiliationId, newWeeklySchedule) {
+  // Import HospitalAffiliation here to avoid circular imports
+  const HospitalAffiliation = (await import('@/models/hospitalAffiliation')).default;
+  
+  // Fetch all other affiliations for this doctor
+  const otherAffiliations = await HospitalAffiliation.find({
+    doctorId,
+    _id: { $ne: currentAffiliationId }, // Exclude the current affiliation
+    status: 'APPROVED'
+  }).populate('hospitalId', 'name');
+  
+  const conflicts = [];
+  const currentDayMap = {};
+  
+  // Build a map of the proposed schedule for the current hospital
+  if (newWeeklySchedule && Array.isArray(newWeeklySchedule)) {
+    newWeeklySchedule.forEach(daySchedule => {
+      if (daySchedule.slots && Array.isArray(daySchedule.slots)) {
+        currentDayMap[daySchedule.day] = daySchedule.slots;
+      }
+    });
+  }
+  
+  // Check against all other approved affiliations
+  otherAffiliations.forEach(affiliation => {
+    const otherSchedule = affiliation.weeklySchedule || [];
+    
+    // Check each day for potential conflicts
+    otherSchedule.forEach(otherDaySchedule => {
+      const day = otherDaySchedule.day;
+      const otherSlots = otherDaySchedule.slots || [];
+      
+      // If the current hospital has slots on this day, check for overlaps
+      if (currentDayMap[day] && currentDayMap[day].length > 0) {
+        // Check each slot in the current proposed schedule against other hospital's slots
+        currentDayMap[day].forEach(currentSlot => {
+          otherSlots.forEach(otherSlot => {
+            // Check if time ranges overlap
+            const currentStart = toMinutes(currentSlot.start);
+            const currentEnd = toMinutes(currentSlot.end);
+            const otherStart = toMinutes(otherSlot.start);
+            const otherEnd = toMinutes(otherSlot.end);
+            
+            // Two time ranges overlap if: (start1 < end2) AND (start2 < end1)
+            if (currentStart < otherEnd && otherStart < currentEnd) {
+              conflicts.push({
+                day,
+                currentSlot,
+                otherSlot,
+                otherHospital: affiliation.hospitalId?.name || 'Unknown Hospital',
+                currentHospital: affiliation.hospitalId?.name || 'Current Hospital'
+              });
+            }
+          });
+        });
+      }
+    });
+  });
+  
+  return conflicts;
+}
+
 // --- Routes ---
 
 // ✅ GET - Fetch schedule + slot duration for a specific affiliation
@@ -153,6 +216,15 @@ export async function PATCH(req) {
         }
       }
 
+      // Check for cross-hospital overlaps
+      const crossHospitalConflicts = await checkCrossHospitalOverlap(gate.me._id, affiliationId, weekly);
+      if (crossHospitalConflicts.length > 0) {
+        const conflict = crossHospitalConflicts[0];
+        return NextResponse.json({ 
+          error: `Schedule conflicts with ${conflict.otherHospital} on ${conflict.day} (${conflict.otherSlot.start}-${conflict.otherSlot.end}). Please adjust your schedule.` 
+        }, { status: 400 });
+      }
+      
       // If validation passes, map clean data to model
       affiliation.weeklySchedule = weekly.map(day => ({
         day: day.day,

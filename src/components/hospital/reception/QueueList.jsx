@@ -80,13 +80,13 @@ export default function QueueList({
 
   const getStatusStyle = (status) => {
     switch (status) {
-      case 'CHECKED_IN': return 'bg-green-50 text-green-700 border-green-200'
-      case 'IN_CONSULTATION': return 'bg-purple-50 text-purple-700 border-purple-200'
-      case 'COMPLETED': return 'bg-slate-50 text-slate-600 border-slate-200'
-      case 'SKIPPED': return 'bg-orange-50 text-orange-700 border-orange-200'
-      case 'BOOKED': return 'bg-blue-50 text-blue-700 border-blue-200'
-      case 'CANCELLED': return 'bg-red-50 text-red-700 border-red-200'
-      default: return 'bg-slate-50 text-slate-600 border-slate-200'
+      case 'CHECKED_IN': return 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-700'
+      case 'IN_CONSULTATION': return 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-700'
+      case 'COMPLETED': return 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+      case 'SKIPPED': return 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-700'
+      case 'BOOKED': return 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700'
+      case 'CANCELLED': return 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-700'
+      default: return 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
     }
   }
 
@@ -100,9 +100,9 @@ export default function QueueList({
       <div
         key={apt._id}
         onClick={() => onSelect(apt)}
-        className={`p-4 cursor-pointer transition-all hover:bg-slate-50 ${
+        className={`p-4 cursor-pointer transition-all hover:bg-accent ${
           selectedId === apt._id 
-            ? 'bg-blue-50 border-l-4 border-l-blue-600' 
+            ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-600' 
             : 'border-l-4 border-l-transparent'
         } ${isPastDate || isCompleted ? 'opacity-60' : ''}`}
       >
@@ -111,19 +111,19 @@ export default function QueueList({
           <div className="flex gap-3 flex-1 min-w-0">
             <div className={`h-12 w-12 rounded-lg flex items-center justify-center font-bold text-sm shadow-sm flex-shrink-0 ${
               apt.status === 'CHECKED_IN' 
-                ? 'bg-green-100 text-green-700 border-2 border-green-200' 
+                ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-2 border-green-200 dark:border-green-700' 
                 : apt.status === 'IN_CONSULTATION'
-                ? 'bg-purple-100 text-purple-700 border-2 border-purple-200 animate-pulse'
+                ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border-2 border-purple-200 dark:border-purple-700 animate-pulse'
                 : apt.status === 'COMPLETED'
-                ? 'bg-slate-100 text-slate-500 border-2 border-slate-200'
-                : 'bg-white text-slate-700 border-2 border-slate-200'
+                ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-2 border-slate-200 dark:border-slate-700'
+                : 'bg-white dark:bg-background text-slate-700 dark:text-foreground border-2 border-slate-200 dark:border-border'
             }`}>
               {apt.tokenNumber ? `#${apt.tokenNumber}` : '—'}
             </div>
             
             <div className="flex-1 min-w-0">
               <h4 className={`font-semibold text-sm truncate ${
-                selectedId === apt._id ? 'text-blue-700' : 'text-slate-900'
+                selectedId === apt._id ? 'text-blue-700 dark:text-blue-300' : 'text-slate-900 dark:text-foreground'
               }`}>
                 {apt.patientId?.firstName} {apt.patientId?.lastName}
               </h4>
@@ -131,12 +131,12 @@ export default function QueueList({
               <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
                 <span className="flex items-center gap-1 truncate">
                   <User className="w-3 h-3 flex-shrink-0" />
-                  <span className="truncate">Dr. {apt.doctorId?.firstName || apt.doctorId?.lastName}</span>
+                  <span className="truncate text-foreground/70">Dr. {apt.doctorId?.firstName || apt.doctorId?.lastName}</span>
                 </span>
-                <span>•</span>
+                <span className="text-foreground/50">•</span>
                 <span className="flex items-center gap-1 flex-shrink-0">
                   <Clock className="w-3 h-3" />
-                  {format(aptDate, 'hh:mm a')}
+                  <span className="text-foreground/70">{format(aptDate, 'hh:mm a')}</span>
                 </span>
               </div>
 
@@ -150,25 +150,25 @@ export default function QueueList({
                     </div>
                   )}
                   {apt.vitals.weight && (
-                    <div className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                    <div className="flex items-center gap-1 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
                       <Weight className="w-2.5 h-2.5" />
                       {apt.vitals.weight}kg
                     </div>
                   )}
                   {apt.vitals.bpSystolic && apt.vitals.bpDiastolic && (
-                    <div className="flex items-center gap-1 text-xs bg-red-50 text-red-700 px-1.5 py-0.5 rounded">
+                    <div className="flex items-center gap-1 text-xs bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-1.5 py-0.5 rounded">
                       <Heart className="w-2.5 h-2.5" />
                       {apt.vitals.bpSystolic}/{apt.vitals.bpDiastolic}
                     </div>
                   )}
                   {apt.vitals.spo2 && (
-                    <div className="flex items-center gap-1 text-xs bg-cyan-50 text-cyan-700 px-1.5 py-0.5 rounded">
+                    <div className="flex items-center gap-1 text-xs bg-cyan-50 dark:bg-cyan-900/20 text-cyan-700 dark:text-cyan-300 px-1.5 py-0.5 rounded">
                       <Wind className="w-2.5 h-2.5" />
                       {apt.vitals.spo2}%
                     </div>
                   )}
                   {apt.vitals.heartRate && (
-                    <div className="flex items-center gap-1 text-xs bg-pink-50 text-pink-700 px-1.5 py-0.5 rounded">
+                    <div className="flex items-center gap-1 text-xs bg-pink-50 dark:bg-pink-900/20 text-pink-700 dark:text-pink-300 px-1.5 py-0.5 rounded">
                       <Heart className="w-2.5 h-2.5" />
                       {apt.vitals.heartRate}bpm
                     </div>
@@ -190,7 +190,7 @@ export default function QueueList({
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
             <Badge 
               variant="outline" 
-              className={`text-[10px] font-semibold ${getStatusStyle(apt.status)}`}
+              className={`text-[10px] font-semibold ${getStatusStyle(apt.status)} dark:bg-opacity-20`}
             >
               {apt.status.replace('_', ' ')}
             </Badge>
@@ -221,7 +221,7 @@ export default function QueueList({
     <Card className="h-full border-slate-200 shadow-sm flex flex-col">
       <CardHeader className="border-b pb-4 flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
-          <CardTitle className="text-lg">Queue Management</CardTitle>
+          <CardTitle className="text-lg text-foreground">Queue Management</CardTitle>
           <div className="flex items-center gap-2">
             {isLoading && <RefreshCw className="w-4 h-4 text-blue-600 animate-spin" />}
             <Badge variant="secondary" className="bg-slate-100 text-slate-700 font-semibold">
@@ -235,7 +235,7 @@ export default function QueueList({
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
           <Input 
             placeholder="Search patient, doctor, or token..." 
-            className="pl-9 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+            className="pl-9 bg-secondary border-border focus:bg-background transition-all"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
           />
@@ -245,17 +245,17 @@ export default function QueueList({
         {totalCount > 0 && (
           <div className="flex gap-2 mt-3 flex-wrap">
             {groupedAppointments.today.length > 0 && (
-              <Badge className="bg-blue-100 text-blue-700 border-0 text-xs">
+              <Badge className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-0 text-xs">
                 Today: {groupedAppointments.today.length}
               </Badge>
             )}
             {groupedAppointments.upcoming.length > 0 && (
-              <Badge variant="outline" className="border-slate-300 text-slate-600 text-xs">
+              <Badge variant="outline" className="border-border text-foreground/70 text-xs">
                 Upcoming: {groupedAppointments.upcoming.length}
               </Badge>
             )}
             {groupedAppointments.past.length > 0 && (
-              <Badge variant="outline" className="border-slate-200 text-slate-400 text-xs">
+              <Badge variant="outline" className="border-border text-foreground/50 text-xs">
                 Past 3 Days: {groupedAppointments.past.length}
               </Badge>
             )}
@@ -264,7 +264,7 @@ export default function QueueList({
 
         {/* Info: Showing filtered data */}
         {excludedCount > 0 && (
-          <div className="mt-2 text-xs text-slate-500 flex items-center gap-1">
+          <div className="mt-2 text-xs text-foreground/50 flex items-center gap-1">
             <AlertCircle className="w-3 h-3" />
             Showing last 3 days onwards ({excludedCount} older hidden)
           </div>
@@ -274,18 +274,18 @@ export default function QueueList({
       <CardContent className="p-0 flex-1 overflow-y-auto">
         {totalCount === 0 ? (
           <div className="p-12 text-center">
-            <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-400 font-medium">No appointments found</p>
-            <p className="text-slate-300 text-xs mt-1">No appointments in the last 3 days or upcoming</p>
+            <Calendar className="w-12 h-12 text-foreground/30 mx-auto mb-3" />
+            <p className="text-foreground/50 font-medium">No appointments found</p>
+            <p className="text-foreground/40 text-xs mt-1">No appointments in the last 3 days or upcoming</p>
           </div>
         ) : (
           <div>
             {/* TODAY'S APPOINTMENTS */}
             {groupedAppointments.today.length > 0 && (
               <div>
-                <div className="sticky top-0 bg-gradient-to-r from-blue-50 to-blue-100 px-4 py-2.5 border-b border-blue-200 z-10">
+                <div className="sticky top-0 bg-gradient-to-r from-blue-50 dark:from-blue-900/20 to-blue-100 dark:to-blue-900/10 px-4 py-2.5 border-b border-blue-200 dark:border-blue-700 z-10">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center gap-2">
+                    <h3 className="text-xs font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                       Today
                     </h3>
@@ -294,7 +294,7 @@ export default function QueueList({
                     </Badge>
                   </div>
                 </div>
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-border">
                   {groupedAppointments.today.map(apt => renderAppointmentCard(apt, false))}
                 </div>
               </div>
@@ -303,18 +303,18 @@ export default function QueueList({
             {/* UPCOMING APPOINTMENTS */}
             {groupedAppointments.upcoming.length > 0 && (
               <div>
-                <div className="sticky top-0 bg-gradient-to-r from-slate-50 to-slate-100 px-4 py-2.5 border-y border-slate-200 z-10">
+                <div className="sticky top-0 bg-gradient-to-r from-slate-50 dark:from-slate-800 to-slate-100 dark:to-slate-800/50 px-4 py-2.5 border-y border-slate-200 dark:border-slate-700 z-10">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-2">
+                    <h3 className="text-xs font-bold text-foreground/70 uppercase tracking-wider flex items-center gap-2">
                       <ChevronRight className="w-3 h-3" />
                       Upcoming
                     </h3>
-                    <Badge variant="outline" className="border-slate-300 text-slate-600 text-[10px] h-5">
+                    <Badge variant="outline" className="border-border text-foreground/60 text-[10px] h-5">
                       {groupedAppointments.upcoming.length}
                     </Badge>
                   </div>
                 </div>
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-border">
                   {groupedAppointments.upcoming.map(apt => renderAppointmentCard(apt, true))}
                 </div>
               </div>
@@ -323,18 +323,18 @@ export default function QueueList({
             {/* PAST 3 DAYS APPOINTMENTS */}
             {groupedAppointments.past.length > 0 && (
               <div>
-                <div className="sticky top-0 bg-gradient-to-r from-slate-50 to-slate-100 px-4 py-2.5 border-y border-slate-200 z-10">
+                <div className="sticky top-0 bg-gradient-to-r from-slate-50 dark:from-slate-800 to-slate-100 dark:to-slate-800/50 px-4 py-2.5 border-y border-slate-200 dark:border-slate-700 z-10">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <h3 className="text-xs font-bold text-foreground/50 uppercase tracking-wider flex items-center gap-2">
                       <Calendar className="w-3 h-3" />
                       Past 3 Days
                     </h3>
-                    <Badge variant="outline" className="border-slate-200 text-slate-400 text-[10px] h-5">
+                    <Badge variant="outline" className="border-border text-foreground/50 text-[10px] h-5">
                       {groupedAppointments.past.length}
                     </Badge>
                   </div>
                 </div>
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-border">
                   {groupedAppointments.past.map(apt => renderAppointmentCard(apt, true))}
                 </div>
               </div>

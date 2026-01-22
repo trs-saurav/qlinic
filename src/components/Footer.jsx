@@ -2,8 +2,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { 
-  Heart,
+import {
   Mail,
   Phone,
   MapPin,
@@ -15,6 +14,7 @@ import {
   ArrowRight,
   Sparkles
 } from 'lucide-react';
+import Image from 'next/image';
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
@@ -98,8 +98,14 @@ const Footer = () => {
             {/* Brand Section */}
             <motion.div variants={itemVariants} className="lg:col-span-2">
               <Link href="/" className="inline-flex items-center gap-2 mb-4 group">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-violet-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <Heart className="w-6 h-6 text-white" />
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                  <Image
+                    src="/LOGO.png"
+                    alt="QLINIC Logo"
+                    width={40}
+                    height={40}
+                    className="w-6 h-6 object-contain"
+                  />
                 </div>
                 <div>
                   <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent flex items-center gap-1">
@@ -230,9 +236,9 @@ const Footer = () => {
             </div>
 
             {/* Copyright */}
-            <div className="flex flex-col md:flex-row items-center gap-4 text-sm text-gray-400">
+            <div className="flex flex-col md:flex-row items-center gap-4 text-xs text-gray-500">
               <p>© {currentYear} QLINIC. All rights reserved.</p>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <Link href="/terms" className="hover:text-blue-400 transition-colors duration-200">
                   Terms
                 </Link>
@@ -259,7 +265,13 @@ const Footer = () => {
                 animate={{ scale: [1, 1.2, 1] }}
                 transition={{ duration: 1, repeat: Infinity }}
               >
-                <Heart className="w-3 h-3 text-red-500 fill-red-500" />
+                <Image
+                  src="/LOGO.png"
+                  alt="QLINIC Logo"
+                  width={12}
+                  height={12}
+                  className="w-3 h-3 object-contain"
+                />
               </motion.span>
               in India
             </p>

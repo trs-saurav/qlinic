@@ -44,7 +44,7 @@ export default function ReceptionPage() {
   // 1. Refresh on Mount
   useEffect(() => {
     if (hospital?._id) refreshAll()
-  }, [hospital?._id]) 
+  }, [hospital?._id, refreshAll]) 
 
   // 2. Refetch when doctor selection OR date changes
   useEffect(() => {
@@ -169,18 +169,18 @@ export default function ReceptionPage() {
   const isViewingToday = isToday(selectedDate)
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col bg-slate-50/50">
+    <div className="h-[calc(100vh-4rem)] flex flex-col bg-background">
       
       {/* HEADER */}
-      <header className="h-16 px-6 bg-white border-b border-slate-200 flex items-center justify-between flex-shrink-0 shadow-sm">
+      <header className="h-16 px-6 bg-background border-b border-border flex items-center justify-between flex-shrink-0 shadow-sm">
         <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
             <Stethoscope className="w-5 h-5 text-blue-600" /> Reception Desk
           </h1>
-          <div className="h-6 w-px bg-slate-200" />
+          <div className="h-6 w-px bg-border" />
           <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-slate-400" />
-            <p className="text-slate-600 text-sm font-semibold hidden md:block">
+            <Clock className="w-4 h-4 text-foreground/50" />
+            <p className="text-foreground/70 text-sm font-semibold hidden md:block">
               {format(todayDate, 'MMMM do, yyyy')}
             </p>
           </div>
@@ -193,7 +193,7 @@ export default function ReceptionPage() {
               variant={isViewingToday ? 'default' : 'outline'}
               size="sm"
               onClick={() => setQuickDate(0)}
-              className={isViewingToday ? 'bg-blue-600 hover:bg-blue-700' : 'border-slate-200'}
+              className={isViewingToday ? 'bg-blue-600 hover:bg-blue-700' : 'border-border'}
             >
               Today
             </Button>
@@ -201,7 +201,7 @@ export default function ReceptionPage() {
               variant="outline"
               size="sm"
               onClick={() => setQuickDate(-1)}
-              className="border-slate-200"
+              className="border-border"
             >
               Yesterday
             </Button>
@@ -209,20 +209,20 @@ export default function ReceptionPage() {
               variant="outline"
               size="sm"
               onClick={() => setQuickDate(-3)}
-              className="border-slate-200"
+              className="border-border"
             >
               3 Days Ago
             </Button>
           </div>
 
-          <div className="h-6 w-px bg-slate-200 hidden lg:block" />
+          <div className="h-6 w-px bg-border hidden lg:block" />
           
           {/* Date Picker */}
           <div className="relative">
             <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
             <input 
               type="date" 
-              className="pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-700 cursor-pointer w-40 md:w-auto"
+              className="pl-9 pr-3 py-2 text-sm bg-secondary border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-foreground cursor-pointer w-40 md:w-auto"
               value={format(selectedDate, 'yyyy-MM-dd')}
               onChange={handleDateChange}
             />
@@ -234,7 +234,7 @@ export default function ReceptionPage() {
             size="icon" 
             onClick={() => refreshAll()} 
             disabled={appointmentsLoading}
-            className="border-slate-200"
+            className="border-border"
           >
             <RefreshCw className={`w-4 h-4 ${appointmentsLoading ? 'animate-spin' : ''}`} />
           </Button>
@@ -254,19 +254,19 @@ export default function ReceptionPage() {
       <div className="flex-1 flex overflow-hidden">
         
         {/* --- LEFT SIDEBAR: WORKING DOCTORS --- */}
-        <aside className="w-80 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 z-10 hidden md:flex">
-          <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50">
+        <aside className="w-80 bg-background border-r border-border flex flex-col flex-shrink-0 z-10 hidden md:flex">
+          <div className="p-4 border-b border-border bg-gradient-to-r from-secondary to-blue-50 dark:from-secondary dark:to-secondary">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+              <h2 className="text-xs font-bold text-foreground/70 uppercase tracking-wider">
                 Doctors on Duty
               </h2>
-              <Badge className="bg-blue-100 text-blue-700 border-0 text-xs">
+              <Badge className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-0 text-xs">
                 {doctors.length}
               </Badge>
             </div>
             <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <Input placeholder="Find doctor..." className="pl-9 bg-white border-slate-200" />
+              <Search className="w-4 h-4 text-foreground/50 absolute left-3 top-2.5" />
+              <Input placeholder="Find doctor..." className="pl-9 bg-background border-border" />
             </div>
           </div>
           
@@ -277,7 +277,7 @@ export default function ReceptionPage() {
               className={`w-full text-left p-3 rounded-xl border transition-all ${
                 selectedDoctorId === null 
                   ? 'bg-blue-600 border-blue-600 text-white shadow-md' 
-                  : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50 hover:border-slate-200'
+                  : 'bg-background border-border text-foreground/70 hover:bg-accent hover:border-border'
               }`}
             >
               <div className="flex items-center justify-between">
@@ -285,11 +285,7 @@ export default function ReceptionPage() {
                   <TrendingUp className="w-4 h-4" />
                   <span className="font-bold">All Queues</span>
                 </div>
-                <Badge variant="secondary" className={`${
-                  selectedDoctorId === null 
-                    ? 'bg-white/20 text-white' 
-                    : 'bg-slate-100 text-slate-700'
-                } border-0`}>
+                <Badge variant="secondary" className={`${selectedDoctorId === null ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'} border-0 dark:bg-white/20 dark:text-white`}>
                   {recentAppointments.length}
                 </Badge>
               </div>
@@ -316,8 +312,8 @@ export default function ReceptionPage() {
                   onClick={() => setSelectedDoctorId(doc._id)}
                   className={`w-full p-3 rounded-xl border transition-all text-left group ${
                     isActive 
-                      ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200 shadow-sm' 
-                      : 'bg-white border-slate-100 hover:border-blue-200 hover:shadow-sm'
+                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 ring-1 ring-blue-200 dark:ring-blue-700 shadow-sm' 
+                      : 'bg-background border-border hover:border-blue-200 dark:hover:border-blue-700 hover:shadow-sm'
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -331,9 +327,7 @@ export default function ReceptionPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start gap-2">
-                        <h3 className={`font-bold text-sm truncate ${
-                          isActive ? 'text-blue-700' : 'text-slate-900'
-                        }`}>
+                        <h3 className={`font-bold text-sm truncate ${isActive ? 'text-blue-700 dark:text-blue-300' : 'text-foreground'}`}>
                           Dr. {firstName} {lastName}
                         </h3>
                         {docPatientCount > 0 && (
@@ -344,7 +338,7 @@ export default function ReceptionPage() {
                       </div>
                       
                       <div className="flex items-center gap-2 mt-1.5">
-                        <Badge variant="outline" className={`h-5 text-[10px] px-1.5 border-0 ${meta.bg} ${meta.text} font-medium`}>
+                        <Badge variant="outline" className={`h-5 text-[10px] px-1.5 border-0 ${meta.bg} ${meta.text} font-medium dark:bg-opacity-20`}>
                           {meta.label}
                         </Badge>
                         {live.currentToken > 0 && (
@@ -370,15 +364,15 @@ export default function ReceptionPage() {
         </aside>
 
         {/* --- CENTER: PATIENT LIST --- */}
-        <main className="flex-1 flex flex-col min-w-0 bg-slate-50/50">
+        <main className="flex-1 flex flex-col min-w-0 bg-background">
           
           {/* Stats Header */}
-          <div className="h-16 px-6 border-b border-slate-200 bg-white flex items-center justify-between flex-shrink-0">
+          <div className="h-16 px-6 border-b border-border bg-background flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-2 overflow-hidden">
               {selectedDoctorId ? (
                 <>
-                  <h2 className="text-lg font-bold text-slate-800 truncate">
-                    Dr. {doctors.find(d => d._id === selectedDoctorId)?.firstName}'s Queue
+                  <h2 className="text-lg font-bold text-foreground truncate">
+                    Dr. {doctors.find(d => d._id === selectedDoctorId)?.firstName}&apos;s Queue
                   </h2>
                   <Badge className="bg-blue-50 text-blue-700 border-blue-100 hidden sm:inline-flex text-xs">
                     Filtered
@@ -386,8 +380,8 @@ export default function ReceptionPage() {
                 </>
               ) : (
                 <>
-                  <h2 className="text-lg font-bold text-slate-800 truncate">All Patients</h2>
-                  <Badge variant="outline" className="border-slate-200 text-slate-500 hidden sm:inline-flex text-xs">
+                  <h2 className="text-lg font-bold text-foreground truncate">All Patients</h2>
+                  <Badge variant="outline" className="border-border text-foreground/50 hidden sm:inline-flex text-xs">
                     Last 3 Days + Upcoming
                   </Badge>
                 </>
@@ -398,18 +392,18 @@ export default function ReceptionPage() {
             <div className="flex gap-4 text-sm shrink-0">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-green-500" />
-                <span className="text-slate-500 hidden sm:inline">Waiting:</span> 
-                <span className="font-bold text-slate-900">{viewStats.waiting}</span>
+                <span className="text-foreground/50 hidden sm:inline">Waiting:</span> 
+                <span className="font-bold text-foreground">{viewStats.waiting}</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
-                <span className="text-slate-500 hidden sm:inline">Consulting:</span> 
-                <span className="font-bold text-slate-900">{viewStats.consulting}</span>
+                <span className="text-foreground/50 hidden sm:inline">Consulting:</span> 
+                <span className="font-bold text-foreground">{viewStats.consulting}</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-slate-400" />
-                <span className="text-slate-500 hidden sm:inline">Done:</span> 
-                <span className="font-bold text-slate-900">{viewStats.completed}</span>
+                <span className="text-foreground/50 hidden sm:inline">Done:</span> 
+                <span className="font-bold text-foreground">{viewStats.completed}</span>
               </div>
             </div>
           </div>
@@ -434,7 +428,7 @@ export default function ReceptionPage() {
             </div>
 
             {/* Check-In Panel */}
-            <div className="hidden lg:flex w-[400px] border-l border-slate-200 bg-white flex-col">
+            <div className="hidden lg:flex w-[400px] border-l border-border bg-background flex-col">
               <PatientCheckIn 
                 appointment={selectedAppt} 
                 onCheckInSuccess={() => { 

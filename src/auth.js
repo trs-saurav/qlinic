@@ -29,7 +29,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         role: { label: "Role", type: "text" }
       },
       async authorize(credentials) {
-        console.log('AUTH.JS: authorize', { credentials });
+        
         try {
           await connectDB()
           const user = await User.findOne({ email: credentials?.email }).select('+password')
@@ -59,10 +59,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async signIn({ user, account, profile }) {
-      console.log('============== AUTH.JS: signIn callback ==============');
-      console.log('[SIGNIN] user:', user);
-      console.log('[SIGNIN] account:', account);
-      console.log('[SIGNIN] profile:', profile);
+
 
       if (account?.provider === 'credentials') {
         console.log('[SIGNIN] Credentials provider sign-in complete.');
@@ -94,8 +91,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         user.role = dbUser.role;
         user.id = dbUser._id.toString(); // Must be a string
         
-        console.log('[SIGNIN] Attached DB info to user object:', user);
-        console.log('======================================================');
         return true;
       } catch (error) {
         console.error('[SIGNIN] Error in signIn callback for OAuth:', error);
@@ -103,11 +98,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
     },
     async jwt({ token, user, trigger, session, account }) {
-      console.log('================ AUTH.JS: jwt callback =================');
-      console.log('[JWT] token received:', token);
-      console.log('[JWT] user object received:', user);
-      console.log('[JWT] account object received:', account);
-      console.log(`[JWT] trigger: ${trigger}`);
 
 
       // This block only runs on the initial sign-in
@@ -152,27 +142,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
 
-      console.log('[JWT] Returning final token:', token);
-      console.log('======================================================');
       return token;
     },
     async session({ session, token }) {
-      console.log('=============== AUTH.JS: session callback ===============');
-      console.log('[SESSION] session object received:', session);
-      console.log('[SESSION] token object received:', token);
+
 
       if (session.user && token) {
         // Expose database ID and role to the client-side session
         session.user.id = token.db_id;
         session.user.role = token.role;
       }
-      console.log('[SESSION] Returning final session:', session);
-      console.log('======================================================');
+    
       return session;
     },
     async redirect({ url, baseUrl }) {
-      console.log('============== AUTH.JS: redirect callback ==============');
-      console.log({ url, baseUrl });
+  
       
       try {
         // Ensure URLs are properly formatted with protocol before parsing
@@ -258,7 +242,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         console.warn('Could not parse URL in fallback redirect check:', e);
       }
       
-      console.log('======================================================');
       return baseUrl
     }
   }

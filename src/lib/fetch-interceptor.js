@@ -7,10 +7,20 @@ export function setupFetchInterceptor() {
     try {
       // 1. Detect if the URL is external
       // If input is a Request object, get .url, otherwise use input string
-      const urlString = (typeof input === 'object' && input !== null && input.url) ? input.url : input.toString();
+      let urlString = '';
+      if (typeof input === 'string') {
+        urlString = input;
+      } else if (input instanceof Request) {
+        urlString = input.url;
+      } else if (typeof input === 'object' && input !== null && input.url) {
+        urlString = input.url.toString();
+      } else {
+        urlString = String(input);
+      }
       
       // It's external if it starts with http/https AND doesn't match our current domain
-      const isExternal = urlString.startsWith('http') && !urlString.includes(window.location.origin);
+      const origin = window.location.origin || '';
+      const isExternal = urlString.startsWith('http') && origin && !urlString.includes(origin);
 
       // 2. Prepare the enhanced configuration
       const enhancedInit = {
@@ -35,8 +45,13 @@ export function setupFetchInterceptor() {
 
       return response
     } catch (error) {
-      console.error('❌ Fetch error:', error)
-      throw error
+      // Log the error but still propagate it
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        console.warn('⚠️ Network error in fetch:', error.message);
+      } else {
+        console.error('❌ Fetch error:', error);
+      }
+      throw error; // Re-throw to maintain normal error handling
     }
   }
 }

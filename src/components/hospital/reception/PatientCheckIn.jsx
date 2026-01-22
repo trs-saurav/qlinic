@@ -22,8 +22,8 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
 
   if (!appointment) {
     return (
-      <Card className="h-full border-dashed border-2 border-slate-200 shadow-none bg-slate-50 flex items-center justify-center">
-        <div className="text-center text-slate-400 p-8">
+      <Card className="h-full border-dashed border-2 border-border shadow-none bg-secondary flex items-center justify-center">
+        <div className="text-center text-foreground/50 p-8">
           <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
           <p className="text-sm">Select a patient from the queue<br />to view details and check-in</p>
         </div>
@@ -82,9 +82,9 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
   const isCheckedIn = appointment.status === 'CHECKED_IN' || appointment.status === 'IN_CONSULTATION'
 
   return (
-    <Card className="border-slate-200 shadow-sm h-full overflow-y-auto flex flex-col">
+    <Card className="border-border shadow-sm h-full overflow-y-auto flex flex-col">
       {/* Patient Info Header */}
-      <CardHeader className="bg-gradient-to-r from-blue-50 to-slate-50 border-b flex-shrink-0">
+      <CardHeader className="bg-gradient-to-r from-blue-50 dark:from-blue-900/20 to-slate-50 dark:to-slate-800/20 border-b flex-shrink-0">
         <div className="flex items-center gap-4">
           <Avatar className="h-14 w-14 border-2 border-white shadow-sm">
             <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-bold text-lg">
@@ -92,12 +92,12 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
             </AvatarFallback>
           </Avatar>
           <div className="flex-1">
-            <CardTitle className="text-xl text-slate-900">
+            <CardTitle className="text-xl text-foreground">
               {appointment.patientId?.firstName} {appointment.patientId?.lastName}
             </CardTitle>
-            <div className="flex items-center gap-2 text-sm text-slate-500 mt-1 flex-wrap">
+            <div className="flex items-center gap-2 text-sm text-foreground/60 mt-1 flex-wrap">
               {appointment.tokenNumber && (
-                <span className="bg-white px-2 py-0.5 rounded border border-slate-200 font-mono text-xs font-bold">
+                <span className="bg-background px-2 py-0.5 rounded border border-border font-mono text-xs font-bold">
                   Token #{appointment.tokenNumber}
                 </span>
               )}
@@ -115,55 +115,55 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
           // Already Checked In State
           <div className="space-y-6">
             <div className="flex flex-col items-center justify-center py-8 text-center space-y-4">
-              <div className="h-20 w-20 bg-green-50 rounded-full flex items-center justify-center">
-                <CheckCircle className="w-10 h-10 text-green-600" />
+              <div className="h-20 w-20 bg-green-50 dark:bg-green-900/20 rounded-full flex items-center justify-center">
+                <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Patient Checked In</h3>
-                <p className="text-slate-500 text-sm mt-1">Token #{appointment.tokenNumber}</p>
-                <p className="text-slate-400 text-xs mt-2">Waiting for doctor's consultation call</p>
+                <h3 className="text-lg font-bold text-foreground">Patient Checked In</h3>
+                <p className="text-foreground/60 text-sm mt-1">Token #{appointment.tokenNumber}</p>
+                <p className="text-foreground/50 text-xs mt-2">Waiting for doctor's consultation call</p>
               </div>
             </div>
 
             {/* Show Recorded Vitals if Available */}
             {appointment.vitals && Object.keys(appointment.vitals).length > 0 && (
               <div className="border-t pt-6">
-                <h4 className="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                <h4 className="font-semibold text-foreground mb-4 flex items-center gap-2">
                   <Activity className="w-4 h-4 text-blue-600" /> Recorded Vitals
                 </h4>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   {appointment.vitals.temperature && (
                     <div className="flex items-center gap-2">
                       <Thermometer className="w-4 h-4 text-orange-500" />
-                      <span className="text-slate-600">Temp:</span>
+                      <span className="text-foreground/70">Temp:</span>
                       <span className="font-semibold">{appointment.vitals.temperature}°F</span>
                     </div>
                   )}
                   {appointment.vitals.weight && (
                     <div className="flex items-center gap-2">
                       <Weight className="w-4 h-4 text-blue-500" />
-                      <span className="text-slate-600">Weight:</span>
+                      <span className="text-foreground/70">Weight:</span>
                       <span className="font-semibold">{appointment.vitals.weight} kg</span>
                     </div>
                   )}
                   {appointment.vitals.bpSystolic && appointment.vitals.bpDiastolic && (
                     <div className="flex items-center gap-2">
                       <Heart className="w-4 h-4 text-red-500" />
-                      <span className="text-slate-600">BP:</span>
+                      <span className="text-foreground/70">BP:</span>
                       <span className="font-semibold">{appointment.vitals.bpSystolic}/{appointment.vitals.bpDiastolic}</span>
                     </div>
                   )}
                   {appointment.vitals.spo2 && (
                     <div className="flex items-center gap-2">
                       <Wind className="w-4 h-4 text-cyan-500" />
-                      <span className="text-slate-600">SpO2:</span>
+                      <span className="text-foreground/70">SpO2:</span>
                       <span className="font-semibold">{appointment.vitals.spo2}%</span>
                     </div>
                   )}
                   {appointment.vitals.heartRate && (
                     <div className="flex items-center gap-2">
                       <Heart className="w-4 h-4 text-pink-500" />
-                      <span className="text-slate-600">Heart Rate:</span>
+                      <span className="text-foreground/70">Heart Rate:</span>
                       <span className="font-semibold">{appointment.vitals.heartRate} bpm</span>
                     </div>
                   )}
@@ -174,20 +174,20 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
             {/* Appointment Details */}
             <div className="border-t pt-6 space-y-3 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-slate-500">Doctor</span>
-                <span className="font-semibold text-slate-900">
+                <span className="text-foreground/60">Doctor</span>
+                <span className="font-semibold text-foreground">
                   Dr. {appointment.doctorId?.firstName} {appointment.doctorId?.lastName}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-500">Scheduled</span>
-                <span className="font-semibold text-slate-900">
+                <span className="text-foreground/60">Scheduled</span>
+                <span className="font-semibold text-foreground">
                   {format(new Date(appointment.scheduledTime), 'hh:mm a')}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-500">Type</span>
-                <span className="font-semibold text-slate-900">{appointment.type || 'Regular'}</span>
+                <span className="text-foreground/60">Type</span>
+                <span className="font-semibold text-foreground">{appointment.type || 'Regular'}</span>
               </div>
             </div>
           </div>
@@ -222,15 +222,15 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
 
             {/* Vitals Form */}
             <div>
-              <div className="flex items-center gap-2 text-slate-800 font-semibold pb-3 mb-4 border-b">
+              <div className="flex items-center gap-2 text-foreground font-semibold pb-3 mb-4 border-b">
                 <Activity className="w-5 h-5 text-blue-600" /> Vitals Check
-                <span className="text-xs text-slate-400 font-normal ml-auto">(Optional)</span>
+                <span className="text-xs text-foreground/50 font-normal ml-auto">(Optional)</span>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 {/* Temperature */}
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2 text-slate-600 text-xs font-medium">
+                  <Label className="flex items-center gap-2 text-foreground/70 text-xs font-medium">
                     <Thermometer className="w-3 h-3 text-orange-500" /> Temperature (°F)
                   </Label>
                   <Input 
@@ -242,10 +242,10 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
                     className="h-10"
                   />
                 </div>
-
+                
                 {/* Weight */}
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2 text-slate-600 text-xs font-medium">
+                  <Label className="flex items-center gap-2 text-foreground/70 text-xs font-medium">
                     <Weight className="w-3 h-3 text-blue-500" /> Weight (kg)
                   </Label>
                   <Input 
@@ -260,7 +260,7 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
 
                 {/* BP Systolic */}
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2 text-slate-600 text-xs font-medium">
+                  <Label className="flex items-center gap-2 text-foreground/70 text-xs font-medium">
                     <Heart className="w-3 h-3 text-red-500" /> BP Systolic
                   </Label>
                   <Input 
@@ -271,10 +271,10 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
                     className="h-10"
                   />
                 </div>
-
+                
                 {/* BP Diastolic */}
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2 text-slate-600 text-xs font-medium">
+                  <Label className="flex items-center gap-2 text-foreground/70 text-xs font-medium">
                     <Heart className="w-3 h-3 text-red-500" /> BP Diastolic
                   </Label>
                   <Input 
@@ -288,7 +288,7 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
 
                 {/* SpO2 */}
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2 text-slate-600 text-xs font-medium">
+                  <Label className="flex items-center gap-2 text-foreground/70 text-xs font-medium">
                     <Wind className="w-3 h-3 text-cyan-500" /> SpO2 (%)
                   </Label>
                   <Input 
@@ -299,10 +299,10 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
                     className="h-10"
                   />
                 </div>
-
+                
                 {/* Heart Rate */}
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2 text-slate-600 text-xs font-medium">
+                  <Label className="flex items-center gap-2 text-foreground/70 text-xs font-medium">
                     <Heart className="w-3 h-3 text-pink-500" /> Heart Rate (bpm)
                   </Label>
                   <Input 
