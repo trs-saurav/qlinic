@@ -37,24 +37,42 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
     setLoading(true)
     
     try {
+      // Prepare vitals data - send ALL fields, not just numeric ones
+      const vitalsData = {
+        temperature: vitals.temperature || '',
+        weight: vitals.weight || '',
+        bpSystolic: vitals.bpSystolic || '',
+        bpDiastolic: vitals.bpDiastolic || '',
+        spo2: vitals.spo2 || '',
+        heartRate: vitals.heartRate || ''
+      };
+      
+      console.log('📋 Sending check-in request with vitals:', { 
+        appointmentId: appointment._id, 
+        vitals: vitalsData,
+        paymentStatus: 'PAID'
+      })
+      
       const res = await fetch('/api/appointment/check-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           appointmentId: appointment._id,
-          vitals: {
-            temperature: vitals.temperature || undefined,
-            weight: vitals.weight || undefined,
-            bpSystolic: vitals.bpSystolic || undefined,
-            bpDiastolic: vitals.bpDiastolic || undefined,
-            spo2: vitals.spo2 || undefined,
-            heartRate: vitals.heartRate || undefined
-          },
+          vitals: vitalsData,
           paymentStatus: 'PAID'
         })
       })
       
+      // Check if the response is JSON before parsing
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('Non-JSON response:', text);
+        throw new Error(`Invalid response format. Status: ${res.status}`);
+      }
+      
       const data = await res.json()
+      console.log('Check-in response:', data)
       
       if (res.ok && data.success) {
         toast.success(`Checked In! Token #${data.tokenNumber}`)
@@ -73,7 +91,11 @@ export default function PatientCheckIn({ appointment, onCheckInSuccess }) {
       }
     } catch (err) {
       console.error('Check-in error:', err)
-      toast.error('Network error')
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        toast.error('Network error - please check your connection')
+      } else {
+        toast.error(err.message || 'An error occurred during check-in')
+      }
     } finally {
       setLoading(false)
     }

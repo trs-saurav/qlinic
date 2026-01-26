@@ -26,7 +26,9 @@ export default function HospitalAppointmentsPage() {
     fetchAppointments, 
     fetchDoctors, 
     doctors, 
-    updateAppointmentStatus 
+    updateAppointmentStatus,
+    refreshAll,
+    forceRefreshAll
   } = useHospitalAdmin()
   
   const [loading, setLoading] = useState(true)
@@ -81,7 +83,7 @@ export default function HospitalAppointmentsPage() {
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
-    await fetchAppointments();
+    await forceRefreshAll(); // Use the new forceRefreshAll function to ensure all data is fetched
     setIsRefreshing(false);
   };
 

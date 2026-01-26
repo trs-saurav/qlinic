@@ -6,18 +6,21 @@ import DoctorQueueList from '@/components/doctor/DoctorQueueList'
 import ActivePatientConsole from '@/components/doctor/ActivePatientConsole'
 import AppointmentHistoryList from '@/components/doctor/AppointmentHistoryList'
 import { Card } from '@/components/ui/card'
-import { Activity, Clock } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Activity, Clock, RefreshCw } from 'lucide-react'
 
 export default function DoctorAppointmentsPage() {
-  const { appointments, fetchAppointments, updateAppointmentStatus, appointmentsLoading } = useDoctor()
+  const { appointments, fetchAppointments, updateAppointmentStatus, appointmentsLoading, refreshAll, forceRefreshAll } = useDoctor()
   const [activeTab, setActiveTab] = useState('queue')
   const [currentPatient, setCurrentPatient] = useState(null)
   const [lastRefresh, setLastRefresh] = useState(Date.now())
 
+  // Initial data fetch when component mounts
   useEffect(() => {
+    console.log('🔄 DoctorAppointmentsPage mounted, fetching appointments...')
     fetchAppointments('today')
     setLastRefresh(Date.now())
-  }, []) // eslint-disable-line
+  }, [fetchAppointments]) // Only fetch once when component mounts
 
   // 30-minute fallback refresh effect
   useEffect(() => {
@@ -55,7 +58,7 @@ export default function DoctorAppointmentsPage() {
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
-    await fetchAppointments('today');
+    await forceRefreshAll(); // Use the new forceRefreshAll function to ensure all data is fetched
     setLastRefresh(Date.now());
     setIsRefreshing(false);
   };
@@ -66,8 +69,8 @@ export default function DoctorAppointmentsPage() {
       {/* LEFT COLUMN: Queue & History (30% width) */}
       <Card className="lg:col-span-4 xl:col-span-3 flex flex-col h-full border border-slate-200 shadow-sm overflow-hidden bg-card">
         <div className="p-4 border-b bg-background flex justify-between items-center">
-           <h2 className="text-lg font-bold flex items-center gap-2 text-blue-900">
-             <Clock className="w-5 h-5 text-blue-600" /> Appointments
+           <h2 className="text-lg font-bold flex items-center gap-2 text-foreground">
+             <Clock className="w-5 h-5 text-foreground" /> Appointments
            </h2>
            <Button 
              variant="outline" 

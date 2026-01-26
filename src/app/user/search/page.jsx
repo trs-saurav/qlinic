@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, Suspense, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { searchHospitalsWithAI } from "@/app/(public)/actions/smartSearch";
 import HospitalCard from "@/components/search/HospitalCard";
@@ -174,17 +174,23 @@ function SearchPage() {
     toast.success("Link copied to clipboard!");
   };
 
-  // Client-Side Filtering
-  const filteredResults = results.filter(h => {
-    if (h.distance && h.distance > radius[0]) return false;
-    if (minRating > 0 && (h.rating || 0) < minRating) return false;
-    if (filterEmergency && !h.isEmergency) return false;
-    if (filterVerified && !h.isVerified) return false;
-    return true;
-  }).sort((a, b) => {
-     if(a.distance && b.distance) return a.distance - b.distance;
-     return 0;
-  });
+  // Client-Side Filtering - FIXED
+  const filteredResults = useMemo(() => {
+    return results.filter(h => {
+      // Distance filter - use the committed radius value, not local state
+      if (h.distance && h.distance > radius[0]) return false;
+      // Rating filter
+      if (minRating > 0 && (h.rating || 0) < minRating) return false;
+      // Emergency filter
+      if (filterEmergency && !h.isEmergency) return false;
+      // Verified filter
+      if (filterVerified && !h.isVerified) return false;
+      return true;
+    }).sort((a, b) => {
+       if(a.distance && b.distance) return a.distance - b.distance;
+       return 0;
+    });
+  }, [results, radius, minRating, filterEmergency, filterVerified]);
 
   return (
     <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950">
@@ -239,7 +245,21 @@ function SearchPage() {
                       filterEmergency={filterEmergency} setFilterEmergency={setFilterEmergency}
                       filterVerified={filterVerified} setFilterVerified={setFilterVerified}
                    />
-                   <Button className="w-full" onClick={() => document.querySelector('[data-state="open"]')?.click()}>Show Results</Button>
+                   <Button 
+                     className="w-full bg-blue-600 hover:bg-blue-700" 
+                     onClick={() => {
+                       // Close the sheet programmatically
+                       const closeButton = document.querySelector('[data-state="open"] [data-radix-dismiss]');
+                       if (closeButton) {
+                         closeButton.click();
+                       } else {
+                         // Fallback: close by triggering escape key
+                         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+                       }
+                     }}
+                   >
+                     Show Results
+                   </Button>
                 </div>
               </SheetContent>
             </Sheet>
@@ -264,6 +284,25 @@ function SearchPage() {
                     filterEmergency={filterEmergency} setFilterEmergency={setFilterEmergency}
                     filterVerified={filterVerified} setFilterVerified={setFilterVerified}
                 />
+                {/* Clear Filters Button for Desktop */}
+                <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => {
+                      setRadius([50]);
+                      setMinRating(0);
+                      setFilterEmergency(false);
+                      setFilterVerified(false);
+                    }}
+                    className="w-full text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-x mr-2">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                    Clear All Filters
+                  </Button>
+                </div>
              </div>
           </div>
 

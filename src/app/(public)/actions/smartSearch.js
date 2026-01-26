@@ -5,15 +5,18 @@ import Hospital from "@/models/hospital";
 import connectDB from "@/config/db";
 import { SYMPTOM_MAP } from "@/lib/symptomMap";
 
-
-// CHANGE THIS:
-// TO THIS:
-// import { geminiModel } from "@/lib/gemini";
-
-// AND CHANGE THE API CALL SECTION:
-// Instead of groqClient.chat.completions.create({...})
-// You just use: const result = await geminiModel.generateContent(prompt);
-
+// Helper function to calculate distance between two coordinates
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c; // Distance in kilometers
+}
 
 const maxDuration = 60; // Allow function to run for up to 60 seconds
 const searchCache = new Map();
@@ -104,11 +107,9 @@ export async function searchHospitalsWithAI(userQuery, userLat, userLng, userCit
     let hospitals = [];
     
     // TIER 1: Explicit City Search (e.g., "Hospital in Delhi")
-    // If the user or AI specified a city, we IGNORE the user's GPS radius.
     if (analysis.explicitCity) {
       console.log(`📍 Switching to Explicit City: ${analysis.explicitCity}`);
       let cityFilters = { ...searchFilters };
-      // Override the OR to prioritize city match
       cityFilters['address.city'] = new RegExp(analysis.explicitCity, 'i');
       
       hospitals = await Hospital.find(cityFilters)
@@ -117,7 +118,6 @@ export async function searchHospitalsWithAI(userQuery, userLat, userLng, userCit
     }
     
     // TIER 2: Local 50km Search (Priority)
-    // If no explicit city, use GPS to find hospitals within 50km.
     else if (userLat && userLng) {
       console.log("📍 Searching within 50km radius...");
       hospitals = await Hospital.find({
@@ -125,15 +125,14 @@ export async function searchHospitalsWithAI(userQuery, userLat, userLng, userCit
         'location': {
           $near: {
             $geometry: { type: 'Point', coordinates: [userLng, userLat] },
-            $maxDistance: 50000 // ✅ STRICT 50km LIMIT
+            $maxDistance: 50000
           }
         }
       })
-      .select('name address city state logo rating totalReviews specialties location')
+      .select('name address city state logo rating totalReviews specialties location isVerified isEmergency contactDetails')
       .limit(20);
 
       // TIER 3: Global Fallback (Auto-Expand)
-      // If 50km yielded NO results, we remove the limit and search everywhere.
       if (hospitals.length === 0) {
         console.log("⚠️ No local results. Expanding to Global Search...");
         hospitals = await Hospital.find({
@@ -141,11 +140,10 @@ export async function searchHospitalsWithAI(userQuery, userLat, userLng, userCit
           'location': {
             $near: {
               $geometry: { type: 'Point', coordinates: [userLng, userLat] },
-              // ❌ NO maxDistance here (Global)
             }
           }
         })
-        .select('name address city state logo rating totalReviews specialties location')
+        .select('name address city state logo rating totalReviews specialties location isVerified isEmergency contactDetails')
         .limit(20);
       }
     }
@@ -157,11 +155,76 @@ export async function searchHospitalsWithAI(userQuery, userLat, userLng, userCit
         .limit(10);
     }
 
+    // Convert Mongoose documents to plain objects and calculate distances
+    const hospitalsWithDistance = hospitals.map(hospital => {
+      // Convert to plain object with comprehensive ObjectId handling
+      let hospitalObj;
+      if (hospital.toObject) {
+        // Use toJSON to get a clean object, then process it
+        hospitalObj = JSON.parse(JSON.stringify(hospital));
+      } else {
+        hospitalObj = { ...hospital };
+      }
+      
+      // Ensure all ObjectId-like fields are converted to strings
+      const convertObjectIdFields = (obj) => {
+        if (!obj || typeof obj !== 'object') return obj;
+        
+        // Handle direct ObjectId
+        if (obj.constructor?.name === 'ObjectId' || (obj.type === 'Buffer' && obj.data)) {
+          return obj.toString();
+        }
+        
+        // Recursively process nested objects
+        for (const key in obj) {
+          if (obj[key] && typeof obj[key] === 'object') {
+            if (obj[key].constructor?.name === 'ObjectId' || (obj[key].type === 'Buffer' && obj[key].data)) {
+              obj[key] = obj[key].toString();
+            } else if (Array.isArray(obj[key])) {
+              obj[key] = obj[key].map(item => 
+                (item && typeof item === 'object' && (item.constructor?.name === 'ObjectId' || (item.type === 'Buffer' && item.data))) 
+                  ? item.toString() 
+                  : convertObjectIdFields(item)
+              );
+            } else {
+              obj[key] = convertObjectIdFields(obj[key]);
+            }
+          }
+        }
+        return obj;
+      };
+      
+      hospitalObj = convertObjectIdFields(hospitalObj);
+      
+      // Calculate distance if we have user location and hospital location
+      if (userLat && userLng && hospitalObj.location?.coordinates) {
+        const [hospitalLng, hospitalLat] = hospitalObj.location.coordinates;
+        const distance = calculateDistance(
+          parseFloat(userLat), 
+          parseFloat(userLng), 
+          hospitalLat, 
+          hospitalLng
+        );
+        hospitalObj.distance = Math.round(distance * 100) / 100;
+      } else {
+        hospitalObj.distance = null;
+      }
+      
+      // Remove problematic fields that might cause serialization issues
+      const fieldsToRemove = [
+        '__v', 'createdAt', 'updatedAt', 'verificationRequest', 
+        'stats', 'password', 'resetPasswordToken', 'resetPasswordExpires'
+      ];
+      
+      fieldsToRemove.forEach(field => delete hospitalObj[field]);
+      
+      return hospitalObj;
+    });
+
     return {
       success: true,
       analysis: analysis.specialties.length > 0 ? analysis : null,
-      results: JSON.parse(JSON.stringify(hospitals)),
-      // We pass a flag so UI can tell user if we expanded search
+      results: hospitalsWithDistance,
       isExpandedSearch: !analysis.explicitCity && userLat && hospitals.length > 0
     };
 

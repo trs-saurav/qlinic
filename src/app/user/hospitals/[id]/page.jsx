@@ -285,8 +285,10 @@ export default function HospitalPublicProfile() {
                         </CardHeader>
                         <CardContent>
                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                              {hospital.images.map((img, idx) => (
-                                <div key={idx} className="aspect-video rounded-lg overflow-hidden border bg-slate-100 relative group cursor-pointer">
+                              {hospital.images
+                                .filter(img => img && img.trim() !== '') // Filter out empty images
+                                .map((img, idx) => (
+                                <div key={`${img}-${idx}`} className="aspect-video rounded-lg overflow-hidden border bg-slate-100 relative group cursor-pointer">
                                    <img src={img} alt={`Hospital view ${idx + 1}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                                 </div>
                               ))}
@@ -304,8 +306,10 @@ export default function HospitalPublicProfile() {
                       <CardContent>
                         <div className="flex flex-wrap gap-2">
                           {hospital.specialties?.length > 0 ? (
-                            hospital.specialties.map((spec, i) => (
-                              <Badge key={i} variant="secondary" className="px-3 py-1.5 text-sm bg-white border shadow-sm text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                            hospital.specialties
+                              .filter(spec => spec && spec.trim() !== '') // Filter out empty specialties
+                              .map((spec, i) => (
+                              <Badge key={`${spec}-${i}`} variant="secondary" className="px-3 py-1.5 text-sm bg-white border shadow-sm text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                                 {spec}
                               </Badge>
                             ))
@@ -325,8 +329,10 @@ export default function HospitalPublicProfile() {
                         <CardContent>
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                             {hospital.facilities?.length > 0 ? (
-                              hospital.facilities.map((facility, i) => (
-                                <div key={i} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 text-sm">
+                              hospital.facilities
+                                .filter(facility => facility && facility.trim() !== '') // Filter out empty facilities
+                                .map((facility, i) => (
+                                <div key={`${facility}-${i}`} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 text-sm">
                                   <div className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
                                   {facility}
                                 </div>

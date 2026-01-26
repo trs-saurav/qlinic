@@ -83,6 +83,19 @@ export default function BookAppointmentModal({ isOpen, onClose, doctor, hospital
     if (!selectedTimeAvailable) {
       return toast.error('The selected time slot is no longer available. Please select another slot.')
     }
+    
+    // Validate that the appointment time is not in the past
+    const [hours, minutes] = selectedTime.split(':')
+    const appointmentDate = new Date(selectedDate)
+    appointmentDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
+    
+    const now = new Date()
+    const timeBuffer = 30 * 60 * 1000; // 30 minutes buffer
+    
+    if (appointmentDate < new Date(now.getTime() + timeBuffer)) {
+      toast.error('Cannot book appointment for a time that has already passed or is too soon')
+      return
+    }
 
     setIsLoading(true)
     const loadingToast = toast.loading('Confirming booking...')
@@ -240,9 +253,11 @@ export default function BookAppointmentModal({ isOpen, onClose, doctor, hospital
                 </div>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {availableSlots.map((slot) => (
+                  {availableSlots
+                    .filter(slot => slot.time && slot.displayTime) // Filter out invalid slots
+                    .map((slot, index) => (
                     <button
-                      key={slot.time}
+                      key={`${slot.time}-${index}`}
                       type="button"
                       onClick={() => setSelectedTime(slot.time)}
                       className={`

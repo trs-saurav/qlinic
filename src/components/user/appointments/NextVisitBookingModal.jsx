@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Calendar } from '@/components/ui/calendar'
-import { CalendarPlus, Calendar as CalendarIcon, Clock, Loader2, AlertCircle, RefreshCcw, Info } from 'lucide-react'
+import { CalendarPlus, Calendar as CalendarIcon, Clock, Loader2, AlertCircle, RefreshCw, Info } from 'lucide-react'
 import { format, addDays, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
 
@@ -130,6 +130,15 @@ export default function NextVisitBookingModal({ isOpen, onClose, data, setData, 
     const appointmentDate = new Date(selectedDate)
     appointmentDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
     
+    // Validate that the appointment time is not in the past
+    const now = new Date()
+    const timeBuffer = 30 * 60 * 1000; // 30 minutes buffer
+    
+    if (appointmentDate < new Date(now.getTime() + timeBuffer)) {
+      toast.error('Cannot book appointment for a time that has already passed or is too soon')
+      return
+    }
+    
     // Create updated data object
     const updatedData = { 
       ...data, 
@@ -245,7 +254,7 @@ export default function NextVisitBookingModal({ isOpen, onClose, data, setData, 
                   disabled={loadingSlots}
                   className="h-8 px-2 text-xs"
                 >
-                  <RefreshCcw className={`w-3 h-3 mr-1 ${loadingSlots ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-3 h-3 mr-1 ${loadingSlots ? 'animate-spin' : ''}`} />
                   Refresh
                 </Button>
               </div>
@@ -288,9 +297,11 @@ export default function NextVisitBookingModal({ isOpen, onClose, data, setData, 
                 </div>
               ) : (
                 <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-60 overflow-y-auto p-2 border rounded-lg bg-white">
-                  {availableSlots.map((slot) => (
+                  {availableSlots
+                    .filter(slot => slot.time && slot.displayTime) // Filter out invalid slots
+                    .map((slot, index) => (
                     <button
-                      key={slot.time}
+                      key={`${slot.time}-${index}`}
                       type="button"
                       onClick={() => setSelectedTime(slot.time)}
                       className={`

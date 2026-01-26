@@ -87,6 +87,18 @@ export const UserProvider = ({ children }) => {
     }
   }, [status, session]) // ✅ FIX: Add session to dependencies
 
+  // Force refresh of all user data with user feedback
+  const forceRefreshAll = useCallback(async () => {
+    console.log('🔄 Forcing refresh of all user data')
+    try {
+      await fetchAllUserData();
+      toast.success('Data refreshed successfully')
+    } catch (error) {
+      console.error('❌ Error during forced refresh:', error)
+      toast.error('Failed to refresh data')
+    }
+  }, [fetchAllUserData])
+
   useEffect(() => {
     if (status === 'authenticated') {
       fetchAllUserData()
@@ -256,7 +268,10 @@ export const UserProvider = ({ children }) => {
     // Records
     addMedicalRecord, 
     deleteMedicalRecord,
-    setMedicalRecords
+    setMedicalRecords,
+    
+    // Additional functions
+    forceRefreshAll,
   }
 
   return (

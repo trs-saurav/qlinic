@@ -9,77 +9,130 @@ import bcrypt from 'bcryptjs';
 
 export async function POST(req) {
   try {
-    const gate = await requireRole(['hospital_admin']);
+    // Allow both hospital_admin and user roles to create appointments
+    // hospital_admin for walk-ins, user for self-booked appointments
+    const gate = await requireRole(['hospital_admin', 'user']);
     if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
     
-    const hospital = await getMyHospitalOrFail(gate.me);
-    if (!hospital.ok) return NextResponse.json({ error: hospital.error }, { status: hospital.status });
-
     await connectDB();
 
-    const { patientData, doctorId, isEmergency, appointmentType } = await req.json();
+    const body = await req.json();
+    
+    // Different handling based on user role
+    if (gate.me.role === 'hospital_admin') {
+      // Hospital admin creating walk-in appointment
+      const hospital = await getMyHospitalOrFail(gate.me);
+      if (!hospital.ok) return NextResponse.json({ error: hospital.error }, { status: hospital.status });
 
-    // 1. Find or create patient
-    let patient = await User.findOne({ phone: patientData.phone });
-    let generatedPassword = null;
+      const { patientData, doctorId, isEmergency, appointmentType } = body;
 
-    if (!patient) {
-      // ✅ Generate random password for new patient
-      const randomPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
-      const hashedPassword = await bcrypt.hash(randomPassword, 10);
+      // 1. Find or create patient
+      let patient = await User.findOne({ phone: patientData.phone });
+      let generatedPassword = null;
 
-      patient = new User({
-        ...patientData,
-        role: 'user',
-        email: patientData.email || `${patientData.phone}@qlinic.app`,
-        password: hashedPassword // ✅ FIX: Add hashed password
+      if (!patient) {
+        // ✅ Generate random password for new patient
+        const randomPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+        const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+        patient = new User({
+          ...patientData,
+          role: 'user',
+          email: patientData.email || `${patientData.phone}@qlinic.app`,
+          password: hashedPassword // ✅ FIX: Add hashed password
+        });
+        
+        await patient.save();
+        generatedPassword = randomPassword; // Store plain password to return to user
+        
+        console.log('✅ New patient created with ID:', patient._id);
+      }
+
+      // 2. Generate Token
+      const todayStart = startOfDay(new Date());
+      const todayEnd = endOfDay(new Date());
+
+      const lastTokenAppt = await Appointment.findOne({
+        hospitalId: hospital.hospital._id,
+        doctorId: doctorId,
+        scheduledTime: { $gte: todayStart, $lte: todayEnd },
+        tokenNumber: { $ne: null }
+      }).sort({ tokenNumber: -1 });
+
+      const nextToken = (lastTokenAppt?.tokenNumber || 0) + 1;
+
+      // 3. Create Appointment
+      const newAppointment = await Appointment.create({
+        patientId: patient._id,
+        doctorId,
+        hospitalId: hospital.hospital._id,
+        scheduledTime: new Date(), // Walk-in is for now
+        status: 'CHECKED_IN',
+        tokenNumber: nextToken,
+        type: isEmergency ? 'EMERGENCY' : (appointmentType || 'WALKIN'),
+        checkInTime: new Date(),
       });
-      
-      await patient.save();
-      generatedPassword = randomPassword; // Store plain password to return to user
-      
-      console.log('✅ New patient created with ID:', patient._id);
+
+      console.log('✅ Walk-in appointment created. Token:', nextToken);
+
+      return NextResponse.json({ 
+        success: true, 
+        appointment: newAppointment,
+        tokenNumber: nextToken,
+        generatedCredentials: generatedPassword ? {
+          phone: patientData.phone,
+          password: generatedPassword
+        } : null
+      });
+    } else if (gate.me.role === 'user') {
+      // Regular user booking their own appointment
+      const { 
+        patientId, 
+        patientModel, 
+        doctorId, 
+        hospitalId, 
+        scheduledTime, 
+        reason, 
+        instructions, 
+        type 
+      } = body;
+
+      // Validate that user is booking for themselves or their family member
+      if (patientId !== gate.me._id.toString() && patientModel !== 'User') {
+        // Check if it's a family member they have access to
+        const familyMember = gate.me.familyMembers?.find(fm => fm._id.toString() === patientId);
+        if (!familyMember) {
+          return NextResponse.json({ 
+            error: 'Unauthorized to book appointment for this patient' 
+          }, { status: 403 });
+        }
+      }
+
+      // Create the appointment
+      const newAppointment = await Appointment.create({
+        patientId,
+        patientModel: patientModel || 'User',
+        doctorId,
+        hospitalId,
+        scheduledTime: new Date(scheduledTime),
+        status: 'BOOKED',
+        type: type || 'FOLLOW_UP',
+        reason: reason || 'Follow-up appointment',
+        instructions: instructions || ''
+      });
+
+      console.log('✅ User appointment booked successfully:', newAppointment._id);
+
+      return NextResponse.json({ 
+        success: true, 
+        appointment: newAppointment
+      });
+    } else {
+      return NextResponse.json({ error: 'Unauthorized role' }, { status: 403 });
     }
 
-    // 2. Generate Token
-    const todayStart = startOfDay(new Date());
-    const todayEnd = endOfDay(new Date());
-
-    const lastTokenAppt = await Appointment.findOne({
-      hospitalId: hospital.hospital._id,
-      doctorId: doctorId,
-      scheduledTime: { $gte: todayStart, $lte: todayEnd },
-      tokenNumber: { $ne: null }
-    }).sort({ tokenNumber: -1 });
-
-    const nextToken = (lastTokenAppt?.tokenNumber || 0) + 1;
-
-    // 3. Create Appointment
-    const newAppointment = await Appointment.create({
-      patientId: patient._id,
-      doctorId,
-      hospitalId: hospital.hospital._id,
-      scheduledTime: new Date(), // Walk-in is for now
-      status: 'CHECKED_IN',
-      tokenNumber: nextToken,
-      type: isEmergency ? 'EMERGENCY' : (appointmentType || 'WALKIN'),
-      checkInTime: new Date(),
-    });
-
-    console.log('✅ Walk-in appointment created. Token:', nextToken);
-
-    return NextResponse.json({ 
-      success: true, 
-      appointment: newAppointment,
-      tokenNumber: nextToken,
-      generatedCredentials: generatedPassword ? {
-        phone: patientData.phone,
-        password: generatedPassword
-      } : null
-    });
-
   } catch (error) {
-    console.error('❌ Error creating walk-in appointment:', error);
+    console.error('❌ Error creating appointment:', error);
     return NextResponse.json({ 
       success: false, 
       error: error.message || 'Server Error',
@@ -95,11 +148,19 @@ export async function GET(req) {
     await connectDB();
     console.log('✅ Database connected');
 
-    const { searchParams } = new URL(req.url);
-    const role = searchParams.get('role');
-    const doctorId = searchParams.get('doctorId');
-    const patientId = searchParams.get('patientId');
-    const filter = searchParams.get('filter');
+    // Safely parse URL to prevent errors
+    let url;
+    try {
+      url = new URL(req.url);
+    } catch (urlError) {
+      console.error('❌ Invalid URL:', urlError);
+      return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
+    }
+    
+    const role = url.searchParams.get('role');
+    const doctorId = url.searchParams.get('doctorId');
+    const patientId = url.searchParams.get('patientId');
+    const filter = url.searchParams.get('filter');
 
     console.log('🔍 GET /api/appointment params:', { role, doctorId, patientId, filter });
 
@@ -109,12 +170,18 @@ export async function GET(req) {
       return NextResponse.json({ error: gate.error }, { status: gate.status });
     }
 
-    console.log('✅ User authenticated:', { userId: gate.me._id, role: gate.me.role });
+    console.log('✅ User authenticated:', { userId: gate.me?._id, role: gate.me?.role });
+    
+    // Check if gate.me exists and has required properties
+    if (!gate.me) {
+      console.error('❌ gate.me is undefined');
+      return NextResponse.json({ error: 'Authentication error' }, { status: 500 });
+    }
 
     let query = {};
 
     if (role === 'doctor' && doctorId) {
-      if (gate.me.role !== 'doctor' || gate.me._id.toString() !== doctorId) {
+      if (!gate.me.role || gate.me.role !== 'doctor' || !gate.me._id || gate.me._id.toString() !== doctorId) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
       query.doctorId = doctorId;
@@ -123,14 +190,14 @@ export async function GET(req) {
       if (!hospital.ok) return NextResponse.json({ error: hospital.error }, { status: hospital.status });
       query.hospitalId = hospital.hospital._id;
     } else if (role === 'patient' && patientId) {
-       if (gate.me.role !== 'user' || gate.me._id.toString() !== patientId) {
+       if (!gate.me.role || gate.me.role !== 'user' || !gate.me._id || gate.me._id.toString() !== patientId) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
       query.patientId = patientId;
     } else {
       // Fallback for generic queries based on logged-in user
-      if(gate.me.role === 'doctor') query.doctorId = gate.me._id;
-      else if(gate.me.role === 'user') query.patientId = gate.me._id;
+      if(gate.me.role === 'doctor' && gate.me._id) query.doctorId = gate.me._id;
+      else if(gate.me.role === 'user' && gate.me._id) query.patientId = gate.me._id;
       else {
         return NextResponse.json({ error: 'Invalid query parameters for your role' }, { status: 400 });
       }
@@ -166,8 +233,37 @@ export async function GET(req) {
       .populate('hospitalId', 'name')
       .sort({ scheduledTime: 1, tokenNumber: 1 });
 
+    // Ensure all appointment objects have proper structure for frontend
+    const processedAppointments = appointments.map(apt => {
+      const aptObj = apt.toObject();
+      
+      // Ensure vitals object exists and has proper structure
+      if (!aptObj.vitals) {
+        aptObj.vitals = {
+          temperature: '',
+          weight: '',
+          bpSystolic: '',
+          bpDiastolic: '',
+          spo2: '',
+          heartRate: ''
+        };
+      }
+      
+      console.log(`📋 Appointment ${aptObj._id}:`, {
+        status: aptObj.status,
+        hasVitals: !!aptObj.vitals,
+        vitalsKeys: aptObj.vitals ? Object.keys(aptObj.vitals) : [],
+        vitalsValues: aptObj.vitals
+      });
+      return aptObj;
+    });
+
     console.log('✅ Appointments found:', appointments.length, 'for query:', query);
-    return NextResponse.json({ success: true, appointments: appointments }, { status: 200 });
+    
+    // Ensure appointments is always an array
+    const appointmentsArray = Array.isArray(processedAppointments) ? processedAppointments : [];
+    
+    return NextResponse.json({ success: true, appointments: appointmentsArray }, { status: 200 });
 
   } catch (error) {
     console.error('❌ Error fetching appointments:', error);

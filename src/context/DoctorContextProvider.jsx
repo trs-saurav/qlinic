@@ -77,11 +77,14 @@ export function DoctorProvider({ children }) {
     if (!doctor?._id) return
     try {
       setDashboardLoading(true)
+      console.log('🔍 Fetching doctor dashboard...');
       const res = await fetch('/api/doctor/dashboard')
       const data = await res.json()
+      console.log('📊 Received dashboard data:', data.dashboard);
       
       if (res.ok) {
         setDashboard(data.dashboard || dashboard)
+        console.log('📋 Dashboard state updated:', data.dashboard);
       }
     } catch (err) {
       console.error('❌ fetchDoctorDashboard:', err)
@@ -112,6 +115,14 @@ export function DoctorProvider({ children }) {
           toast.error(data?.error || 'Failed to load appointments')
           return
         }
+
+        // Log the appointments data to see if vitals are included
+        console.log('📋 Fetched appointments:', data.appointments?.map(apt => ({
+          id: apt._id,
+          status: apt.status,
+          hasVitals: !!apt.vitals,
+          vitals: apt.vitals
+        })));
 
         setAppointments(data.appointments || [])
         setAppointmentsFilter(filter)
@@ -182,6 +193,8 @@ export function DoctorProvider({ children }) {
   // 🔄 Unified Appointment Update
   const updateAppointmentStatus = useCallback(async (appointmentId, status, additionalData = {}) => {
     try {
+      console.log('🔍 updateAppointmentStatus called with:', { appointmentId, status, additionalData });
+      
       const res = await fetch(`/api/appointment/${appointmentId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -191,9 +204,12 @@ export function DoctorProvider({ children }) {
           updatedByRole: 'doctor' 
         }),
       })
+      
       const data = await res.json()
+      console.log('🔍 updateAppointmentStatus response:', { status: res.status, data });
 
       if (!res.ok) {
+        console.error('❌ Failed to update appointment:', data?.error);
         toast.error(data?.error || 'Failed to update appointment')
         return { success: false }
       }
@@ -207,6 +223,9 @@ export function DoctorProvider({ children }) {
         )
       )
 
+      // Refresh dashboard to update statistics
+      await fetchDoctorDashboard();
+
       toast.success('Appointment updated successfully')
       return { success: true }
     } catch (err) {
@@ -214,7 +233,7 @@ export function DoctorProvider({ children }) {
       toast.error('Failed to update appointment')
       return { success: false }
     }
-  }, [])
+  }, [fetchDoctorDashboard])
 
   // 🏥 NEW: Queue Action (Start/Next/Skip/Complete)
   // Calls the centralized queue-action API which updates MongoDB AND Firebase
@@ -306,6 +325,25 @@ export function DoctorProvider({ children }) {
     ])
   }, [doctor?._id, appointmentsFilter, fetchDoctorDashboard, fetchAppointments, fetchAffiliations, fetchNotifications])
 
+  // Force refresh of all data with user feedback
+  const forceRefreshAll = useCallback(async () => {
+    if (!doctor?._id) return
+    console.log('🔄 Forcing refresh of all doctor data')
+    try {
+      await Promise.all([
+        fetchDoctorProfile(),
+        fetchDoctorDashboard(),
+        fetchAppointments(appointmentsFilter),
+        fetchAffiliations(),
+        fetchNotifications(),
+      ])
+      toast.success('Data refreshed successfully')
+    } catch (error) {
+      console.error('❌ Error during forced refresh:', error)
+      toast.error('Failed to refresh data')
+    }
+  }, [doctor?._id, appointmentsFilter, fetchDoctorProfile, fetchDoctorDashboard, fetchAppointments, fetchAffiliations, fetchNotifications])
+
   // ================= Effects =================
   useEffect(() => {
     if (status === 'loading') return
@@ -319,12 +357,15 @@ export function DoctorProvider({ children }) {
     fetchDoctorProfile()
   }, [status, session, fetchDoctorProfile])
 
+  // Initialize all data when doctor is loaded
   useEffect(() => {
     if (!doctor?._id) return
+    console.log('🔍 Doctor loaded, initializing all data...')
     fetchDoctorDashboard()
+    fetchAppointments(appointmentsFilter)
     fetchAffiliations()
     fetchNotifications()
-  }, [doctor?._id, fetchDoctorDashboard, fetchAffiliations, fetchNotifications])
+  }, [doctor?._id, appointmentsFilter, fetchDoctorDashboard, fetchAppointments, fetchAffiliations, fetchNotifications])
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -343,7 +384,7 @@ export function DoctorProvider({ children }) {
     updateAppointmentStatus, performQueueAction, setDoctorStatus, // <-- Exported new actions
     affiliations, affiliationsLoading, fetchAffiliations,
     notifications, unreadCount, fetchNotifications, markNotificationRead,
-    refreshAll,
+    refreshAll, forceRefreshAll,
   }
 
   return <DoctorContext.Provider value={value}>{children}</DoctorContext.Provider>

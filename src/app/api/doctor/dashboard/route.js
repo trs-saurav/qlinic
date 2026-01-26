@@ -17,17 +17,26 @@ export async function GET(req) {
     const todayEnd = endOfDay(now);
 
     // Run queries in parallel for speed
+    console.log('🔍 Dashboard API - Query params:', {
+      doctorId,
+      todayStart: todayStart.toISOString(),
+      todayEnd: todayEnd.toISOString()
+    });
+    
     const [
       todayCount,
       upcomingCount,
       completedWeekCount,
       emergencyCount
     ] = await Promise.all([
-      // 1. Today's Appointments
+      // 1. Today's Appointments - Only COUNT Checked-In Patients (Patients who have arrived but not yet seen)
       Appointment.countDocuments({
         doctorId,
         scheduledTime: { $gte: todayStart, $lte: todayEnd },
-        status: { $ne: 'CANCELLED' }
+        status: 'CHECKED_IN'  // Only count patients who have checked in but not yet seen
+      }).then(count => {
+        console.log('📊 Today\'s CHECKED-IN appointments count:', count);
+        return count;
       }),
       
       // 2. Upcoming (Future)
@@ -35,6 +44,9 @@ export async function GET(req) {
         doctorId,
         scheduledTime: { $gt: todayEnd },
         status: { $ne: 'CANCELLED' }
+      }).then(count => {
+        console.log('📊 Upcoming appointments count:', count);
+        return count;
       }),
 
       // 3. Completed This Week
@@ -45,6 +57,9 @@ export async function GET(req) {
            $gte: startOfWeek(now, { weekStartsOn: 1 }), 
            $lte: endOfWeek(now, { weekStartsOn: 1 }) 
         }
+      }).then(count => {
+        console.log('📊 Completed this week count:', count);
+        return count;
       }),
 
       // 4. Emergency Cases Today (New Metric based on your Schema)
@@ -53,17 +68,24 @@ export async function GET(req) {
         scheduledTime: { $gte: todayStart, $lte: todayEnd },
         type: 'EMERGENCY',
         status: { $ne: 'CANCELLED' }
+      }).then(count => {
+        console.log('📊 Emergency cases today count:', count);
+        return count;
       })
     ]);
 
+    const dashboardResult = {
+      todayAppointments: todayCount,
+      upcomingAppointments: upcomingCount,
+      completedThisWeek: completedWeekCount,
+      emergencyCases: emergencyCount, // New stat you can use
+      pendingHospitalInvites: 0
+    };
+    
+    console.log('📈 Final dashboard result:', dashboardResult);
+    
     return NextResponse.json({
-      dashboard: {
-        todayAppointments: todayCount,
-        upcomingAppointments: upcomingCount,
-        completedThisWeek: completedWeekCount,
-        emergencyCases: emergencyCount, // New stat you can use
-        pendingHospitalInvites: 0
-      }
+      dashboard: dashboardResult
     });
 
   } catch (error) {

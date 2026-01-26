@@ -106,10 +106,14 @@ export async function GET(req) {
       }
     })
 
-    // 4. Filter Out Booked Slots
+    // 4. Filter Out Booked Slots AND Past Time Slots for Today
     const dayStart = startOfDay(new Date(dateStr))
     const dayEnd = endOfDay(new Date(dateStr))
+    const now = new Date()
 
+    // Check if this is today's date
+    const isToday = dateStr === format(now, 'yyyy-MM-dd')
+    
     const existingAppointments = await Appointment.find({
       doctorId,
       hospitalId,
@@ -131,13 +135,30 @@ export async function GET(req) {
 
     console.log(`Found ${bookedTimes.size} existing bookings`)
 
-    // 5. Final Result
-    const finalSlots = generatedSlots
+    // 5. Final Result - Filter out past time slots for today
+    let finalSlots = generatedSlots
       .filter(time => !bookedTimes.has(time))
       .map(time => ({
         time,
         displayTime: toDisplayTime(time)
       }))
+      // Filter out any slots with empty time values
+      .filter(slot => slot.time && slot.displayTime)
+
+    // Additional filter for today - remove past time slots
+    if (isToday) {
+      const currentHour = now.getHours()
+      const currentMinute = now.getMinutes()
+      const currentTimeInMinutes = currentHour * 60 + currentMinute
+      
+      finalSlots = finalSlots.filter(slot => {
+        const slotTimeInMinutes = toMinutes(slot.time)
+        // Allow slots that are at least 30 minutes in the future to account for booking time
+        return slotTimeInMinutes >= (currentTimeInMinutes + 30)
+      })
+      
+      console.log(`Filtered out past time slots for today. Remaining slots: ${finalSlots.length}`)
+    }
 
     return NextResponse.json({
       success: true,

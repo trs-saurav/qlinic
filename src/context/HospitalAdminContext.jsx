@@ -361,6 +361,29 @@ export const HospitalAdminProvider = ({ children }) => {
     setLastRefresh(Date.now());
   }, [hospital?._id, appointmentsFilter, selectedDate, fetchStats, fetchAppointments, fetchDoctors, fetchPatients, fetchInventoryStats, fetchNotifications])
 
+  // Force refresh of all data with user feedback
+  const forceRefreshAll = useCallback(async () => {
+    if (!hospital?._id) return
+    console.log('🔄 Forcing refresh of all hospital admin data')
+    try {
+      await Promise.all([
+        fetchHospital(),
+        fetchStats(),
+        fetchAppointments(appointmentsFilter, selectedDate),
+        fetchDoctors(),
+        fetchPatients(),
+        fetchStaff(),
+        fetchInventoryStats(),
+        fetchNotifications(),
+      ])
+      toast.success('Data refreshed successfully')
+      setLastRefresh(Date.now());
+    } catch (error) {
+      console.error('❌ Error during forced refresh:', error)
+      toast.error('Failed to refresh data')
+    }
+  }, [hospital?._id, appointmentsFilter, selectedDate, fetchHospital, fetchStats, fetchAppointments, fetchDoctors, fetchPatients, fetchStaff, fetchInventoryStats, fetchNotifications])
+
   // Effects
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return
@@ -428,7 +451,7 @@ export const HospitalAdminProvider = ({ children }) => {
       // ✅ EXPOSE LIVE DATA
       liveQueueData, 
 
-      refreshAll,
+      refreshAll, forceRefreshAll,
     }),
     [
       user, isLoaded, isSignedIn,
@@ -442,7 +465,7 @@ export const HospitalAdminProvider = ({ children }) => {
       inventory, inventoryLoading, inventoryStats, inventoryFilters, lowStockItems, fetchInventory, fetchInventoryStats,
       notifications, unreadCount, fetchNotifications,
       liveQueueData, 
-      refreshAll
+      refreshAll, forceRefreshAll
     ]
   )
 

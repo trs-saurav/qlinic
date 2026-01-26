@@ -57,7 +57,7 @@ export default function DoctorNavbar() {
   const { data: session } = useSession()
   const [scrolled, setScrolled] = useState(false)
 
-  const { unreadCount, dashboard } = useDoctor()
+  const { unreadCount, dashboard, refreshAll } = useDoctor()
 
   // Scroll effect for formal transparency handling
   useEffect(() => {
@@ -117,7 +117,7 @@ export default function DoctorNavbar() {
                   <span>{item.label}</span>
                   
                   {/* Badge Logic */}
-                  {item.href === '/doctor/appointments' && dashboard?.todayAppointments > 0 && (
+                  {item.href === '/doctor/appointments' && dashboard?.todayAppointments && dashboard?.todayAppointments > 0 && (
                      <span className="ml-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white">
                         {dashboard.todayAppointments > 9 ? '9+' : dashboard.todayAppointments}
                      </span>

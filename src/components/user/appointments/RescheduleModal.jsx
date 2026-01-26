@@ -146,9 +146,11 @@ export default function RescheduleModal({ isOpen, onClose, data, setData, onConf
                 </div>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {availableSlots.map((slot) => (
+                  {availableSlots
+                    .filter(slot => slot.time && slot.displayTime) // Filter out invalid slots
+                    .map((slot, index) => (
                     <button
-                      key={slot.time}
+                      key={`${slot.time}-${index}`}
                       type="button"
                       onClick={() => setSelectedTime(slot.time)}
                       className={`
@@ -171,7 +173,7 @@ export default function RescheduleModal({ isOpen, onClose, data, setData, onConf
                 Reason for Reschedule
               </label>
               <Input
-                value={data.reason}
+                value={data?.reason || ''}  // ✅ Add null check
                 onChange={(e) => setData({ ...data, reason: e.target.value })}
                 placeholder="e.g., Personal emergency, conflicting appointment"
                 className="w-full"
@@ -183,7 +185,7 @@ export default function RescheduleModal({ isOpen, onClose, data, setData, onConf
                 Additional Instructions
               </label>
               <Textarea
-                value={data.instructions}
+                value={data?.instructions || ''}  // ✅ Add null check
                 onChange={(e) => setData({ ...data, instructions: e.target.value })}
                 placeholder="Any special instructions for the clinic..."
                 className="w-full"
@@ -211,6 +213,15 @@ export default function RescheduleModal({ isOpen, onClose, data, setData, onConf
                 const appointmentDate = new Date(selectedDate)
                 appointmentDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
                 
+                // Validate that the appointment time is not in the past
+                const now = new Date()
+                const timeBuffer = 30 * 60 * 1000; // 30 minutes buffer
+                
+                if (appointmentDate < new Date(now.getTime() + timeBuffer)) {
+                  toast.error('Cannot reschedule appointment for a time that has already passed or is too soon')
+                  return
+                }
+                
                 const updatedData = { 
                   ...data, 
                   newDate: format(selectedDate, 'yyyy-MM-dd'),
@@ -221,7 +232,7 @@ export default function RescheduleModal({ isOpen, onClose, data, setData, onConf
                 console.log('📋 Updated data to send:', updatedData);
                 
                 setData(updatedData);
-                onConfirm()
+                onConfirm(updatedData)  // ✅ Pass updatedData to onConfirm
               }} 
               className="flex-1 bg-blue-600 hover:bg-blue-700"
               disabled={!selectedTime}
