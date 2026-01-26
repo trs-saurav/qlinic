@@ -61,6 +61,7 @@
     "zod": "^4.2.1"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.1"
   },

@@ -73,7 +73,9 @@ const appointmentSchema = new mongoose.Schema({
     reason: String,
     instructions: String
   },
-  cancelReason: String,
+  reason: { type: String },
+  instructions: { type: String },
+  cancelReason: { type: String },
   cancelledBy: {
     type: String,
     enum: ['patient', 'doctor', 'hospital_admin']

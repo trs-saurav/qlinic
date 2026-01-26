@@ -9,7 +9,7 @@ import { Calendar } from '@/components/ui/calendar'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import toast from 'react-hot-toast'
-import { Calendar as CalendarIcon, Clock, User, AlertCircle, Loader2, Info } from 'lucide-react'
+import { Calendar as CalendarIcon, Clock, User, AlertCircle, Loader2, Info, RefreshCcw } from 'lucide-react'
 import { format } from 'date-fns'
 import { useUser } from '@/context/UserContext' // ✅ Import User Context
 
@@ -56,6 +56,7 @@ export default function BookAppointmentModal({ isOpen, onClose, doctor, hospital
       const data = await response.json()
 
       if (data.success) {
+        console.log('✅ Setting available slots in BookAppointmentModal:', data.availableSlots || [])
         setAvailableSlots(data.availableSlots || [])
       } else {
         // Only show error if it's not a "no schedule" message
@@ -76,6 +77,12 @@ export default function BookAppointmentModal({ isOpen, onClose, doctor, hospital
 
     if (!selectedMember) return toast.error('Please select a family member')
     if (!selectedTime) return toast.error('Please select a time slot')
+    
+    // Double-check that the selected time is still available
+    const selectedTimeAvailable = availableSlots.some(slot => slot.time === selectedTime);
+    if (!selectedTimeAvailable) {
+      return toast.error('The selected time slot is no longer available. Please select another slot.')
+    }
 
     setIsLoading(true)
     const loadingToast = toast.loading('Confirming booking...')
@@ -121,10 +128,10 @@ export default function BookAppointmentModal({ isOpen, onClose, doctor, hospital
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl h-[90vh] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-xl">
-        <DialogHeader className="p-6 pb-2 shrink-0 border-b">
-          <DialogTitle className="text-xl">Book Appointment</DialogTitle>
-          <DialogDescription>
+      <DialogContent className="max-w-full sm:max-w-2xl h-[90vh] sm:h-auto max-h-[90vh] overflow-y-auto flex flex-col p-0 gap-0 overflow-hidden sm:rounded-xl">
+        <DialogHeader className="p-4 sm:p-6 pb-2 shrink-0 border-b">
+          <DialogTitle className="text-lg sm:text-xl">Book Appointment</DialogTitle>
+          <DialogDescription className="text-sm">
             Schedule a visit with Dr. {doctor?.firstName} {doctor?.lastName}
           </DialogDescription>
         </DialogHeader>
@@ -204,9 +211,21 @@ export default function BookAppointmentModal({ isOpen, onClose, doctor, hospital
 
             {/* 3. Which Slot? (Time) */}
             <div className="space-y-3">
-              <Label className="flex items-center gap-2">
-                <Clock className="w-4 h-4" /> Available Slots
-              </Label>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="flex items-center gap-2 text-sm">
+                  <Clock className="w-4 h-4" /> Available Slots
+                </Label>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={fetchAvailableSlots}
+                  disabled={loadingSlots}
+                  className="h-8 px-2 text-xs"
+                >
+                  <RefreshCcw className={`w-3 h-3 mr-1 ${loadingSlots ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
               
               {loadingSlots ? (
                 <div className="flex items-center justify-center py-8 border rounded-lg border-dashed">
@@ -214,20 +233,20 @@ export default function BookAppointmentModal({ isOpen, onClose, doctor, hospital
                   <span className="text-sm text-slate-500">Checking doctor's schedule...</span>
                 </div>
               ) : availableSlots.length === 0 ? (
-                <div className="p-6 bg-orange-50 border border-orange-100 rounded-lg text-center">
+                <div className="p-4 sm:p-6 bg-orange-50 border border-orange-100 rounded-lg text-center">
                   <AlertCircle className="w-8 h-8 text-orange-400 mx-auto mb-2" />
                   <p className="text-sm font-medium text-orange-800">No slots available on this date.</p>
                   <p className="text-xs text-orange-600 mt-1">Please try selecting another date.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                   {availableSlots.map((slot) => (
                     <button
                       key={slot.time}
                       type="button"
                       onClick={() => setSelectedTime(slot.time)}
                       className={`
-                        py-2 px-1 text-sm rounded-md border font-medium transition-all
+                        py-2 px-1 text-xs sm:text-sm rounded-md border font-medium transition-all min-w-[60px]
                         ${selectedTime === slot.time 
                           ? 'bg-primary text-primary-foreground border-primary ring-2 ring-primary/20' 
                           : 'bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-700 border-slate-200'
@@ -257,7 +276,7 @@ export default function BookAppointmentModal({ isOpen, onClose, doctor, hospital
           </form>
         </div>
 
-        <div className="p-6 border-t bg-slate-50 shrink-0 flex gap-3">
+        <div className="p-4 sm:p-6 border-t bg-slate-50 shrink-0 flex flex-col sm:flex-row gap-2 sm:gap-3">
           <Button variant="outline" onClick={onClose} className="flex-1" type="button">
             Cancel
           </Button>

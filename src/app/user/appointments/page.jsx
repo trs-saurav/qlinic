@@ -1,4 +1,3 @@
-// src/app/user/appointments/page.jsx
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useUser } from '@/context/UserContext'
@@ -10,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Filter, Search, Calendar, RefreshCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-// Import Sub-components (Create these files as shown below)
+// Import Sub-components
 import AppointmentCard from  '@/components/user/appointments/AppointmentCard'
 import AppointmentDetailsModal from '@/components/user/appointments/AppointmentDetailsModal'
 import RescheduleModal from '@/components/user/appointments/RescheduleModal'
@@ -38,23 +37,34 @@ export default function UserAppointmentsPage() {
     appointmentId: null, newDate: '', newTime: '', reason: '', instructions: '' 
   })
   const [nextVisitData, setNextVisitData] = useState({ 
-    parentAppointmentId: null, doctorId: null, hospitalId: null, 
-    scheduledDate: '', scheduledTime: '', reason: '', instructions: '' 
+    parentAppointmentId: null, 
+    doctorId: null, 
+    hospitalId: null, 
+    scheduledDate: '', 
+    scheduledTime: '', 
+    reason: '', 
+    instructions: '' 
   })
 
   // Fetch Data
   const fetchAppointments = async () => {
+    console.log('🔄 fetchAppointments called')
     setIsLoading(true)
     try {
       if (fetchAppointmentsWithFilter) {
-        await fetchAppointmentsWithFilter(familyMemberFilter === 'self' ? null : familyMemberFilter);
+        console.log('🔄 Calling fetchAppointmentsWithFilter with filter:', familyMemberFilter === 'self' ? null : familyMemberFilter)
+        await fetchAppointmentsWithFilter(familyMemberFilter === 'self' ? null : familyMemberFilter)
+        console.log('🔄 fetchAppointmentsWithFilter completed')
       }
     } catch (error) {
-      console.error('Error fetching appointments:', error);
-      toast.error('Failed to load appointments');
+      console.error('Error fetching appointments:', error)
+      toast.error('Failed to load appointments')
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
+      console.log('🔄 fetchAppointments completed')
     }
+    
+    console.log('📋 Appointments after fetch:', appointments.length)
   }
 
   useEffect(() => {
@@ -66,7 +76,7 @@ export default function UserAppointmentsPage() {
     let filtered = [...appointments]
     const now = new Date()
 
-    // 1. Tab Logic (Switch Case for Data Filtering)
+    // 1. Tab Logic
     switch (activeTab) {
       case 'ongoing':
         filtered = filtered.filter(a => 
@@ -113,7 +123,6 @@ export default function UserAppointmentsPage() {
     filterAppointments()
   }, [filterAppointments])
 
-
   // Actions
   const handleStatusUpdate = async (id, newStatus) => {
     const loadingToast = toast.loading('Updating status...')
@@ -135,52 +144,107 @@ export default function UserAppointmentsPage() {
     }
   }
 
-  const handleReschedule = async () => {
-    const { appointmentId, newDate, newTime, reason, instructions } = rescheduleData;
-    const newScheduledTime = new Date(`${newDate}T${newTime}`);
+  const handleReschedule = async (updatedData) => {  // ✅ Accept data parameter
+    console.log('🔍 HANDLE RESCHEDULE CALLED')
+    console.log('📋 Reschedule Data:', updatedData)
 
     const loadingToast = toast.loading('Rescheduling appointment...')
     try {
-      const res = await fetch(`/api/appointment/${appointmentId}`, {
+      console.log('📤 Sending PATCH request')
+      
+      const res = await fetch(`/api/appointment/${updatedData.appointmentId || rescheduleData.appointmentId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-            scheduledTime: newScheduledTime.toISOString(),
-            rescheduleReason: reason, 
-            instructions: instructions
+          scheduledTime: updatedData.scheduledTime,
+          reason: updatedData.reason, 
+          instructions: updatedData.instructions
         })
       })
+      
+      console.log('📨 Response status:', res.status)
       const data = await res.json()
+      console.log('📥 Response data:', data)
+      
       if (data.success) {
-        toast.success('Appointment rescheduled', { id: loadingToast })
+        console.log('✅ Reschedule successful!')
+        toast.success('Appointment rescheduled successfully!', { id: loadingToast })
         setIsRescheduleOpen(false)
-        fetchAppointments()
+        
+        // Reset reschedule data
+        setRescheduleData({ 
+          appointmentId: null, 
+          newDate: '', 
+          newTime: '', 
+          reason: '', 
+          instructions: '' 
+        })
+        
+        // Refresh appointments
+        await fetchAppointments()
+        console.log('🔄 Appointments refreshed after reschedule')
       } else {
-        throw new Error(data.error)
+        console.error('❌ Reschedule failed:', data.error)
+        throw new Error(data.error || 'Unknown error')
       }
     } catch (error) {
-      toast.error('Failed to reschedule', { id: loadingToast })
+      console.error('💥 Reschedule error:', error)
+      toast.error(error.message || 'Failed to reschedule', { id: loadingToast })
     }
   }
 
-  const handleBookNextVisit = async () => {
+  const handleBookNextVisit = async (appointmentData) => {  // ✅ Accept data parameter
+    console.log('📋 Booking next visit with data:', appointmentData)
+    
     const loadingToast = toast.loading('Booking next visit...')
     try {
-        const res = await fetch('/api/appointment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(nextVisitData)
+      // Prepare the request body
+      const requestBody = {
+        patientId: selectedAppointment?.patientId?._id || selectedAppointment?.patientId,
+        patientModel: selectedAppointment?.patientModel || 'User',
+        doctorId: selectedAppointment?.doctorId?._id || selectedAppointment?.doctorId,
+        hospitalId: selectedAppointment?.hospitalId?._id || selectedAppointment?.hospitalId,
+        scheduledTime: appointmentData.dateTime,
+        reason: appointmentData.reason || 'Follow-up appointment',
+        instructions: appointmentData.instructions || '',
+        type: 'FOLLOW_UP',
+        status: 'BOOKED'
+      }
+      
+      console.log('📤 Sending POST request:', requestBody)
+      
+      const res = await fetch('/api/appointment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      })
+      
+      const data = await res.json()
+      console.log('📥 Response:', data)
+      
+      if (data.success) {
+        toast.success('Follow-up appointment booked successfully!', { id: loadingToast })
+        setIsNextVisitOpen(false)
+        
+        // Reset next visit data
+        setNextVisitData({ 
+          parentAppointmentId: null, 
+          doctorId: null, 
+          hospitalId: null, 
+          scheduledDate: '', 
+          scheduledTime: '', 
+          reason: '', 
+          instructions: '' 
         })
-        const data = await res.json()
-        if (data.success) {
-            toast.success('Next visit booked successfully', { id: loadingToast })
-            setIsNextVisitOpen(false)
-            fetchAppointments()
-        } else {
-            throw new Error(data.error)
-        }
+        
+        // Refresh appointments
+        await fetchAppointments()
+      } else {
+        throw new Error(data.error || 'Failed to book appointment')
+      }
     } catch (error) {
-        toast.error('Failed to book next visit', { id: loadingToast })
+      console.error('💥 Error booking next visit:', error)
+      toast.error(error.message || 'Failed to book next visit', { id: loadingToast })
     }
   }
 
@@ -206,11 +270,15 @@ export default function UserAppointmentsPage() {
             key={apt._id}
             appointment={apt}
             activeTab={activeTab}
-            familyMemberFilter={familyMemberFilter} // FIX: Passed prop here
-            onViewDetails={() => { setSelectedAppointment(apt); setIsDetailsOpen(true) }}
+            familyMemberFilter={familyMemberFilter}
+            onViewDetails={() => { 
+              setSelectedAppointment(apt)
+              setIsDetailsOpen(true) 
+            }}
             onCancel={() => handleStatusUpdate(apt._id, 'CANCELLED')}
             onComplete={() => handleStatusUpdate(apt._id, 'COMPLETED')}
             onReschedule={(apt) => {
+              setSelectedAppointment(apt)
               const d = new Date(apt.scheduledTime)
               setRescheduleData({ 
                 appointmentId: apt._id, 
@@ -219,7 +287,9 @@ export default function UserAppointmentsPage() {
                 reason: '',
                 instructions: ''
               })
-              setIsRescheduleOpen(true)
+              setTimeout(() => {
+                setIsRescheduleOpen(true)
+              }, 10)
             }}
           />
         ))}
@@ -257,18 +327,18 @@ export default function UserAppointmentsPage() {
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="ALL">All Statuses</SelectItem>
-                    <SelectItem value="BOOKED">Booked</SelectItem>
-                    <SelectItem value="CHECKED_IN">Checked In</SelectItem>
-                    <SelectItem value="IN_CONSULTATION">In Consultation</SelectItem>
-                    <SelectItem value="COMPLETED">Completed</SelectItem>
-                    <SelectItem value="CANCELLED">Cancelled</SelectItem>
-                    <SelectItem value="SKIPPED">Skipped</SelectItem>
-                </SelectContent>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Statuses</SelectItem>
+                <SelectItem value="BOOKED">Booked</SelectItem>
+                <SelectItem value="CHECKED_IN">Checked In</SelectItem>
+                <SelectItem value="IN_CONSULTATION">In Consultation</SelectItem>
+                <SelectItem value="COMPLETED">Completed</SelectItem>
+                <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                <SelectItem value="SKIPPED">Skipped</SelectItem>
+              </SelectContent>
             </Select>
             <Button variant="outline" onClick={fetchAppointments}>
               <RefreshCcw className="w-4 h-4 mr-2" /> Refresh
@@ -293,32 +363,55 @@ export default function UserAppointmentsPage() {
 
       {/* Modals */}
       {selectedAppointment && (
-        <AppointmentDetailsModal 
-          isOpen={isDetailsOpen} 
-          onClose={() => setIsDetailsOpen(false)} 
-          appointment={selectedAppointment}
-          onBookNextVisit={(data) => {
-             setNextVisitData(data)
-             setIsNextVisitOpen(true)
-          }}
-        />
-      )}
-      
-      <RescheduleModal 
-        isOpen={isRescheduleOpen} 
-        onClose={() => setIsRescheduleOpen(false)} 
-        data={rescheduleData}
-        setData={setRescheduleData}
-        onConfirm={handleReschedule} 
-      />
+        <>
+          <AppointmentDetailsModal 
+            isOpen={isDetailsOpen} 
+            onClose={() => {
+              setIsDetailsOpen(false)
+              setSelectedAppointment(null)
+            }}
+            appointment={selectedAppointment}
+            onBookNextVisit={(data) => {
+              console.log('📋 Book next visit triggered with data:', data)
+              setNextVisitData(data)
+              setIsDetailsOpen(false)
+              // Small delay to ensure details modal is closed
+              setTimeout(() => {
+                setIsNextVisitOpen(true)
+              }, 100)
+            }}
+          />
+          
+          <RescheduleModal 
+            key={`reschedule-${selectedAppointment._id}`}
+            isOpen={isRescheduleOpen} 
+            onClose={() => {
+              setIsRescheduleOpen(false)
+              setSelectedAppointment(null)
+            }}
+            data={rescheduleData}
+            setData={setRescheduleData}
+            onConfirm={handleReschedule}  // ✅ Pass data to handler
+            doctor={selectedAppointment.doctorId}
+            hospital={selectedAppointment.hospitalId}
+          />
 
-      <NextVisitBookingModal
-        isOpen={isNextVisitOpen}
-        onClose={() => setIsNextVisitOpen(false)}
-        data={nextVisitData}
-        setData={setNextVisitData}
-        onSuccess={handleBookNextVisit}
-      />
+          <NextVisitBookingModal
+            key={`next-visit-${selectedAppointment._id}`}
+            isOpen={isNextVisitOpen}
+            onClose={() => {
+              setIsNextVisitOpen(false)
+              setSelectedAppointment(null)
+            }}
+            data={nextVisitData}
+            setData={setNextVisitData}
+            onSuccess={handleBookNextVisit}  // ✅ Pass data to handler
+            doctor={selectedAppointment.doctorId}  // ✅ Pass doctor
+            hospital={selectedAppointment.hospitalId}  // ✅ Pass hospital
+            recommendedDate={selectedAppointment.nextVisit?.date}  // ✅ Pass recommended date
+          />
+        </>
+      )}
     </div>
   )
 }
