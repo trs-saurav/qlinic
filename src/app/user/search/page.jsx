@@ -10,7 +10,7 @@ import { Slider } from "@/components/ui/slider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Filter, 
-  Map as MapIcon, // 👈 RENAMED to avoid conflict with JS 'new Map()'
+  Map as MapIcon, //  RENAMED to avoid conflict with JS 'new Map()'
   SlidersHorizontal, 
   ArrowDownWideNarrow, 
   Loader2, 
