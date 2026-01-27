@@ -112,6 +112,37 @@
   --sidebar-ring: oklch(0.553 0.013 58.071);
 }
 
+/* QLINIC custom palette */
+:root {
+  --qlinic-primary: #2563EB; /* blue */
+  --qlinic-primary-soft: rgba(37,99,235,0.12);
+  --qlinic-accent: #22C55E; /* green */
+  --qlinic-accent-alt: #A855F7; /* purple accent */
+  --qlinic-hero-from: #0F172A;
+  --qlinic-hero-to: #1D4ED8;
+  --qlinic-hero-bg: linear-gradient(135deg,var(--qlinic-hero-from),var(--qlinic-hero-to));
+  --qlinic-card: #0B1120;
+  --qlinic-border-subtle: #1F2937;
+  --qlinic-text: #F9FAFB;
+  --qlinic-text-muted: #CBD5F5;
+  --qlinic-bg: #020617;
+}
+
+.dark {
+  --qlinic-primary: #2563EB;
+  --qlinic-primary-soft: rgba(37,99,235,0.12);
+  --qlinic-accent: #22C55E;
+  --qlinic-accent-alt: #A855F7;
+  --qlinic-hero-from: #0F172A;
+  --qlinic-hero-to: #1D4ED8;
+  --qlinic-hero-bg: linear-gradient(135deg,var(--qlinic-hero-from),var(--qlinic-hero-to));
+  --qlinic-card: #0B1120;
+  --qlinic-border-subtle: #1F2937;
+  --qlinic-text: #F9FAFB;
+  --qlinic-text-muted: #CBD5F5;
+  --qlinic-bg: #020617;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -126,6 +157,31 @@
     -ms-overflow-style: none; /* IE/old Edge */
     scrollbar-width: none; /* Firefox */
   }
+  /* QLINIC utilities */
+  .qlinic-hero {
+    background: var(--qlinic-hero-bg);
+    color: var(--qlinic-text);
+  }
+  .qlinic-card {
+    background: var(--qlinic-card);
+    border: 1px solid var(--qlinic-border-subtle);
+    color: var(--qlinic-text);
+    border-radius: var(--radius);
+  }
+  .btn-primary {
+    background-color: var(--qlinic-primary);
+    color: var(--qlinic-text);
+    transition: transform .18s ease, box-shadow .18s ease, background-color .12s ease;
+  }
+  .btn-primary:hover { transform: scale(1.03); box-shadow: 0 8px 24px rgba(37,99,235,0.12); }
+  .btn-primary:focus { outline: 2px solid rgba(37,99,235,0.18); outline-offset: 2px; }
+
+  .card-hover:hover { transform: translateY(-4px); box-shadow: 0 12px 30px rgba(2,6,23,0.5); transition: transform .18s ease, box-shadow .18s ease; }
+
+  @keyframes ql-fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .anim-fade-up { animation: ql-fade-up .45s ease both; }
+
+  .count-up { font-variant-numeric: tabular-nums; }
   .no-scrollbar::-webkit-scrollbar {
     display: none; /* Chrome/Safari/Opera */
   }
