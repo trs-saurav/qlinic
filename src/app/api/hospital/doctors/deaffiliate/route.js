@@ -1,38 +1,33 @@
-import { auth } from "@/auth";
+import { getHospitalAdmin, handleHospitalAuthError } from "@/lib/hospitalAuth";
 import connectDB from "@/config/db";
-import User from "@/models/user";
 import HospitalAffiliation from "@/models/hospitalAffiliation";
 import Appointment from "@/models/appointment";
+import { NextResponse } from "next/server";
 
 export async function POST(req) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await getHospitalAdmin();
+    const error = handleHospitalAuthError(authResult, NextResponse);
+    if (error) return error;
+
+    const { hospitalId } = authResult;
 
     await connectDB();
-
-    // Verify hospital admin
-    const user = await User.findOne({ email: session.user.email });
-    if (!user?.hospitalAdminProfile?.hospitalId) {
-      return Response.json({ error: "Not a hospital admin" }, { status: 403 });
-    }
 
     const { affiliationId } = await req.json();
 
     if (!affiliationId) {
-      return Response.json({ error: "Affiliation ID is required" }, { status: 400 });
+      return NextResponse.json({ error: "Affiliation ID is required" }, { status: 400 });
     }
 
     // Find affiliation and verify it belongs to this hospital
     const affiliation = await HospitalAffiliation.findOne({
       _id: affiliationId,
-      hospitalId: user.hospitalAdminProfile.hospitalId,
+      hospitalId,
     });
 
     if (!affiliation) {
-      return Response.json({ error: "Affiliation not found" }, { status: 404 });
+      return NextResponse.json({ error: "Affiliation not found" }, { status: 404 });
     }
 
     // Delete the affiliation
@@ -55,14 +50,14 @@ export async function POST(req) {
       }
     );
 
-    return Response.json({
+    return NextResponse.json({
       success: true,
       message: "Doctor deaffiliated successfully",
       cancelledAppointments: cancelledAppointments.modifiedCount,
     });
   } catch (error) {
     console.error("Deaffiliate error:", error);
-    return Response.json(
+    return NextResponse.json(
       { error: "Failed to deaffiliate doctor" },
       { status: 500 }
     );

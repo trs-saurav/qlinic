@@ -1,30 +1,10 @@
+// src/models/User.js
 import mongoose from 'mongoose'
 import bcrypt from 'bcryptjs'
 
-// Reusable Point schema (GeoJSON)
-const pointSchema = new mongoose.Schema(
-  {
-    type: {
-      type: String,
-      enum: ['Point'],
-      default: undefined,
-    },
-    coordinates: {
-      type: [Number],
-      default: undefined,
-    },
-    address: String,
-    city: String,
-    state: String,
-    pincode: String,
-    country: String,
-  },
-  { _id: false }
-)
-
 const userSchema = new mongoose.Schema(
   {
-    // ✅ Auth fields (Auth.js compatible)
+    // ============ AUTH FIELDS ============
     email: { 
       type: String, 
       required: true, 
@@ -50,24 +30,18 @@ const userSchema = new mongoose.Schema(
       providerId: String,
       connectedAt: { type: Date, default: Date.now }
     }],
-   
 
+    // ============ IDENTITY ============
     firstName: { type: String, trim: true, default: '' },
     lastName: { type: String, trim: true, default: '' },
+    phoneNumber: { 
+  type: String, 
+  unique: true,     // ← Enforces unique
+  sparse: true,     // ← Should allow multiple nulls
+  index: true 
+},
+
     
-    // ✅ NEW: Date of Birth added here
-    dateOfBirth: { type: Date },
-    // ... inside userSchema definition
-  
-  phoneNumber: { type: String, trim: true, index: true }, // Add index: true for speed
-
-  // ✅ ADD THESE TWO FIELDS
-  isWalkInCreated: { type: Boolean, default: false }, // Marks account as "Shadow/Placeholder"
-  requiresPasswordChange: { type: Boolean, default: false }, // Forces user to set own password
-
-  // ... rest of schema
-
-
     role: {
       type: String,
       enum: ['user', 'doctor', 'hospital_admin', 'admin', 'sub_admin'],
@@ -75,102 +49,26 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
 
-    phoneNumber: { type: String, trim: true },
     profileImage: { type: String, default: '' },
 
+    // ============ ACCOUNT STATUS ============
     isActive: { type: Boolean, default: true },
     isProfileComplete: { type: Boolean, default: false },
-
+    isWalkInCreated: { type: Boolean, default: false }, // Marks reception-created accounts
+    requiresPasswordChange: { type: Boolean, default: false }, // Forces password reset on first login
+    
     lastLogin: { type: Date, default: Date.now },
-    deletedAt: { type: Date },
-
     firstSeenAt: { type: Date, default: Date.now },
     lastSeenAt: { type: Date, default: Date.now },
+    deletedAt: { type: Date },
 
-    // ✅ Admin permissions
+    // ============ ADMIN PERMISSIONS (only for role='admin') ============
     adminPermissions: {
       canManageUsers: { type: Boolean, default: false },
       canManageHospitals: { type: Boolean, default: false },
       canViewAnalytics: { type: Boolean, default: false },
       canManageSettings: { type: Boolean, default: false },
       canAccessFinancials: { type: Boolean, default: false },
-    },
-
-    // Patient Profile
-    patientProfile: {
-      // dateOfBirth removed from here since it's now at root, 
-      // but you can keep it here if your logic strictly looks here.
-      // I recommend using the root one for simplicity.
-      gender: { type: String, enum: ['male', 'female', 'other', null] },
-      bloodGroup: { type: String, enum: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-', null] },
-      address: { 
-        street: String, 
-        city: String, 
-        state: String, 
-        pincode: String, 
-        country: { type: String, default: 'India' }
-      },
-      emergencyContact: String,
-      medicalHistory: { type: [String], default: undefined },
-      allergies: { type: [String], default: undefined },
-      chronicConditions: { type: [String], default: undefined },
-      currentMedications: { type: [String], default: undefined },
-      insuranceProvider: String,
-      insurancePolicyNumber: String,
-    },
-
-    // Doctor Profile
-    doctorProfile: {
-      specialization: String,
-      qualification: String,
-      qualifications: { type: [String], default: undefined },
-      experience: Number,
-      licenseNumber: String,
-      registrationNumber: String,
-      registrationCouncil: String,
-      consultationFee: Number,
-      about: String,
-      languages: { type: [String], default: undefined },
-      expertise: { type: [String], default: undefined },
-      awards: { type: [String], default: undefined },
-      publications: { type: [String], default: undefined },
-
-      location: { type: pointSchema, default: undefined },
-
-      availableDays: { type: [String], default: undefined },
-      timeSlots: { type: [{ day: String, startTime: String, endTime: String }], default: undefined },
-      isAvailable: { type: Boolean, default: true },
-
-      rating: { type: Number, default: 0, min: 0, max: 5 },
-      totalReviews: { type: Number, default: 0 },
-      totalConsultations: { type: Number, default: 0 },
-
-      affiliatedHospitals: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Hospital' }],
-      consultationRoomNumber: String,
-
-      isOnlineConsultationAvailable: { type: Boolean, default: false },
-      videoConsultationFee: Number,
-    },
-
-    // Hospital Admin Profile
-    hospitalAdminProfile: {
-      hospitalId: { 
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: 'Hospital'
-      },
-      designation: String,
-      department: String,
-      employeeId: String,
-      joinedAt: { type: Date, default: Date.now },
-      permissions: {
-        canManageDoctors: { type: Boolean, default: true },
-        canManageStaff: { type: Boolean, default: true },
-        canManageInventory: { type: Boolean, default: true },
-        canViewReports: { type: Boolean, default: true },
-        canManageSettings: { type: Boolean, default: false },
-        canApproveLeave: { type: Boolean, default: false },
-        canManageFinances: { type: Boolean, default: false },
-      },
     },
   },
   { 
@@ -180,26 +78,15 @@ const userSchema = new mongoose.Schema(
   }
 )
 
-// ✅ Indexes for performance
+// ============ INDEXES ============
 userSchema.index({ email: 1, role: 1 })
+userSchema.index({ phoneNumber: 1 }, { sparse: true })
+userSchema.index({ role: 1, isActive: 1 })
 userSchema.index({ 'oauthProviders.provider': 1, 'oauthProviders.providerId': 1 })
-userSchema.index({ 'doctorProfile.location': '2dsphere' })
-userSchema.index({
-  firstName: 'text',
-  lastName: 'text',
-  'doctorProfile.specialization': 'text',
-  'doctorProfile.expertise': 'text',
-})
-userSchema.index({ role: 1 })
-userSchema.index({ isActive: 1 })
-userSchema.index({ 'doctorProfile.affiliatedHospitals': 1 })
-userSchema.index({ 'doctorProfile.specialization': 1 })
-userSchema.index({ 'doctorProfile.isAvailable': 1 })
-userSchema.index({ 'hospitalAdminProfile.hospitalId': 1 })
 userSchema.index({ deletedAt: 1 })
 
-// ✅ Pre-save hook: Hash password & clean location
-userSchema.pre('save', async function () { 
+// ============ PRE-SAVE HOOKS ============
+userSchema.pre('save', async function () {
   try {
     // Hash password if modified
     if (this.isModified('password') && this.password) {
@@ -217,33 +104,12 @@ userSchema.pre('save', async function () {
         canAccessFinancials: true,
       }
     }
-
-    // Clean invalid location for doctors
-    if (this.doctorProfile) {
-      const loc = this.doctorProfile.location
-      const coords = loc?.coordinates
-
-      const isValidPoint =
-        loc &&
-        loc.type === 'Point' &&
-        Array.isArray(coords) &&
-        coords.length === 2 &&
-        typeof coords[0] === 'number' &&
-        typeof coords[1] === 'number' &&
-        !isNaN(coords[0]) &&
-        !isNaN(coords[1])
-
-      if (!isValidPoint) {
-        this.doctorProfile.location = undefined
-      }
-    }
-   
   } catch (error) {
-    console.error('Error in pre-save hook:', error)
+    console.error('Error in User pre-save hook:', error)
   }
 })
 
-// ✅ Virtuals and Methods (Kept same as provided)
+// ============ VIRTUALS ============
 userSchema.virtual('shortId').get(function () {
   return this._id ? this._id.toString().slice(-8).toUpperCase() : null
 })
@@ -253,20 +119,7 @@ userSchema.virtual('fullName').get(function () {
   return name || this.email.split('@')[0]
 })
 
-userSchema.virtual('isDoctorActive').get(function () {
-  if (this.role === 'doctor' && this.doctorProfile) {
-    return this.isActive && this.doctorProfile.isAvailable
-  }
-  return false
-})
-
-userSchema.virtual('hospital', {
-  ref: 'Hospital',
-  localField: 'hospitalAdminProfile.hospitalId',
-  foreignField: '_id',
-  justOne: true,
-})
-
+// ============ METHODS ============
 userSchema.methods.comparePassword = async function (candidatePassword) {
   if (!this.password) return false
   return await bcrypt.compare(candidatePassword, this.password)

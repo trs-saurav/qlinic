@@ -97,53 +97,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return false; // Prevent sign-in on error
       }
     },
-    async jwt({ token, user, trigger, session, account }) {
+    async jwt({ token, user, trigger, session }) {
+  if (user) {
+    token.db_id = user.id;
+    token.role = user.role;
+    token.roleLastChecked = Date.now(); // ✅ Add timestamp
+  }
 
+  if (trigger === 'update' && session?.role) {
+    token.role = session.role;
+    token.roleLastChecked = Date.now();
+  }
 
-      // This block only runs on the initial sign-in
-      if (user) {
-        console.log('[JWT] Initial sign-in. Attaching info from user object to token...');
-        // The user object is from the `signIn` callback or the provider.
-        // We MUST use the `id` we attached in the `signIn` callback.
-        token.db_id = user.id;
-        token.role = user.role;
-        console.log('[JWT] Token after initial update:', token);
+  // ✅ Only check DB every 5 minutes
+  const fiveMinutes = 5 * 60 * 1000;
+  const shouldRefresh = !token.roleLastChecked || 
+                        (Date.now() - token.roleLastChecked > fiveMinutes);
+
+  if (shouldRefresh && token.db_id && objectIdRegex.test(token.db_id)) {
+    console.log('[JWT] Role cache expired. Refreshing...');
+    try {
+      await connectDB();
+      const dbUser = await User.findById(token.db_id);
+      if (dbUser) {
+        token.role = dbUser.role;
+        token.roleLastChecked = Date.now();
+        console.log(`[JWT] Role refreshed: ${dbUser.role}`);
       }
+    } catch (e) {
+      console.error('[JWT] Refresh error:', e.message);
+    }
+  }
 
-      if (trigger === 'update' && session?.role) {
-         console.log('[JWT] Session update triggered. Updating role...');
-        token.role = session.role;
-        console.log('[JWT] Token after session update:', token);
-      }
+  return token;
+},
 
-      // This block runs on every request to keep role fresh.
-      // CRITICAL FIX: Check if token.db_id is a valid ObjectId before querying the DB.
-      if (token.db_id && objectIdRegex.test(token.db_id)) {
-        console.log(`[JWT] Refreshing role. Searching user by ID: ${token.db_id}`);
-        try {
-            // Ensure database is connected before querying
-            await connectDB();
-            const dbUser = await User.findById(token.db_id);
-            if (dbUser) {
-              token.role = dbUser.role;
-              console.log(`[JWT] Role refreshed from DB. New role: ${dbUser.role}`);
-            } else {
-              console.log(`[JWT] User with ID ${token.db_id} not found in DB.`);
-            }
-        } catch(e) {
-            if (e instanceof MongooseError) {
-                console.log(`[JWT] Mongoose error while refreshing role: ${e.message}`)
-            } else {
-                console.log(`[JWT] UNKNOWN error while refreshing role: ${e.message}`)
-            }
-        }
-      } else {
-        console.log(`[JWT] Did not refresh role. ID is missing or invalid: "${token.db_id}"`);
-      }
-
-
-      return token;
-    },
     async session({ session, token }) {
 
 

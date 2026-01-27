@@ -2,10 +2,11 @@ import { auth } from '@/auth'
 import connectDB from '@/config/db'
 import cloudinary from '@/lib/cloudinary'
 import User from '@/models/user'
+import DoctorProfile from '@/models/DoctorProfile'
 import { NextResponse } from 'next/server'
 
 // GET - Fetch doctor profile
-export async function GET(req) {
+export async function GET() {
   try {
     const session = await auth()
     if (!session?.user) {
@@ -14,14 +15,22 @@ export async function GET(req) {
 
     await connectDB()
 
-    const doctor = await User.findOne({ email: session.user.email, role: 'doctor' })
-    if (!doctor) {
+    const doctor = await User.findById(session.user.id).select('-password').lean()
+    
+    if (!doctor || doctor.role !== 'doctor') {
       return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
+    }
+
+    // Fetch doctor profile
+    const doctorProfile = await DoctorProfile.findOne({ userId: doctor._id }).lean()
+    
+    if (doctorProfile) {
+      doctor.doctorProfile = doctorProfile
     }
 
     console.log('✅ Doctor profile loaded:', doctor._id, doctor.email)
 
-    return NextResponse.json({ success: true, doctor: doctor })
+    return NextResponse.json({ success: true, doctor })
   } catch (error) {
     console.error('Error fetching doctor profile:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -54,7 +63,7 @@ export async function POST(req) {
       ? languagesString.split(',').map(l => l.trim()).filter(l => l)
       : []
 
-    // Doctor profile nested data
+    // Doctor profile data
     const doctorProfileData = {
       specialization: formData.get('specialization'),
       experience: parseInt(formData.get('experience')),
@@ -65,9 +74,9 @@ export async function POST(req) {
       languages: languagesArray
     }
 
-    // Get existing doctor first
-    const existingDoctor = await User.findOne({ email: session.user.email, role: 'doctor' })
-    if (!existingDoctor) {
+    // Get existing doctor
+    const existingDoctor = await User.findById(session.user.id)
+    if (!existingDoctor || existingDoctor.role !== 'doctor') {
       return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
     }
 
@@ -80,12 +89,8 @@ export async function POST(req) {
         const bytes = await profilePhoto.arrayBuffer()
         const buffer = Buffer.from(bytes)
 
-        // ✅ Get cloudinary instance (already configured via @/lib/cloudinary)
-        const cloudinaryInstance = cloudinary
-
-        // ✅ Upload to Cloudinary
         const uploadResponse = await new Promise((resolve, reject) => {
-          const uploadStream = cloudinaryInstance.uploader.upload_stream(
+          const uploadStream = cloudinary.uploader.upload_stream(
             {
               folder: 'qlinic/doctor_profiles',
               resource_type: 'image',
@@ -121,31 +126,23 @@ export async function POST(req) {
       }
     }
 
-    // Merge existing doctorProfile with new data
-    const mergedDoctorProfile = {
-      ...existingDoctor.doctorProfile?.toObject?.() || {},
-      ...doctorProfileData
-    }
-
-    // Update the doctor profile
-    const doctor = await User.findOneAndUpdate(
-      { email: session.user.email, role: 'doctor' },
-      { 
-        $set: {
-          ...profileData,
-          doctorProfile: mergedDoctorProfile
-        }
-      },
+    // Update User model
+    const updatedDoctor = await User.findByIdAndUpdate(
+      session.user.id,
+      { $set: profileData },
       { new: true, runValidators: true }
+    ).select('-password')
+
+    // Update DoctorProfile model
+    await DoctorProfile.findOneAndUpdate(
+      { userId: session.user.id },
+      { $set: doctorProfileData },
+      { upsert: true, new: true }
     )
 
-    if (!doctor) {
-      return NextResponse.json({ error: 'Doctor not found' }, { status: 404 })
-    }
+    console.log('✅ Doctor profile updated:', updatedDoctor._id)
 
-    console.log('✅ Doctor profile updated:', doctor._id)
-
-    return NextResponse.json({ success: true, doctor: doctor })
+    return NextResponse.json({ success: true, doctor: updatedDoctor })
   } catch (error) {
     console.error('Error updating doctor profile:', error)
     return NextResponse.json({ 

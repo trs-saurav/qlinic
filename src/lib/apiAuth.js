@@ -2,6 +2,7 @@ import { auth } from '@/auth'
 import connectDB from '@/config/db'
 import User from '@/models/user'
 import Hospital from '@/models/hospital'
+import HospitalAdminProfile from '@/models/HospitalAdminProfile'
 
 /**
  * Check if user is authenticated
@@ -88,9 +89,11 @@ export async function requireRole(roles = [], includeDeleted = false) {
  */
 export async function getMyHospital(me, allowInactive = false) {
   try {
-    // First check if user has hospitalAdminProfile with hospitalId
-    if (me.hospitalAdminProfile?.hospitalId) {
-      const query = { _id: me.hospitalAdminProfile.hospitalId }
+    // ✅ NEW: Query HospitalAdminProfile collection
+    const adminProfile = await HospitalAdminProfile.findOne({ userId: me._id })
+    
+    if (adminProfile?.hospitalId) {
+      const query = { _id: adminProfile.hospitalId }
       if (!allowInactive) {
         query.isActive = true
       }
@@ -98,7 +101,7 @@ export async function getMyHospital(me, allowInactive = false) {
       const hospital = await Hospital.findOne(query)
       
       if (hospital) {
-        console.log('✅ Hospital found via hospitalAdminProfile:', hospital.name)
+        console.log('✅ Hospital found via HospitalAdminProfile:', hospital.name)
         return { ok: true, hospital }
       }
     }
@@ -170,16 +173,19 @@ export async function requireHospitalAdmin(allowInactive = false) {
  * @param {string} permission - Permission to check
  * @returns {boolean}
  */
-export function hasPermission(me, permission) {
+export async function hasPermission(me, permission) {
   // Admin has all permissions
   if (me.role === 'admin') return true
 
   // Check admin permissions
   if (me.adminPermissions?.[permission]) return true
 
-  // Check hospital admin permissions
-  if (me.role === 'hospital_admin' && me.hospitalAdminProfile?.permissions?.[permission]) {
-    return true
+  // ✅ NEW: Check hospital admin permissions from HospitalAdminProfile
+  if (me.role === 'hospital_admin') {
+    const adminProfile = await HospitalAdminProfile.findOne({ userId: me._id })
+    if (adminProfile?.permissions?.[permission]) {
+      return true
+    }
   }
 
   return false
@@ -189,10 +195,12 @@ export function hasPermission(me, permission) {
  * Require specific permission
  * @param {User} me - User object
  * @param {string} permission - Permission to check
- * @returns {{ok: boolean, status?: number, error?: string}}
+ * @returns {Promise<{ok: boolean, status?: number, error?: string}>}
  */
-export function requirePermission(me, permission) {
-  if (!hasPermission(me, permission)) {
+export async function requirePermission(me, permission) {
+  const hasPerm = await hasPermission(me, permission)
+  
+  if (!hasPerm) {
     console.log('❌ Permission denied:', { 
       user: me.email, 
       role: me.role, 

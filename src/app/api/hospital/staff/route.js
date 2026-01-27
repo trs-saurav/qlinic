@@ -1,37 +1,18 @@
-import { auth } from "@/auth";
+import { getHospitalAdmin, handleHospitalAuthError } from "@/lib/hospitalAuth";
 import connectDB from "@/config/db";
-import User from "@/models/user";
 import Staff from "@/models/staff";
 import { NextResponse } from "next/server";
 
 // GET - Fetch all staff
-export async function GET(req) {
+export async function GET() {
   try {
-    const session = await auth();
+    const authResult = await getHospitalAdmin();
+    const error = handleHospitalAuthError(authResult, NextResponse);
+    if (error) return error;
 
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { hospitalId } = authResult;
 
     await connectDB();
-
-    const admin = await User.findOne({ email: session.user.email });
-
-    if (!admin || admin.role !== "hospital_admin") {
-      return NextResponse.json(
-        { error: "Not authorized" },
-        { status: 403 }
-      );
-    }
-
-    const hospitalId = admin.hospitalAdminProfile?.hospitalId;
-
-    if (!hospitalId) {
-      return NextResponse.json(
-        { error: "No hospital profile found" },
-        { status: 404 }
-      );
-    }
 
     const staff = await Staff.find({ hospitalId, isActive: true })
       .sort({ createdAt: -1 })
@@ -56,31 +37,13 @@ export async function GET(req) {
 // POST - Add new staff member
 export async function POST(req) {
   try {
-    const session = await auth();
+    const authResult = await getHospitalAdmin();
+    const error = handleHospitalAuthError(authResult, NextResponse);
+    if (error) return error;
 
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { hospitalId, user } = authResult;
 
     await connectDB();
-
-    const admin = await User.findOne({ email: session.user.email });
-
-    if (!admin || admin.role !== "hospital_admin") {
-      return NextResponse.json(
-        { error: "Not authorized" },
-        { status: 403 }
-      );
-    }
-
-    const hospitalId = admin.hospitalAdminProfile?.hospitalId;
-
-    if (!hospitalId) {
-      return NextResponse.json(
-        { error: "No hospital profile found" },
-        { status: 404 }
-      );
-    }
 
     const body = await req.json();
     const { name, email, phone, role, department, salary } = body;
@@ -112,7 +75,7 @@ export async function POST(req) {
       role,
       department: department || null,
       salary: salary ? parseFloat(salary) : null,
-      addedBy: admin._id,
+      addedBy: user._id,
       isActive: true,
     });
 

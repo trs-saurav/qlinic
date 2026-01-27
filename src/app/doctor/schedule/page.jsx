@@ -82,10 +82,10 @@ function checkCrossHospitalOverlap(currentAffiliationId, allAffiliations, newWee
 }
 
 // Function to validate the entire schedule against other hospitals
-function validateCrossHospitalConflicts() {
-  if (!activeAffiliation || !affiliations) return [];
+function validateCrossHospitalConflicts(activeAff, allAffs, weeklySchedule) {
+  if (!activeAff || !allAffs) return [];
   
-  return checkCrossHospitalOverlap(activeAffiliation._id, affiliations, weekly);
+  return checkCrossHospitalOverlap(activeAff._id, allAffs, weeklySchedule);
 }
 
 // --- Components ---
@@ -198,7 +198,7 @@ export default function DoctorSchedulePage() {
     }
   }, [])
 
-  // --- Handlers (Unchanged functionality) ---
+  // --- Handlers ---
   const openScheduleEditor = async (affiliation) => {
     setActiveAffiliation(affiliation)
     setScheduleDialogOpen(true)
@@ -253,11 +253,9 @@ export default function DoctorSchedulePage() {
       const tempSlot = {...slot};
       
       if (dayIndex >= 0) {
-        // Add the new slot temporarily to the day's schedule
         const updatedSlots = [...tempWeekly[dayIndex].slots, tempSlot];
         tempWeekly[dayIndex] = { ...tempWeekly[dayIndex], slots: updatedSlots };
       } else {
-        // Create a new day entry if it doesn't exist
         tempWeekly.push({ day, slots: [tempSlot] });
       }
       
@@ -327,7 +325,7 @@ export default function DoctorSchedulePage() {
     if (!activeAffiliation) return
     
     // Check for cross-hospital conflicts before saving
-    const conflicts = validateCrossHospitalConflicts();
+    const conflicts = validateCrossHospitalConflicts(activeAffiliation, affiliations, weekly);
     if (conflicts.length > 0) {
       const conflict = conflicts[0];
       toast.error(`Schedule conflicts with ${conflict.otherHospital} on ${conflict.day} (${conflict.otherSlot.start}-${conflict.otherSlot.end}). Please adjust your schedule.`);
@@ -475,7 +473,7 @@ export default function DoctorSchedulePage() {
                   </TabsList>
                 </div>
 
-                {/* ✅ Weekly Content - LIST VIEW */}
+                {/* Weekly Content */}
                 <TabsContent value="weekly" className="flex-1 overflow-y-auto p-4 sm:p-6 m-0">
                   <div className="bg-background rounded-xl border border-slate-200 shadow-sm divide-y divide-slate-100">
                     {DAYS.map(day => {
@@ -546,7 +544,7 @@ export default function DoctorSchedulePage() {
                   </div>
                 </TabsContent>
 
-                {/* Exceptions Content (Unchanged) */}
+                {/* Exceptions Content */}
                 <TabsContent value="exceptions" className="flex-1 overflow-y-auto p-4 sm:p-6 m-0">
                     <div className="max-w-3xl mx-auto space-y-6">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-background p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -622,7 +620,7 @@ export default function DoctorSchedulePage() {
         </DialogContent>
       </Dialog>
 
-      {/* Add Slot Dialog (Functionality Unchanged) */}
+      {/* Add Slot Dialog */}
       <Dialog open={slotDialogOpen} onOpenChange={setSlotDialogOpen}>
         <DialogContent className="w-[90vw] max-w-sm rounded-xl">
           <DialogHeader>
@@ -648,7 +646,7 @@ export default function DoctorSchedulePage() {
         </DialogContent>
       </Dialog>
 
-      {/* Add Exception Dialog (Functionality Unchanged) */}
+      {/* Add Exception Dialog */}
       <Dialog open={exceptionDialogOpen} onOpenChange={setExceptionDialogOpen}>
         <DialogContent className="w-[90vw] max-w-sm rounded-xl">
           <DialogHeader>

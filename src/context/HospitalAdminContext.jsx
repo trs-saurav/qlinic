@@ -89,6 +89,8 @@ export const HospitalAdminProvider = ({ children }) => {
     theme: 'light',
   })
 
+  const [lastRefresh, setLastRefresh] = useState(Date.now())
+
   const didInitRef = useRef(false)
 
   // ===== Shared fetch helper =====
@@ -153,26 +155,24 @@ export const HospitalAdminProvider = ({ children }) => {
       const { res, data } = await apiFetch('/api/hospital/dashboard/stats')
       if (res.ok && data?.stats) setStats(data.stats)
     } catch (err) { } finally { 
-      setStatsLoading(false);
-      setLastRefresh(Date.now());
+      setStatsLoading(false)
+      setLastRefresh(Date.now())
     }
   }, [apiFetch, hospital?._id])
 
   const fetchAppointments = useCallback(
-    async (filter = 'all', date = selectedDate, doctorId = null) => { // ✅ Added doctorId param
+    async (filter = 'all', date = selectedDate, doctorId = null) => {
       if (!hospital?._id) return
       try {
         setAppointmentsLoading(true)
         const dateStr = date ? new Date(date).toISOString().split('T')[0] : ''
         
-        // ✅ Build params
         const params = new URLSearchParams({ 
           role: 'hospital_admin', 
           filter, 
           date: dateStr 
         })
         
-        // ✅ Add doctorId if filtering
         if (doctorId) {
           params.set('doctorId', doctorId)
         }
@@ -188,15 +188,12 @@ export const HospitalAdminProvider = ({ children }) => {
         toast.error('Failed to load appointments')
       } finally {
         setAppointmentsLoading(false)
-        setLastRefresh(Date.now());
+        setLastRefresh(Date.now())
       }
     },
     [apiFetch, handleErrorToast, hospital?._id, selectedDate]
   )
 
-  // ✅ ✅ FIXED: Doctor Data Normalization
-  // This flattens the nested API structure (aff.doctorId.firstName) -> (doc.firstName)
-  // Ensures Sidebar shows names correctly
   const fetchDoctors = useCallback(async () => {
     if (!hospital?._id) return
     try {
@@ -206,26 +203,19 @@ export const HospitalAdminProvider = ({ children }) => {
         const rawDocs = data?.doctors || []
         
         const normalizedDocs = rawDocs
-          .filter(aff => aff.doctorId) // Filter nulls
+          .filter(aff => aff.doctorId)
           .map(aff => {
              const d = aff.doctorId
              return {
-                // IMPORTANT: Use the User ID as main _id to match Appointment doctorId
                 _id: d._id, 
-                
-                // Flatten names
                 firstName: d.firstName || 'Unknown',
                 lastName: d.lastName || '',
                 email: d.email || '',
                 phone: d.phone || '',
                 profileImage: d.profileImage,
-                
-                // Flatten Profile
                 specialization: d.doctorProfile?.specialization || 'General',
                 consultationFee: d.doctorProfile?.consultationFee || 0,
                 qualification: d.doctorProfile?.qualification || '',
-                
-                // Keep Affiliation Metadata
                 affiliationId: aff._id,
                 status: aff.status,
                 role: 'doctor'
@@ -235,9 +225,11 @@ export const HospitalAdminProvider = ({ children }) => {
         setDoctors(normalizedDocs)
         setPendingDoctorRequests(data?.pendingRequests || [])
       }
-    } catch (err) { console.error(err) } finally { 
-      setDoctorsLoading(false);
-      setLastRefresh(Date.now());
+    } catch (err) { 
+      console.error(err) 
+    } finally { 
+      setDoctorsLoading(false)
+      setLastRefresh(Date.now())
     }
   }, [apiFetch, hospital?._id])
 
@@ -251,8 +243,8 @@ export const HospitalAdminProvider = ({ children }) => {
         setTodayPatients(data?.todayPatients || [])
       }
     } catch (err) { } finally { 
-      setPatientsLoading(false);
-      setLastRefresh(Date.now());
+      setPatientsLoading(false)
+      setLastRefresh(Date.now())
     }
   }, [apiFetch, hospital?._id])
 
@@ -263,8 +255,8 @@ export const HospitalAdminProvider = ({ children }) => {
       const { res, data } = await apiFetch('/api/hospital/staff')
       if (res.ok) setStaff(data?.staff || [])
     } catch (err) { } finally { 
-      setStaffLoading(false);
-      setLastRefresh(Date.now());
+      setStaffLoading(false)
+      setLastRefresh(Date.now())
     }
   }, [apiFetch, hospital?._id])
 
@@ -275,11 +267,10 @@ export const HospitalAdminProvider = ({ children }) => {
       const { res, data } = await apiFetch(`/api/hospital/inventory/stats?${params}`)
       if (res.ok && data?.stats) setInventoryStats(data.stats)
     } catch (err) { }
-    setLastRefresh(Date.now());
+    setLastRefresh(Date.now())
   }, [apiFetch, hospital?._id])
 
   const fetchInventory = useCallback(async (filters) => {
-      // (Simplified placeholder - assuming logic matches your provided code)
       const activeFilters = filters || inventoryFilters
       if (!hospital?._id) return
       try {
@@ -297,8 +288,8 @@ export const HospitalAdminProvider = ({ children }) => {
            setLowStockItems((data?.items || []).filter(i => ['low-stock','out-of-stock'].includes(i.status)))
         }
       } catch (err) {} finally { 
-        setInventoryLoading(false);
-        setLastRefresh(Date.now());
+        setInventoryLoading(false)
+        setLastRefresh(Date.now())
       }
   }, [apiFetch, hospital?._id, inventoryFilters])
 
@@ -311,10 +302,11 @@ export const HospitalAdminProvider = ({ children }) => {
         setUnreadCount(data?.unreadCount || 0)
       }
     } catch (err) { }
-    setLastRefresh(Date.now());
+    setLastRefresh(Date.now())
   }, [apiFetch, hospital?._id])
 
-  // Actions
+  // ===== Actions =====
+  
   const addInventoryItem = useCallback(async (itemData) => {
       try {
         const { res, data } = await apiFetch('/api/hospital/inventory', {
@@ -322,11 +314,16 @@ export const HospitalAdminProvider = ({ children }) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...itemData, hospitalId: hospital._id }),
         })
-        if (!res.ok) { handleErrorToast(res, data, 'Failed'); return { success: false, error: data?.error } }
+        if (!res.ok) { 
+          handleErrorToast(res, data, 'Failed') 
+          return { success: false, error: data?.error } 
+        }
         toast.success('Added')
         fetchInventory(inventoryFilters)
         return { success: true }
-      } catch (err) { return { success: false, error: err.message } }
+      } catch (err) { 
+        return { success: false, error: err.message } 
+      }
   }, [apiFetch, handleErrorToast, hospital?._id, fetchInventory, inventoryFilters])
 
   const updateAppointmentStatus = useCallback(
@@ -339,14 +336,74 @@ export const HospitalAdminProvider = ({ children }) => {
         })
         if (!res.ok) throw new Error(data?.error)
         
-        // Optimistic update
         setAppointments(prev => prev.map(apt => apt._id === appointmentId ? { ...apt, status, ...additionalData } : apt))
         return { success: true }
-      } catch (err) { return { success: false, error: err.message } }
+      } catch (err) { 
+        return { success: false, error: err.message } 
+      }
     }, [apiFetch]
   )
-  
-  // (Assuming other actions like markNotificationRead are here...)
+
+  // ✅ NEW: Doctor Management Actions
+  const approveDoctorRequest = useCallback(async (affiliationId) => {
+    try {
+      const { res, data } = await apiFetch('/api/hospital/doctors/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ affiliationId }),
+      })
+      if (!res.ok) {
+        handleErrorToast(res, data, 'Failed to approve doctor')
+        return { success: false, error: data?.error }
+      }
+      toast.success('Doctor approved successfully')
+      await fetchDoctors()
+      return { success: true }
+    } catch (err) {
+      toast.error('Failed to approve doctor')
+      return { success: false, error: err.message }
+    }
+  }, [apiFetch, handleErrorToast, fetchDoctors])
+
+  const rejectDoctorRequest = useCallback(async (affiliationId, notes = '') => {
+    try {
+      const { res, data } = await apiFetch('/api/hospital/doctors/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ affiliationId, notes }),
+      })
+      if (!res.ok) {
+        handleErrorToast(res, data, 'Failed to reject doctor')
+        return { success: false, error: data?.error }
+      }
+      toast.success('Doctor request rejected')
+      await fetchDoctors()
+      return { success: true }
+    } catch (err) {
+      toast.error('Failed to reject doctor')
+      return { success: false, error: err.message }
+    }
+  }, [apiFetch, handleErrorToast, fetchDoctors])
+
+  const deaffiliateDoctor = useCallback(async (affiliationId) => {
+    try {
+      const { res, data } = await apiFetch('/api/hospital/doctors/deaffiliate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ affiliationId }),
+      })
+      if (!res.ok) {
+        handleErrorToast(res, data, 'Failed to remove doctor')
+        return { success: false, error: data?.error }
+      }
+      toast.success(`Doctor removed. ${data.cancelledAppointments || 0} appointments cancelled`)
+      await fetchDoctors()
+      return { success: true }
+    } catch (err) {
+      toast.error('Failed to remove doctor')
+      return { success: false, error: err.message }
+    }
+  }, [apiFetch, handleErrorToast, fetchDoctors])
 
   const refreshAll = useCallback(async () => {
     if (!hospital?._id) return
@@ -358,10 +415,9 @@ export const HospitalAdminProvider = ({ children }) => {
       fetchInventoryStats(),
       fetchNotifications(),
     ])
-    setLastRefresh(Date.now());
+    setLastRefresh(Date.now())
   }, [hospital?._id, appointmentsFilter, selectedDate, fetchStats, fetchAppointments, fetchDoctors, fetchPatients, fetchInventoryStats, fetchNotifications])
 
-  // Force refresh of all data with user feedback
   const forceRefreshAll = useCallback(async () => {
     if (!hospital?._id) return
     console.log('🔄 Forcing refresh of all hospital admin data')
@@ -377,14 +433,15 @@ export const HospitalAdminProvider = ({ children }) => {
         fetchNotifications(),
       ])
       toast.success('Data refreshed successfully')
-      setLastRefresh(Date.now());
+      setLastRefresh(Date.now())
     } catch (error) {
       console.error('❌ Error during forced refresh:', error)
       toast.error('Failed to refresh data')
     }
   }, [hospital?._id, appointmentsFilter, selectedDate, fetchHospital, fetchStats, fetchAppointments, fetchDoctors, fetchPatients, fetchStaff, fetchInventoryStats, fetchNotifications])
 
-  // Effects
+  // ===== Effects =====
+  
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return
     if (didInitRef.current) return 
@@ -408,26 +465,23 @@ export const HospitalAdminProvider = ({ children }) => {
     return () => off(queuesRef)
   }, [hospital?._id])
 
-  // MANUAL REFRESH WITH 30-MINUTE FALLBACK
-  const [lastRefresh, setLastRefresh] = useState(Date.now())
-
-  // Check every minute if 30 minutes have passed since last refresh
+  // Auto-refresh every 30 minutes
   useEffect(() => {
     if (!hospital?._id) return
     const interval = setInterval(() => {
-      const timeSinceLastRefresh = Date.now() - lastRefresh;
-      if (timeSinceLastRefresh >= 30 * 60 * 1000) { // 30 minutes
+      const timeSinceLastRefresh = Date.now() - lastRefresh
+      if (timeSinceLastRefresh >= 30 * 60 * 1000) {
         fetchAppointments(appointmentsFilter, selectedDate)
         fetchNotifications()
         fetchStats()
-        setLastRefresh(Date.now());
+        setLastRefresh(Date.now())
       }
-    }, 60 * 1000); // Check every minute
+    }, 60 * 1000)
     
-    return () => clearInterval(interval);
+    return () => clearInterval(interval)
   }, [hospital?._id, fetchAppointments, fetchNotifications, fetchStats, appointmentsFilter, selectedDate, lastRefresh])
 
-  // Redirect
+  // Redirect to setup if no hospital
   useEffect(() => {
     if (!isLoaded || !isSignedIn || hospitalLoading) return
     if (pathname?.includes('/hospital-admin/setup')) return
@@ -442,15 +496,13 @@ export const HospitalAdminProvider = ({ children }) => {
       stats, statsLoading, fetchStats,
       appointments, appointmentsLoading, appointmentsFilter, selectedDate, setSelectedDate, 
       fetchAppointments, updateAppointmentStatus,
-      doctors, doctorsLoading, pendingDoctorRequests, fetchDoctors, 
+      doctors, doctorsLoading, pendingDoctorRequests, fetchDoctors,
+      approveDoctorRequest, rejectDoctorRequest, deaffiliateDoctor,
       patients, patientsLoading, todayPatients, fetchPatients,
       staff, staffLoading, fetchStaff,
       inventory, inventoryLoading, inventoryStats, inventoryFilters, lowStockItems, fetchInventory, fetchInventoryStats, addInventoryItem,
       notifications, unreadCount, fetchNotifications, 
-      
-      // ✅ EXPOSE LIVE DATA
       liveQueueData, 
-
       refreshAll, forceRefreshAll,
     }),
     [
@@ -459,10 +511,11 @@ export const HospitalAdminProvider = ({ children }) => {
       stats, statsLoading, fetchStats,
       appointments, appointmentsLoading, appointmentsFilter, selectedDate, 
       fetchAppointments, updateAppointmentStatus,
-      doctors, doctorsLoading, pendingDoctorRequests, fetchDoctors, 
+      doctors, doctorsLoading, pendingDoctorRequests, fetchDoctors,
+      approveDoctorRequest, rejectDoctorRequest, deaffiliateDoctor,
       patients, patientsLoading, todayPatients, fetchPatients,
       staff, staffLoading, fetchStaff,
-      inventory, inventoryLoading, inventoryStats, inventoryFilters, lowStockItems, fetchInventory, fetchInventoryStats,
+      inventory, inventoryLoading, inventoryStats, inventoryFilters, lowStockItems, fetchInventory, fetchInventoryStats, addInventoryItem,
       notifications, unreadCount, fetchNotifications,
       liveQueueData, 
       refreshAll, forceRefreshAll

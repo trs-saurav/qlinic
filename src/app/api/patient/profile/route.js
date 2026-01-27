@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import connectDB from '@/config/db'
 import User from '@/models/user'
+import PatientProfile from '@/models/PatientProfile'
 
 // GET: Fetch User Profile
 export async function GET() {
@@ -12,10 +13,21 @@ export async function GET() {
     }
 
     await connectDB()
-    const user = await User.findById(session.user.id).select('-password')
+    
+    const user = await User.findById(session.user.id).select('-password').lean()
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    // Fetch patient profile if user is a patient
+    let patientProfile = null
+    if (user.role === 'user' || user.role === 'patient') {
+      patientProfile = await PatientProfile.findOne({ userId: user._id }).lean()
+      
+      if (patientProfile) {
+        user.patientProfile = patientProfile
+      }
     }
 
     return NextResponse.json({ user })
@@ -35,7 +47,6 @@ export async function PUT(req) {
 
     const body = await req.json()
     
-    // ✅ ADDED profileImage to destructuring
     const { 
       firstName, 
       lastName, 
@@ -44,15 +55,12 @@ export async function PUT(req) {
       gender, 
       bloodGroup, 
       address,
-      profileImage // <--- Critical addition
+      profileImage
     } = body
 
     await connectDB()
 
-    // Handle empty enums safely
-    const safeGender = gender === '' ? null : gender
-    const safeBloodGroup = bloodGroup === '' ? null : bloodGroup
-
+    // Update User model
     const updatedUser = await User.findByIdAndUpdate(
       session.user.id,
       {
@@ -60,16 +68,22 @@ export async function PUT(req) {
         lastName,
         phoneNumber,
         dateOfBirth,
-        profileImage, // <--- Add to update object
-        
-        // Update patientProfile fields
-        'patientProfile.gender': safeGender,
-        'patientProfile.bloodGroup': safeBloodGroup,
-        'patientProfile.address': address,
+        profileImage,
         isProfileComplete: true 
       },
       { new: true, runValidators: true }
     ).select('-password')
+
+    // Update PatientProfile
+    await PatientProfile.findOneAndUpdate(
+      { userId: session.user.id },
+      {
+        gender: gender || null,
+        bloodGroup: bloodGroup || null,
+        address
+      },
+      { upsert: true, new: true }
+    )
 
     return NextResponse.json({ success: true, user: updatedUser })
 

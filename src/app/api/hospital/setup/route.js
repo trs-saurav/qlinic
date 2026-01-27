@@ -1,7 +1,9 @@
+// src/app/api/hospital/setup/route.js
 import { auth } from "@/auth"
 import connectDB from "@/config/db"
-import User from "@/models/user"
-import Hospital from "@/models/hospital"
+import User from "@/models/user"  // ✅ Capital U
+import Hospital from "@/models/hospital"  // ✅ Capital H
+import HospitalAdminProfile from "@/models/HospitalAdminProfile"
 import { NextResponse } from "next/server"
 
 export async function POST(req) {
@@ -34,25 +36,40 @@ export async function POST(req) {
       )
     }
 
-    // ✅ Check if hospital already exists
-    if (user.hospitalAdminProfile?.hospitalId) {
-      const existing = await Hospital.findById(user.hospitalAdminProfile.hospitalId)
+    // ✅ Check if profile exists
+    const existingProfile = await HospitalAdminProfile.findOne({ userId: user._id })
+    
+    if (!existingProfile) {
+      console.log('❌ HospitalAdminProfile not found')
+      return NextResponse.json(
+        { error: "Admin profile not found. Please contact support." },
+        { status: 404 }
+      )
+    }
+    
+    if (existingProfile.hospitalId) {
+      const existing = await Hospital.findById(existingProfile.hospitalId)
       if (existing) {
         console.log('✅ Hospital already exists:', existing.name)
         return NextResponse.json(
           { 
             success: true,
             message: "Hospital already exists",
-            hospital: existing.toObject(),
+            hospital: {
+              _id: existing._id.toString(),
+              name: existing.name,
+              type: existing.type,
+              address: existing.address,
+              contactDetails: existing.contactDetails,
+            },
             redirect: "/hospital"
           },
           { status: 200 }
         )
       } else {
-        // Cleanup invalid reference
         console.log('⚠️ Cleaning up invalid hospital reference')
-        user.hospitalAdminProfile.hospitalId = undefined
-        await user.save()
+        existingProfile.hospitalId = null
+        await existingProfile.save()
       }
     }
 
@@ -67,7 +84,8 @@ export async function POST(req) {
       pincode, 
       description,
       type,
-      registrationNumber 
+      registrationNumber,
+      coordinates  // ✅ Accept coordinates from frontend
     } = body
 
     // Validate required fields
@@ -100,9 +118,34 @@ export async function POST(req) {
       }
     }
 
+    // ✅ Validate coordinates if provided
+    if (coordinates) {
+      const { latitude, longitude } = coordinates
+      
+      if (latitude !== undefined && latitude !== null && latitude !== '') {
+        const lat = parseFloat(latitude)
+        if (isNaN(lat) || lat < -90 || lat > 90) {
+          return NextResponse.json(
+            { error: "Invalid latitude. Must be between -90 and 90" },
+            { status: 400 }
+          )
+        }
+      }
+      
+      if (longitude !== undefined && longitude !== null && longitude !== '') {
+        const lng = parseFloat(longitude)
+        if (isNaN(lng) || lng < -180 || lng > 180) {
+          return NextResponse.json(
+            { error: "Invalid longitude. Must be between -180 and 180" },
+            { status: 400 }
+          )
+        }
+      }
+    }
+
     console.log('📝 Creating hospital:', name)
 
-    // ✅ Map hospital type to correct enum value
+    // Map hospital type to correct enum value
     const hospitalTypeMap = {
       'government': 'Government',
       'private': 'Private',
@@ -114,10 +157,33 @@ export async function POST(req) {
 
     const hospitalType = hospitalTypeMap[type?.toLowerCase()] || 'Private'
 
-    // ✅ Create hospital with correct data structure
-    const hospital = new Hospital({
+    // ✅ Prepare address object with coordinates if provided
+    const addressData = {
+      street: street?.trim() || "",
+      city: city.trim(),
+      state: state.trim(),
+      country: "India",
+      pincode: pincode?.replace(/\D/g, '') || "",
+    }
+
+    // ✅ Add coordinates if valid values provided
+    if (coordinates?.latitude && coordinates?.longitude) {
+      const lat = parseFloat(coordinates.latitude)
+      const lng = parseFloat(coordinates.longitude)
+      
+      if (!isNaN(lat) && !isNaN(lng)) {
+        addressData.coordinates = {
+          latitude: lat,
+          longitude: lng
+        }
+        console.log('📍 Coordinates added:', { lat, lng })
+      }
+    }
+
+    // ✅ Create hospital (Hospital model pre-save hook will convert coordinates to GeoJSON)
+    const hospital = await Hospital.create({
       name: name.trim(),
-      type: hospitalType, // ✅ Use correct enum value
+      type: hospitalType,
       registrationNumber: registrationNumber?.trim() || undefined,
       description: description?.trim() || "",
       
@@ -126,13 +192,7 @@ export async function POST(req) {
         email: email?.trim() || user.email,
       },
       
-      address: {
-        street: street?.trim() || "",
-        city: city.trim(),
-        state: state.trim(),
-        country: "India",
-        pincode: pincode?.replace(/\D/g, '') || "",
-      },
+      address: addressData,  // ✅ Address with coordinates
       
       operatingHours: {
         Monday: { open: "09:00", close: "18:00", isOpen: true },
@@ -145,13 +205,11 @@ export async function POST(req) {
         isOpen24x7: false,
       },
       
-      // Beds
       totalBeds: 0,
       availableBeds: 0,
       icuBeds: 0,
       emergencyBeds: 0,
       
-      // Fees
       consultationFee: {
         general: 0,
         specialist: 0,
@@ -159,54 +217,44 @@ export async function POST(req) {
       },
       emergencyFee: 0,
       
-      // ✅ Initialize arrays as empty arrays (not undefined)
       departments: [],
       specialties: [],
       facilities: [],
       amenities: [],
       accreditations: [],
-      emergencyServices: [], // ✅ This is an array, not boolean
+      emergencyServices: [],
       insurance: [],
       
-      // Media
       logo: undefined,
       images: [],
       
-      // Admin
       createdBy: user._id,
       adminUsers: [user._id],
       
-      // Status
       isActive: true,
       isVerified: false,
       isProfileComplete: false,
       status: 'active',
     })
 
-    await hospital.save()
-
     console.log('✅ Hospital created with ID:', hospital._id)
-
-    // ✅ Update user with hospital ID
-    user.hospitalAdminProfile = {
-      hospitalId: hospital._id,
-      designation: "Administrator",
-      joinedAt: new Date(),
-      permissions: {
-        canManageDoctors: true,
-        canManageStaff: true,
-        canManageInventory: true,
-        canViewReports: true,
-        canManageSettings: true,
-      },
+    if (hospital.location?.coordinates) {
+      console.log('✅ GeoJSON location created:', hospital.location.coordinates)
     }
 
-    user.isProfileComplete = false
+    // ✅ Update HospitalAdminProfile
+    existingProfile.hospitalId = hospital._id
+    existingProfile.designation = existingProfile.designation || "Administrator"
+    existingProfile.department = existingProfile.department || "Administration"
+    await existingProfile.save()
+    
+    console.log('✅ HospitalAdminProfile updated')
+
+    // ✅ Mark user profile as complete
+    user.isProfileComplete = true
     await user.save()
 
-    // ✅ Verify it was saved
-    const updatedUser = await User.findById(user._id).select('hospitalAdminProfile')
-    console.log('✅ User updated. Hospital ID:', updatedUser.hospitalAdminProfile?.hospitalId)
+    console.log('✅ User profile marked as complete')
 
     return NextResponse.json(
       {
@@ -221,6 +269,7 @@ export async function POST(req) {
             phone: hospital.contactDetails.phone,
             email: hospital.contactDetails.email,
           },
+          hasLocation: !!hospital.location?.coordinates,  // ✅ Indicate if location was set
         },
         redirect: "/hospital"
       },
@@ -229,7 +278,6 @@ export async function POST(req) {
   } catch (error) {
     console.error("❌ Hospital setup error:", error)
     
-    // Handle validation errors
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(err => err.message)
       return NextResponse.json(
@@ -242,7 +290,6 @@ export async function POST(req) {
       )
     }
     
-    // Handle duplicate key errors
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0]
       return NextResponse.json(
@@ -277,7 +324,7 @@ export async function GET() {
 
     await connectDB()
 
-    const user = await User.findById(userId).select('role hospitalAdminProfile')
+    const user = await User.findById(userId).select('role isProfileComplete')
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
@@ -290,12 +337,26 @@ export async function GET() {
       )
     }
 
-    const hasHospital = !!user.hospitalAdminProfile?.hospitalId
+    const profile = await HospitalAdminProfile.findOne({ userId: user._id })
+    
+    if (!profile) {
+      return NextResponse.json(
+        {
+          success: true,
+          hasHospital: false,
+          hospital: null,
+          needsSetup: true,
+        },
+        { status: 200 }
+      )
+    }
+    
+    const hasHospital = !!profile.hospitalId
     let hospital = null
 
     if (hasHospital) {
-      hospital = await Hospital.findById(user.hospitalAdminProfile.hospitalId)
-        .select('name type address contactDetails isProfileComplete isVerified status')
+      hospital = await Hospital.findById(profile.hospitalId)
+        .select('name type address contactDetails isProfileComplete isVerified status location')
     }
 
     return NextResponse.json(
@@ -311,6 +372,7 @@ export async function GET() {
           isProfileComplete: hospital.isProfileComplete,
           isVerified: hospital.isVerified,
           status: hospital.status,
+          hasLocation: !!hospital.location?.coordinates,  // ✅ Include location status
         } : null,
         needsSetup: !hasHospital,
       },

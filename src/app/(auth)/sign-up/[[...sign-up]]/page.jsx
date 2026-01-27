@@ -72,64 +72,66 @@ export default function SignUpPage() {
   })
 
   // ... (onSubmit remains unchanged) ...
-  const onSubmit = async (data) => {
-    setLoading(true)
-    const loadingToast = toast.loading('Creating your account...')
-    try {
-      const checkRes = await fetch('/api/user/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: data.email }),
-      })
-      const checkData = await checkRes.json()
-      if (checkData.exists) {
-        toast.dismiss(loadingToast)
-        toast.error('Account already exists')
-        setLoading(false)
-        return
-      }
-      const res = await fetch('/api/user/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstName: data.firstName,
-          lastName: data.lastName,
-          email: data.email,
-          password: data.password,
-          role: selectedRole,
-        }),
-      })
-      const result = await res.json()
-      if (!res.ok) throw new Error(result.error || 'Failed to create account')
-      
+const onSubmit = async (data) => {
+  setLoading(true)
+  const loadingToast = toast.loading('Creating your account...')
+  try {
+    const checkRes = await fetch('/api/user/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: data.email }),
+    })
+    const checkData = await checkRes.json()
+    if (checkData.exists) {
       toast.dismiss(loadingToast)
-      toast.success('Account created!', { icon: '🎉' })
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Define the correct routes map
-      const roleRoutes = {
-        user: '/user',
-        doctor: '/doctor',
-        hospital_admin: '/hospital-admin',
-      };
-      
-      const signInResult = await signIn('credentials', {
+      toast.error('Account already exists')
+      setLoading(false)
+      return
+    }
+    
+    const res = await fetch('/api/user/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        firstName: data.firstName,
+        lastName: data.lastName,
         email: data.email,
         password: data.password,
-        redirect: true,
-        callbackUrl: roleRoutes[selectedRole] || '/user' // ✅ FIXED LINE
-      })
+        role: selectedRole,
+        profileData: {} // ← ADDED: Empty profile data (will use defaults)
+      }),
+    })
+    
+    const result = await res.json()
+    if (!res.ok) throw new Error(result.error || 'Failed to create account')
+    
+    toast.dismiss(loadingToast)
+    toast.success('Account created!', { icon: '🎉' })
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    const roleRoutes = {
+      user: '/user',
+      doctor: '/doctor',
+      hospital_admin: '/hospital-admin',
+    };
+    
+    const signInResult = await signIn('credentials', {
+      email: data.email,
+      password: data.password,
+      redirect: true,
+      callbackUrl: roleRoutes[selectedRole] || '/user'
+    })
 
-      if (signInResult?.error) {
-        toast.error('Login failed: ' + signInResult.error)
-        setTimeout(() => router.push('/sign-in'), 2000)
-      }
-    } catch (err) {
-      toast.dismiss(loadingToast)
-      toast.error(err.message)
-      setLoading(false)
+    if (signInResult?.error) {
+      toast.error('Login failed: ' + signInResult.error)
+      setTimeout(() => router.push('/sign-in'), 2000)
     }
+  } catch (err) {
+    toast.dismiss(loadingToast)
+    toast.error(err.message)
+    setLoading(false)
   }
+}
 
   const handleSocialSignUp = async (provider) => {
     setSocialLoading(provider)

@@ -1,25 +1,19 @@
-import { auth } from "@/auth";
+import { getHospitalAdmin, handleHospitalAuthError } from "@/lib/hospitalAuth";
 import connectDB from "@/config/db";
-import User from "@/models/user";
 import Staff from "@/models/staff";
 import mongoose from "mongoose";
+import { NextResponse } from "next/server";
 
 export async function PATCH(req, { params }) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await getHospitalAdmin();
+    const error = handleHospitalAuthError(authResult, NextResponse);
+    if (error) return error;
+
+    const { hospitalId } = authResult;
 
     await connectDB();
 
-    // Verify hospital admin
-    const user = await User.findOne({ email: session.user.email });
-    if (!user?.hospitalAdminProfile?.hospitalId) {
-      return Response.json({ error: "Not a hospital admin" }, { status: 403 });
-    }
-
-    // ✅ Await params (Next.js 15 requirement)
     const { id } = await params;
 
     const updateData = await req.json();
@@ -31,7 +25,7 @@ export async function PATCH(req, { params }) {
     ];
 
     if (updateData.role && !validRoles.includes(updateData.role)) {
-      return Response.json({ error: "Invalid role" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
 
     // Build update object
@@ -49,20 +43,20 @@ export async function PATCH(req, { params }) {
     const staff = await Staff.findOneAndUpdate(
       {
         _id: new mongoose.Types.ObjectId(id),
-        hospitalId: user.hospitalAdminProfile.hospitalId,
+        hospitalId,
       },
       { $set: updateFields },
       { new: true, runValidators: true }
     );
 
     if (!staff) {
-      return Response.json(
+      return NextResponse.json(
         { error: "Staff member not found" },
         { status: 404 }
       );
     }
 
-    return Response.json({
+    return NextResponse.json({
       success: true,
       message: "Staff member updated successfully",
       staff,
@@ -71,13 +65,13 @@ export async function PATCH(req, { params }) {
     console.error("Update staff error:", error);
 
     if (error.name === 'ValidationError') {
-      return Response.json(
+      return NextResponse.json(
         { error: "Validation error: " + error.message },
         { status: 400 }
       );
     }
 
-    return Response.json(
+    return NextResponse.json(
       { error: "Failed to update staff member" },
       { status: 500 }
     );
@@ -86,27 +80,21 @@ export async function PATCH(req, { params }) {
 
 export async function DELETE(req, { params }) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await getHospitalAdmin();
+    const error = handleHospitalAuthError(authResult, NextResponse);
+    if (error) return error;
+
+    const { hospitalId } = authResult;
 
     await connectDB();
 
-    // Verify hospital admin
-    const user = await User.findOne({ email: session.user.email });
-    if (!user?.hospitalAdminProfile?.hospitalId) {
-      return Response.json({ error: "Not a hospital admin" }, { status: 403 });
-    }
-
-    // ✅ Await params (Next.js 15 requirement)
     const { id } = await params;
 
     // Soft delete - mark as inactive
     const staff = await Staff.findOneAndUpdate(
       {
         _id: new mongoose.Types.ObjectId(id),
-        hospitalId: user.hospitalAdminProfile.hospitalId,
+        hospitalId,
       },
       {
         $set: {
@@ -117,19 +105,19 @@ export async function DELETE(req, { params }) {
     );
 
     if (!staff) {
-      return Response.json(
+      return NextResponse.json(
         { error: "Staff member not found" },
         { status: 404 }
       );
     }
 
-    return Response.json({
+    return NextResponse.json({
       success: true,
       message: "Staff member removed successfully",
     });
   } catch (error) {
     console.error("Delete staff error:", error);
-    return Response.json(
+    return NextResponse.json(
       { error: "Failed to remove staff member" },
       { status: 500 }
     );

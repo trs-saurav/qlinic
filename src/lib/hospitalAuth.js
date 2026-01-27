@@ -2,10 +2,11 @@ import { auth } from '@/auth'
 import connectDB from '@/config/db'
 import User from '@/models/user'
 import Hospital from '@/models/hospital'
+import HospitalAdminProfile from '@/models/HospitalAdminProfile'
 
 /**
  * Get authenticated hospital admin with hospital data
- * @returns {Promise<{success: boolean, user?: User, hospital?: Hospital, hospitalId?: string, permissions?: object, error?: string, status?: number}>}
+ * @returns {Promise<{success: boolean, user?: User, hospital?: Hospital, hospitalId?: string, adminProfile?: object, permissions?: object, error?: string, status?: number}>}
  */
 export async function getHospitalAdmin() {
   try {
@@ -23,10 +24,8 @@ export async function getHospitalAdmin() {
 
     await connectDB()
 
-    // ✅ Fetch user by _id (not clerkId)
-    const user = await User.findById(userId)
-      .populate('hospital')  // Uses virtual we defined
-      .lean()
+    // ✅ Fetch user
+    const user = await User.findById(userId).lean()
 
     if (!user) {
       console.log('❌ User not found:', userId)
@@ -52,10 +51,22 @@ export async function getHospitalAdmin() {
       }
     }
 
-    const hospitalId = user.hospitalAdminProfile?.hospitalId
+    // ✅ NEW: Fetch hospital admin profile
+    const adminProfile = await HospitalAdminProfile.findOne({ userId: user._id }).lean()
+
+    if (!adminProfile) {
+      console.log('❌ No hospital admin profile found for user:', user.email)
+      return { 
+        error: "No hospital admin profile found. Please complete hospital setup.", 
+        status: 404,
+        needsSetup: true
+      }
+    }
+
+    const hospitalId = adminProfile.hospitalId
 
     if (!hospitalId) {
-      console.log('❌ No hospital ID in user profile')
+      console.log('❌ No hospital ID in admin profile')
       return { 
         error: "No hospital linked to this account. Please complete hospital setup.", 
         status: 404,
@@ -63,8 +74,10 @@ export async function getHospitalAdmin() {
       }
     }
 
-    // Hospital already populated via virtual
-    if (!user.hospital) {
+    // ✅ Fetch hospital
+    const hospital = await Hospital.findById(hospitalId).lean()
+
+    if (!hospital) {
       console.log('❌ Hospital not found in database:', hospitalId)
       return { 
         error: "Hospital not found. Please contact support.", 
@@ -73,23 +86,24 @@ export async function getHospitalAdmin() {
     }
 
     // Check if hospital is active
-    if (!user.hospital.isActive) {
-      console.log('❌ Hospital is inactive:', user.hospital.name)
+    if (!hospital.isActive) {
+      console.log('❌ Hospital is inactive:', hospital.name)
       return {
         error: "Hospital account is inactive",
         status: 403
       }
     }
 
-    console.log('✅ Hospital admin authenticated:', user.email, 'Hospital:', user.hospital.name)
+    console.log('✅ Hospital admin authenticated:', user.email, 'Hospital:', hospital.name)
 
     return {
       success: true,
       user,
-      hospital: user.hospital,
+      hospital,
       hospitalId: hospitalId.toString(),
-      permissions: user.hospitalAdminProfile.permissions || {},
-      designation: user.hospitalAdminProfile.designation,
+      adminProfile,
+      permissions: adminProfile.permissions || {},
+      designation: adminProfile.designation,
     }
   } catch (error) {
     console.error("❌ Hospital auth error:", error)
@@ -119,7 +133,7 @@ export async function verifyHospitalAdmin() {
     await connectDB()
 
     const user = await User.findById(userId)
-      .select('role hospitalAdminProfile isActive email')
+      .select('role isActive email')
       .lean()
 
     if (!user) {
@@ -137,8 +151,13 @@ export async function verifyHospitalAdmin() {
       return { error: "Not authorized", status: 403 }
     }
 
-    if (!user.hospitalAdminProfile?.hospitalId) {
-      console.log('❌ No hospital ID in user profile')
+    // ✅ NEW: Check admin profile
+    const adminProfile = await HospitalAdminProfile.findOne({ userId: user._id })
+      .select('hospitalId permissions designation isActive')
+      .lean()
+
+    if (!adminProfile || !adminProfile.hospitalId) {
+      console.log('❌ No hospital linked in admin profile')
       return { 
         error: "No hospital linked", 
         status: 404,
@@ -151,9 +170,9 @@ export async function verifyHospitalAdmin() {
     return {
       success: true,
       userId: user._id.toString(),
-      hospitalId: user.hospitalAdminProfile.hospitalId.toString(),
-      permissions: user.hospitalAdminProfile.permissions || {},
-      designation: user.hospitalAdminProfile.designation,
+      hospitalId: adminProfile.hospitalId.toString(),
+      permissions: adminProfile.permissions || {},
+      designation: adminProfile.designation,
     }
   } catch (error) {
     console.error("❌ Verify admin error:", error)
@@ -173,9 +192,9 @@ export async function checkPermission(permissionName) {
     return result
   }
 
-  const { user, hospital, hospitalId } = result
+  const { user, hospital, hospitalId, permissions } = result
 
-  const hasPermission = user.hospitalAdminProfile?.permissions?.[permissionName]
+  const hasPermission = permissions?.[permissionName]
 
   if (!hasPermission) {
     console.log('❌ Permission denied:', permissionName, 'for user:', user.email)
@@ -192,7 +211,7 @@ export async function checkPermission(permissionName) {
     user,
     hospital,
     hospitalId,
-    permissions: user.hospitalAdminProfile.permissions,
+    permissions,
   }
 }
 
