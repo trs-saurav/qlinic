@@ -1,8 +1,8 @@
 'use client'
 
-import { signIn, useSession } from 'next-auth/react'
+import { signIn, useSession, getCsrfToken } from 'next-auth/react'
 import { useState, useEffect } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -45,12 +45,21 @@ const signInSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 })
 
-export default function SignInPage() {
+export default function SignInClient() {
   const searchParams = useSearchParams()
-  const router = useRouter()
   const { data: session, status } = useSession()
-  const roleFromUrl = searchParams.get('role') || 'user'
-  const redirectTo = searchParams.get('redirect')
+  
+  // Safely get search parameters with fallbacks
+  let roleFromUrl, redirectTo
+  try {
+    roleFromUrl = searchParams.get('role') || 'user'
+    redirectTo = searchParams.get('redirect')
+  } catch (error) {
+    // Fallback values when searchParams is not available (during static generation)
+    roleFromUrl = 'user'
+    redirectTo = null
+  }
+  
   
   const [loading, setLoading] = useState(false)
   const [socialLoading, setSocialLoading] = useState(null)
@@ -63,7 +72,7 @@ export default function SignInPage() {
 
   const roles = {
     user: {
-      label: 'user',
+      label: 'Patient',
       description: 'Book appointments, access records, and manage health',
       icon: Users,
       gradient: 'from-blue-500 via-blue-600 to-violet-600',
@@ -85,7 +94,7 @@ export default function SignInPage() {
       description: 'Control operations, staff, and performance',
       icon: Building2,
       gradient: 'from-purple-500 via-purple-600 to-pink-600',
-      redirectUrl: '/hospital-admin',
+      redirectUrl: '/hospital',
       features: ['Staff management', 'Analytics', 'Operations'],
       bgGradient: 'from-purple-500/20 via-pink-500/20 to-rose-500/20'
     },
@@ -103,50 +112,177 @@ export default function SignInPage() {
   const currentRole = roles[roleFromUrl] || roles.user
   const IconComponent = currentRole.icon
 
+  // ✅ Fetch CSRF token when component mounts
+  useEffect(() => {
+    const fetchCsrfToken = async () => {
+      try {
+        const token = await getCsrfToken()
+        console.log('✅ CSRF token loaded:', token ? 'present' : 'missing')
+      } catch (error) {
+        console.error('CSRF error:', error)
+      }
+    }
+    fetchCsrfToken()
+  }, [])
+
+  // Redirect authenticated users
   useEffect(() => {
     if (status === 'authenticated' && session?.user) {
+      console.log('✅ Already authenticated, redirecting...')
       const userRole = session.user.role
       const roleRoutes = {
         user: '/user',
         doctor: '/doctor',
-        hospital_admin: '/hospital-admin',
+        hospital_admin: '/hospital',
         admin: '/admin',
         sub_admin: '/sub-admin'
       }
       
-      const destination = redirectTo || roleRoutes[userRole] || '/'
-      router.replace(destination)
+      const destination = redirectTo || roleRoutes[userRole] || '/user'
+      console.log('🔀 Redirecting to:', destination)
+      // Use window.location.href only once to avoid loops
+      const timer = setTimeout(() => {
+        window.location.href = destination
+      }, 100)
+      return () => clearTimeout(timer)
     }
-  }, [status, session, redirectTo, router])
+  }, [status, session, redirectTo])
 
-  const onSubmit = async (data) => {
-    setLoading(true)
-    const loadingToast = toast.loading('Signing in...')
+const onSubmit = async (data) => {
+  setLoading(true)
+  
+  // ============ CLIENT-SIDE DEBUG START ============
+  console.log('\n' + '='.repeat(70))
+  console.log('🖥️  CLIENT-SIDE DEBUG - SIGN IN ATTEMPT')
+  console.log('='.repeat(70))
+  console.log('📍 Current URL:', window.location.href)
+  console.log('📍 Current hostname:', window.location.hostname)
+  console.log('📍 Current pathname:', window.location.pathname)
+  console.log('')
+  console.log('📥 Form data received:')
+  console.log('   Email:', data.email)
+  console.log('   Password:', data.password ? '***' + data.password.slice(-3) : 'MISSING')
+  console.log('')
+  console.log('🎭 Role information:')
+  console.log('   roleFromUrl:', roleFromUrl)
+  console.log('   Type:', typeof roleFromUrl)
+  console.log('   Is defined?', roleFromUrl !== undefined)
+  console.log('   Is null?', roleFromUrl === null)
+  console.log('   Is empty string?', roleFromUrl === '')
+  console.log('')
+  console.log('🎯 Target redirect:')
+  const currentOrigin = window.location.origin
+  let targetUrl
+  if (redirectTo) {
+    targetUrl = redirectTo.startsWith('http') 
+      ? redirectTo 
+      : `${currentOrigin}${redirectTo}`
+  } else {
+    targetUrl = `${currentOrigin}${currentRole.redirectUrl}`
+  }
+  console.log('   Target URL:', targetUrl)
+  console.log('   Current role config:', currentRole.label)
+  console.log('')
+  console.log('📤 About to send signIn request with:')
+  console.log('   email:', data.email)
+  console.log('   password: ***')
+  console.log('   role:', roleFromUrl, '<-- THIS MUST NOT BE UNDEFINED')
+  console.log('   redirect: false')
+  console.log('   callbackUrl:', targetUrl)
+  console.log('='.repeat(70))
+  console.log('')
+  // ============ CLIENT-SIDE DEBUG END ============
+  
+  const loadingToast = toast.loading('Signing in...')
+  
+  try {
+    const result = await signIn('credentials', {
+      email: data.email,
+      password: data.password,
+      role: roleFromUrl,  // ✅ Pass role
+      redirect: false,
+      callbackUrl: targetUrl
+    })
+
+    // ============ CLIENT-SIDE RESULT DEBUG START ============
+    console.log('\n' + '='.repeat(70))
+    console.log('🖥️  CLIENT-SIDE DEBUG - SIGN IN RESULT')
+    console.log('='.repeat(70))
+    console.log('📥 SignIn result received:')
+    console.log('   result.ok:', result?.ok)
+    console.log('   result.error:', result?.error)
+    console.log('   result.status:', result?.status)
+    console.log('   result.url:', result?.url)
+    console.log('   Full result:', JSON.stringify(result, null, 2))
+    console.log('='.repeat(70))
+    console.log('')
+    // ============ CLIENT-SIDE RESULT DEBUG END ============
+
+    toast.dismiss(loadingToast)
     
-    try {
-      const callbackUrl = redirectTo || currentRole.redirectUrl
+    if (result?.error) {
+      console.error('❌ Sign-in failed with error:', result.error)
       
-      // Use redirect-based sign-in to avoid fetch failures
-      const result = await signIn('credentials', {
-        email: data.email,
-        password: data.password,
-        redirect: true,
-        callbackUrl: callbackUrl
-      })
-
-      // If we reach this point without redirecting, there was an error
-      toast.dismiss(loadingToast)
-      if (result?.error) {
-        toast.error('Invalid email or password')
-        setLoading(false)
-        return
+      if (result.error === 'CredentialsSignin') {
+        toast.error('Invalid email, password, or you are trying to sign in with the wrong role')
+      } else if (result.error === 'MissingCSRF') {
+        toast.loading('Refreshing security token...', { id: 'csrf-refresh' })
+        const newToken = await getCsrfToken()
+        toast.dismiss('csrf-refresh')
+        
+        if (newToken) {
+          toast.loading('Retrying sign in...', { id: 'retry-signin' })
+          const retryResult = await signIn('credentials', {
+            email: data.email,
+            password: data.password,
+            role: roleFromUrl,
+            redirect: false,
+            callbackUrl: targetUrl
+          })
+          
+          toast.dismiss('retry-signin')
+          
+          if (retryResult?.error) {
+            toast.error(retryResult.error === 'CredentialsSignin' 
+              ? 'Invalid email, password, or wrong role' 
+              : retryResult.error)
+            setLoading(false)
+            return
+          }
+          
+          if (retryResult?.ok) {
+            console.log('✅ Sign-in successful on retry!')
+            toast.success('Signed in successfully!')
+            return
+          }
+        } else {
+          toast.error('Could not refresh security token. Please refresh the page and try again.')
+          setLoading(false)
+          return
+        }
+      } else {
+        toast.error(result.error)
       }
-    } catch (err) {
-      toast.dismiss(loadingToast)
-      toast.error('An error occurred. Please try again.')
+      setLoading(false)
+      return
+    }
+    
+    if (result?.ok) {
+      console.log('✅ Sign-in successful!')
+      toast.success('Signed in successfully!')
+    } else {
+      toast.error('Sign in failed. Please try again.')
       setLoading(false)
     }
+  } catch (err) {
+    console.error('❌ Exception during sign-in:', err)
+    console.error('Stack trace:', err.stack)
+    toast.dismiss(loadingToast)
+    toast.error('An error occurred. Please try again.')
+    setLoading(false)
   }
+}
+
 
   const handleSocialLogin = async (provider) => {
     setSocialLoading(provider)
@@ -154,8 +290,21 @@ export default function SignInPage() {
     
     toast.loading(`Connecting to ${providerNames[provider]}...`, { id: 'social-login' })
     
-    const callbackUrl = redirectTo || currentRole.redirectUrl
-    await signIn(provider, { callbackUrl: callbackUrl, redirect: true })
+    const currentOrigin = window.location.origin
+    
+    let targetUrl
+    if (redirectTo) {
+      targetUrl = redirectTo.startsWith('http') 
+        ? redirectTo 
+        : `${currentOrigin}${redirectTo}`
+    } else {
+      targetUrl = `${currentOrigin}${currentRole.redirectUrl}`
+    }
+    
+    await signIn(provider, { 
+      callbackUrl: targetUrl, 
+      redirect: true 
+    })
   }
 
   if (status === 'loading') {
@@ -169,8 +318,19 @@ export default function SignInPage() {
     )
   }
 
+  if (status === 'authenticated') {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-violet-50 dark:from-gray-950 dark:via-blue-950 dark:to-gray-900">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">Redirecting to dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="h-screen w-screen overflow-hidden relative bg-gradient-to-br from-gray-50 via-blue-50 to-violet-50 dark:from-gray-950 dark:via-blue-950/30 dark:to-gray-900">
+    <div className="h-screen w-screen overflow-hidden relative bg-gradient-to-br from-gray-50 via-blue-50 to-violet-50 dark:from-gray-950 dark:via-blue-950 dark:to-gray-900">
       
       {/* Animated background orbs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -484,7 +644,7 @@ export default function SignInPage() {
                     <p className="text-center text-xs text-gray-600 dark:text-gray-400">
                       Don't have an account?{' '}
                       <Link 
-                        href="/sign-up" 
+                        href={`/sign-up?role=${roleFromUrl}`}
                         className={`font-bold bg-gradient-to-r ${currentRole.gradient} bg-clip-text text-transparent hover:underline`}
                       >
                         Create account →

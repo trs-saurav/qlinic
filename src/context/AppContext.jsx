@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext } from 'react'
 
 export const AppContext = createContext()
 
@@ -15,56 +15,19 @@ export const AppContextProvider = (props) => {
     const router = useRouter()
 
     const { data: session, status, update } = useSession()
-    const [userData, setUserData] = useState(null)
-    const [userRole, setUserRole] = useState(null)
-    const [isLoading, setIsLoading] = useState(true)
+
+    // ✅ Use session data directly - no API calls needed
+    const userData = session?.user || null
+    const userRole = session?.user?.role || null
+    const isLoading = status === 'loading'
 
     // Role definitions
     const ROLES = {
+        USER: 'user',
         PATIENT: 'patient',
         DOCTOR: 'doctor',
         HOSPITAL_ADMIN: 'hospital_admin',
         ADMIN: 'admin',
-        SUB_ADMIN: 'sub_admin'
-    }
-
-    // Fetch user data from database
-    useEffect(() => {
-        const fetchUserData = async () => {
-            if (status === 'authenticated' && session?.user) {
-                try {
-                    const response = await fetch('/api/user/sync')
-                    if (response.ok) {
-                        const data = await response.json()
-                        setUserData(data.user)
-                        setUserRole(data.user.role)
-                    } else {
-                        // Fallback to session role
-                        setUserRole(session.user.role)
-                    }
-                } catch (error) {
-                    console.error('Failed to fetch user data:', error)
-                    setUserRole(session.user.role)
-                } finally {
-                    setIsLoading(false)
-                }
-            } else if (status === 'unauthenticated') {
-                setUserData(null)
-                setUserRole(null)
-                setIsLoading(false)
-            }
-        }
-
-        fetchUserData()
-    }, [session, status])
-
-    // Get authentication token (for API calls)
-    const getToken = async () => {
-        if (session?.user) {
-            // Auth.js uses JWT tokens stored in the session
-            return session.user.id
-        }
-        return null
     }
 
     // Update user role in database and session
@@ -77,17 +40,8 @@ export const AppContextProvider = (props) => {
             })
 
             if (response.ok) {
-                setUserRole(role)
-                
                 // Update session with new role
                 await update({ role })
-                
-                // Refresh user data
-                const syncResponse = await fetch('/api/user/sync')
-                if (syncResponse.ok) {
-                    const data = await syncResponse.json()
-                    setUserData(data.user)
-                }
             }
         } catch (error) {
             console.error('Error updating user role:', error)
@@ -95,114 +49,41 @@ export const AppContextProvider = (props) => {
         }
     }
 
-    // Refresh user data from database
-    const refreshUserData = async () => {
-        if (session?.user) {
-            try {
-                const response = await fetch('/api/user/sync')
-                if (response.ok) {
-                    const data = await response.json()
-                    setUserData(data.user)
-                    setUserRole(data.user.role)
-                }
-            } catch (error) {
-                console.error('Failed to refresh user data:', error)
-            }
-        }
-    }
-
     // Role-based navigation
     const navigateToDashboard = () => {
-        switch(userRole) {
-            case ROLES.PATIENT:
-                router.push('/patient/dashboard')
-                break
-            case ROLES.DOCTOR:
-                router.push('/doctor/dashboard')
-                break
-            case ROLES.HOSPITAL_ADMIN:
-                router.push('/hospital-admin/dashboard')
-                break
-            case ROLES.ADMIN:
-                router.push('/admin/dashboard')
-                break
-            case ROLES.SUB_ADMIN:
-                router.push('/sub-admin/dashboard')
-                break
-            default:
-                router.push('/')
+        const roleMap = {
+            [ROLES.USER]: '/user',
+            [ROLES.PATIENT]: '/user',
+            [ROLES.DOCTOR]: '/doctor',
+            [ROLES.HOSPITAL_ADMIN]: '/hospital',
+            [ROLES.ADMIN]: '/admin',
         }
-    }
-
-    // Navigate to role-specific landing page
-    const navigateToRolePage = () => {
-        switch(userRole) {
-            case ROLES.PATIENT:
-                router.push('/patient')
-                break
-            case ROLES.DOCTOR:
-                router.push('/doctor')
-                break
-            case ROLES.HOSPITAL_ADMIN:
-                router.push('/hospital-admin')
-                break
-            case ROLES.ADMIN:
-                router.push('/admin')
-                break
-            case ROLES.SUB_ADMIN:
-                router.push('/sub-admin')
-                break
-            default:
-                router.push('/')
-        }
+        router.push(roleMap[userRole] || '/')
     }
 
     // Check if user has specific role
-    const hasRole = (role) => {
-        return userRole === role
-    }
-
-    // Check if user has any of the specified roles
-    const hasAnyRole = (roles) => {
-        return roles.includes(userRole)
-    }
-
-    // Check if user is admin (has access to everything)
-    const isAdmin = () => {
-        return userRole === ROLES.ADMIN
-    }
-
-    // Check if user is admin or sub-admin
-    const isAdminOrSubAdmin = () => {
-        return userRole === ROLES.ADMIN || userRole === ROLES.SUB_ADMIN
-    }
+    const hasRole = (role) => userRole === role
+    const hasAnyRole = (roles) => roles.includes(userRole)
+    const isAdmin = () => userRole === ROLES.ADMIN
+    const isAdminOrSubAdmin = () => userRole === ROLES.ADMIN
 
     // Get role display name
     const getRoleDisplayName = () => {
-        switch(userRole) {
-            case ROLES.PATIENT:
-                return 'Patient'
-            case ROLES.DOCTOR:
-                return 'Doctor'
-            case ROLES.HOSPITAL_ADMIN:
-                return 'Hospital Admin'
-            case ROLES.ADMIN:
-                return 'Super Admin'
-            case ROLES.SUB_ADMIN:
-                return 'Sub Admin'
-            default:
-                return 'Guest'
+        const names = {
+            [ROLES.USER]: 'User',
+            [ROLES.PATIENT]: 'Patient',
+            [ROLES.DOCTOR]: 'Doctor',
+            [ROLES.HOSPITAL_ADMIN]: 'Hospital Admin',
+            [ROLES.ADMIN]: 'Super Admin',
         }
+        return names[userRole] || 'Guest'
     }
 
     const value = {
-        // Session data
+        // Session data - directly from NextAuth
         user: session?.user,
         userData,
         session,
-        
-        // Auth functions
-        getToken,
         
         // App config
         currency,
@@ -210,13 +91,10 @@ export const AppContextProvider = (props) => {
         
         // Role management
         userRole,
-        setUserRole,
         updateUserRole,
-        refreshUserData,
         
         // Navigation helpers
         navigateToDashboard,
-        navigateToRolePage,
         
         // Permission checks
         hasRole,
@@ -226,7 +104,7 @@ export const AppContextProvider = (props) => {
         getRoleDisplayName,
         
         // Loading states
-        isLoading: status === 'loading' || isLoading,
+        isLoading,
         isAuthenticated: status === 'authenticated',
         
         // Constants

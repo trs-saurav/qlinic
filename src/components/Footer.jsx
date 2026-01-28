@@ -29,7 +29,7 @@ const Footer = () => {
     services: [
       { label: 'For Patients', href: '/patient' },
       { label: 'For Doctors', href: '/doctor' },
-      { label: 'For Hospitals', href: '/hospital-admin' },
+      { label: 'For Hospitals', href: '/hospital' },
       { label: 'Telemedicine', href: '/telemedicine' },
     ],
     support: [

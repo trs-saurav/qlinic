@@ -371,21 +371,21 @@ const Navbar = () => {
     {
       label: "user",
       icon: UserIcon,
-      href: "/sign-in?role=user",
+      href: "/user",
       description: "Book appointments & manage health",
       gradient: "from-blue-500 to-teal-500",
     },
     {
       label: "Doctor",
       icon: Stethoscope,
-      href: "/sign-in?role=doctor",
+      href: "/doctor",
       description: "Manage patients & appointments",
       gradient: "from-blue-500 to-cyan-500",
     },
     {
       label: "Hospital Admin",
       icon: Building2,
-      href: "/sign-in?role=hospital_admin",
+      href: "hospital",
       description: "Hospital management",
       gradient: "from-violet-500 to-purple-500",
     },
@@ -410,7 +410,7 @@ const Navbar = () => {
       case "doctor":
         return "/doctor";
       case "hospital_admin":
-        return "/hospital-admin";
+        return "/hospital";
       case "admin":
         return "/admin";
       case "sub_admin":

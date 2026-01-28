@@ -50,12 +50,23 @@ const userSchema = new mongoose.Schema(
       providerId: String,
       connectedAt: { type: Date, default: Date.now }
     }],
+   
 
     firstName: { type: String, trim: true, default: '' },
     lastName: { type: String, trim: true, default: '' },
     
     // ✅ NEW: Date of Birth added here
     dateOfBirth: { type: Date },
+    // ... inside userSchema definition
+  
+  phoneNumber: { type: String, trim: true, index: true }, // Add index: true for speed
+
+  // ✅ ADD THESE TWO FIELDS
+  isWalkInCreated: { type: Boolean, default: false }, // Marks account as "Shadow/Placeholder"
+  requiresPasswordChange: { type: Boolean, default: false }, // Forces user to set own password
+
+  // ... rest of schema
+
 
     role: {
       type: String,

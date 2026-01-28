@@ -23,45 +23,45 @@ const SETTINGS_NAV = [
   {
     label: 'Hospital Profile',
     description: 'Manage hospital details & info',
-    href: '/hospital-admin/settings',
+    href: '/hospital/settings',
     icon: Building2,
   },
   // In your settings navigation array
 {
   label: 'Media & Gallery',
   description: 'Profile photos & practice gallery',
-  href: '/hospital-admin/settings/media',
+  href: '/hospital/settings/media',
   icon: ImageIcon, // or Camera, Images
 },
 
   {
     label: 'Language & Region',
     description: 'Language, timezone & preferences',
-    href: '/hospital-admin/settings/language',
+    href: '/hospital/settings/language',
     icon: Globe,
   },
   {
     label: 'Privacy & Security',
     description: 'Data sharing & access control',
-    href: '/hospital-admin/settings/privacy',
+    href: '/hospital/settings/privacy',
     icon: Shield,
   },
   {
     label: 'Notifications',
     description: 'Email, SMS & app alerts',
-    href: '/hospital-admin/settings/notifications',
+    href: '/hospital/settings/notifications',
     icon: Bell,
   },
   {
     label: 'Staff Management',
     description: 'Roles & permissions',
-    href: '/hospital-admin/settings/staff',
+    href: '/hospital/settings/staff',
     icon: Users,
   },
   {
     label: 'Billing & Payments',
     description: 'Payment methods & invoices',
-    href: '/hospital-admin/settings/billing',
+    href: '/hospital/settings/billing',
     icon: CreditCard,
   },
 ]
@@ -71,8 +71,8 @@ export default function SettingsSidebar({ issuesCount = 0 }) {
 
   const isActive = (href) => {
     // makes "/settings" active for nested routes too, unless another item matches better
-    if (href === '/hospital-admin/settings') {
-      return pathname === href || pathname.startsWith('/hospital-admin/settings/')
+    if (href === '/hospital/settings') {
+      return pathname === href || pathname.startsWith('/hospital/settings/')
     }
     return pathname === href
   }
@@ -185,7 +185,7 @@ export default function SettingsSidebar({ issuesCount = 0 }) {
         {/* Bottom section */}
         <div className="p-2">
           <Link
-            href="/hospital-admin/support"
+            href="/hospital/support"
             className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-accent/60 transition-colors"
           >
             <div className="h-10 w-10 rounded-xl flex items-center justify-center border bg-background">
@@ -200,7 +200,7 @@ export default function SettingsSidebar({ issuesCount = 0 }) {
           </Link>
 
           <Link
-            href="/hospital-admin/about"
+            href="/hospital/about"
             className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-accent/60 transition-colors"
           >
             <div className="h-10 w-10 rounded-xl flex items-center justify-center border bg-background">

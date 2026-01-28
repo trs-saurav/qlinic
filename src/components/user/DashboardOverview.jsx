@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -16,7 +17,9 @@ import { realtimeDb } from '@/config/firebase'
 
 export default function DashboardOverview() {
   const router = useRouter()
+  const { data: session, status } = useSession()
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [data, setData] = useState({ upcoming: [], activeAppointment: null })
   
   const [queueState, setQueueState] = useState({
@@ -28,9 +31,15 @@ export default function DashboardOverview() {
 
   const today = new Date()
   const formattedDate = today.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })
-  const formattedFullDate = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
-  useEffect(() => { fetchDashboardData() }, [])
+  // ✅ Wait for session before fetching
+  useEffect(() => { 
+    if (status === 'authenticated') {
+      fetchDashboardData()
+    } else if (status === 'unauthenticated') {
+      router.push('/sign-in?role=user')
+    }
+  }, [status])
 
   useEffect(() => {
     if (!data.activeAppointment) return
@@ -53,8 +62,23 @@ export default function DashboardOverview() {
 
   const fetchDashboardData = async () => {
     try {
-      const appointmentsRes = await fetch('/api/patient/appointments')
+      setIsLoading(true)
+      setError(null)
+      
+      const appointmentsRes = await fetch('/api/patient/appointments', {
+        credentials: 'include', // ✅ Ensure cookies are sent
+      })
+      
+      if (!appointmentsRes.ok) {
+        if (appointmentsRes.status === 401) {
+          router.push('/sign-in?role=user')
+          return
+        }
+        throw new Error('Failed to fetch appointments')
+      }
+      
       const aptData = await appointmentsRes.json()
+      
       if (aptData.appointments) {
         const now = new Date()
         const upcoming = aptData.appointments.filter(a => 
@@ -65,10 +89,15 @@ export default function DashboardOverview() {
             const aptDate = new Date(a.scheduledTime).toDateString()
             return aptDate === now.toDateString() && ['BOOKED', 'CHECKED_IN', 'IN_CONSULTATION', 'SKIPPED'].includes(a.status)
         })
+        
         setData({ upcoming, activeAppointment: active })
       }
-    } catch (error) { console.error('Error:', error) } 
-    finally { setIsLoading(false) }
+    } catch (error) { 
+      console.error('Error fetching dashboard data:', error)
+      setError(error.message)
+    } finally { 
+      setIsLoading(false) 
+    }
   }
 
   const handleNavigate = (path) => router.push(`/user/${path}`)
@@ -83,7 +112,25 @@ export default function DashboardOverview() {
       }
   }
 
-  if (isLoading) return <div className="h-[40vh] flex items-center justify-center"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div></div>
+  // ✅ Show loading state
+  if (status === 'loading' || isLoading) {
+    return (
+      <div className="h-[40vh] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  // ✅ Show error state
+  if (error) {
+    return (
+      <div className="h-[40vh] flex flex-col items-center justify-center gap-4">
+        <AlertCircle className="w-12 h-12 text-red-500" />
+        <p className="text-sm text-slate-600">{error}</p>
+        <Button onClick={fetchDashboardData}>Retry</Button>
+      </div>
+    )
+  }
 
   const myToken = data.activeAppointment?.tokenNumber || 0
   const currentToken = queueState.currentToken || 0
@@ -103,67 +150,49 @@ export default function DashboardOverview() {
   ]
 
   return (
-    <div className="space-y-6 pb-20 p-4 sm:p-6 font-sans text-slate-900 w-full max-w-6xl mx-auto">
+    <div className="space-y-6 pb-20 p-4 font-sans text-slate-900 w-full max-w-3xl mx-auto">
       
-      {/* Welcome header */}
-      <div className="flex flex-col gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Good morning, {user.name}</h1>
-          {data.upcoming.length > 0 && (
-            <p className="text-slate-600 mt-2 text-sm">
-              Your next appointment is on {new Date(data.upcoming[0]?.scheduledTime).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at {new Date(data.upcoming[0]?.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </p>
-          )}
-        </div>
-        
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm">
-          <div className="flex items-center gap-2 text-slate-500 bg-white dark:bg-slate-800 p-3 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
-            <Clock className="w-4 h-4" />
-            <span className="font-medium text-wrap break-words">{formattedFullDate}</span>
-          </div>
-          <div className="flex items-center gap-2 text-slate-500 bg-white dark:bg-slate-800 p-3 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
-            <MapPin className="w-4 h-4" />
-            <span className="font-medium">Patna</span>
-          </div>
-        </div>
+      {/* 1. Header */}
+      <div className="flex flex-col">
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-sm text-slate-500 font-medium uppercase tracking-wider">{formattedDate}</p>
       </div>
 
       {/* Live Widget */}
       {data.activeAppointment ? (
-        <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-600 to-indigo-700 text-white overflow-hidden relative rounded-2xl">
-          <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full blur-2xl -mt-12 -mr-12"></div>
-          
-          <CardContent className="p-4 sm:p-6 relative z-10">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-5">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className={`h-2.5 w-2.5 rounded-full ${statusMeta.color} ${statusMeta.pulse ? 'animate-pulse' : ''}`}></span>
-                  <span className="text-xs font-bold uppercase opacity-90">{statusMeta.label}</span>
+        <Card className="border-0 shadow-lg bg-blue-600 text-white overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full blur-2xl -mt-12 -mr-12"></div>
+            
+            <CardContent className="p-5 relative z-10">
+                <div className="flex justify-between items-start mb-5">
+                    <div className="flex-1 min-w-0 mr-4">
+                        <div className="flex items-center gap-2 mb-1.5">
+                            <span className={`h-2.5 w-2.5 rounded-full ${statusMeta.color} ${statusMeta.pulse ? 'animate-pulse' : ''}`}></span>
+                            <span className="text-xs font-bold uppercase opacity-90">{statusMeta.label}</span>
+                        </div>
+                        <h3 className="font-bold text-lg md:text-xl truncate">Dr. {data.activeAppointment.doctorId?.firstName} {data.activeAppointment.doctorId?.lastName}</h3>
+                        <p className="text-xs md:text-sm text-blue-100 truncate opacity-80">{data.activeAppointment.hospitalId?.name}</p>
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 text-center min-w-[70px]">
+                        <p className="text-[10px] uppercase font-bold opacity-70">Token</p>
+                        <p className="text-2xl md:text-3xl font-bold leading-none">#{myToken}</p>
+                    </div>
                 </div>
-                <h3 className="font-bold text-lg sm:text-xl truncate">Dr.{data.activeAppointment.doctorId?.firstName} {data.activeAppointment.doctorId?.lastName}</h3>
-                <p className="text-xs sm:text-sm text-blue-100 truncate opacity-80">{data.activeAppointment.hospitalId?.name}</p>
-              </div>
-              <div className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20 text-center min-w-[70px]">
-                <p className="text-[10px] uppercase font-bold opacity-70">Token</p>
-                <p className="text-2xl sm:text-3xl font-bold leading-none">#{myToken}</p>
-              </div>
-            </div>
 
-            {/* Metrics Grid - Stack vertically on mobile, horizontal on tablet/desktop */}
-            <div className="bg-black/20 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between mb-4 text-sm gap-2">
-              <div className="text-center sm:text-center flex-1 border-b sm:border-b-0 sm:border-r border-white/10 pb-2 sm:pb-0 sm:pr-2 mb-2 sm:mb-0 w-full sm:w-auto">
-                <p className="text-[10px] text-blue-200 uppercase mb-0.5">Serving</p>
-                <p className="font-bold text-lg">#{currentToken || '--'}</p>
-              </div>
-              <div className="text-center sm:text-center flex-1 border-b sm:border-b-0 sm:border-r border-white/10 pb-2 sm:pb-0 sm:px-2 mb-2 sm:mb-0 w-full sm:w-auto">
-                <p className="text-[10px] text-blue-200 uppercase mb-0.5">Ahead</p>
-                <p className="font-bold text-lg">{tokensAhead}</p>
-              </div>
-              <div className="text-center sm:text-center flex-1 sm:pl-2 w-full sm:w-auto">
-                <p className="text-[10px] text-blue-200 uppercase mb-0.5">Wait</p>
-                <p className="font-bold text-lg">{estWaitTime}m</p>
-              </div>
-            </div>
+                <div className="bg-black/20 rounded-xl p-3 flex items-center justify-between mb-4 text-sm gap-2">
+                    <div className="text-center flex-1 border-r border-white/10 last:border-0">
+                        <p className="text-[10px] text-blue-200 uppercase mb-0.5">Serving</p>
+                        <p className="font-bold text-lg">#{currentToken || '--'}</p>
+                    </div>
+                    <div className="text-center flex-1 border-r border-white/10 last:border-0">
+                        <p className="text-[10px] text-blue-200 uppercase mb-0.5">Ahead</p>
+                        <p className="font-bold text-lg">{tokensAhead}</p>
+                    </div>
+                    <div className="text-center flex-1 last:border-0">
+                        <p className="text-[10px] text-blue-200 uppercase mb-0.5">Wait</p>
+                        <p className="font-bold text-lg">{estWaitTime}m</p>
+                    </div>
+                </div>
 
             <div className="flex flex-col sm:flex-row items-center gap-3">
               <Progress value={progressVal} className="h-2 flex-1 bg-black/20 w-full sm:w-auto" indicatorClassName="bg-white" />
@@ -185,26 +214,19 @@ export default function DashboardOverview() {
         </div>
       )}
 
-      {/* Quick Links Section */}
-      <section className="mt-6">
-        <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
-          <Home className="w-5 h-5 text-blue-600" />
-          Quick Access
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-          {quickLinks.map((link, idx) => (
-            <button 
-              key={idx} 
-              onClick={() => handleNavigate(link.action)} 
-              className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 sm:p-4 flex items-center gap-3 sm:gap-4 hover:shadow-md transition-all hover:border-blue-300 hover:shadow-blue-100 dark:hover:shadow-blue-900/20 dark:hover:border-blue-500"
-            >
-              <div className={`${link.bg} ${link.text} h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center`}>
-                <link.icon className="w-5 h-5 sm:w-6 sm:h-6" />
-              </div>
-              <div className="text-left flex-1">
-                <h3 className="font-semibold text-slate-900 dark:text-white text-sm sm:text-base">{link.label}</h3>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">{link.desc}</p>
-              </div>
+      {/* 3. Icon Grid */}
+      <div className="grid grid-cols-4 gap-3 md:gap-4">
+        {[
+            { label: 'Book', icon: Calendar, action: 'search', bg: 'bg-blue-50', text: 'text-blue-600' },
+            { label: 'Family', icon: Users, action: 'settings/family', bg: 'bg-indigo-50', text: 'text-indigo-600' },
+            { label: 'Records', icon: FileText, action: 'settings/records', bg: 'bg-violet-50', text: 'text-violet-600' },
+            { label: 'Search', icon: Search, action: 'search', bg: 'bg-slate-100', text: 'text-slate-600' },
+        ].map((item, idx) => (
+            <button key={idx} onClick={() => handleNavigate(item.action)} className="flex flex-col items-center p-3 rounded-xl hover:bg-slate-50 transition-colors w-full">
+                <div className={`h-12 w-12 md:h-14 md:w-14 rounded-2xl ${item.bg} ${item.text} flex items-center justify-center mb-2 shadow-sm`}>
+                    <item.icon className="w-6 h-6 md:w-7 md:h-7" />
+                </div>
+                <span className="text-xs md:text-sm font-semibold text-slate-600">{item.label}</span>
             </button>
           ))}
         </div>

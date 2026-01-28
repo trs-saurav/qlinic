@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/config/db';
 import Appointment from '@/models/appointment';
 import User from '@/models/user';
+import Hospital from '@/models/hospital';
 import { requireRole, getMyHospitalOrFail } from '@/lib/apiAuth';
 import { startOfDay, endOfDay } from 'date-fns';
+import bcrypt from 'bcryptjs';
 
 export async function POST(req) {
   try {
@@ -19,13 +21,24 @@ export async function POST(req) {
 
     // 1. Find or create patient
     let patient = await User.findOne({ phone: patientData.phone });
+    let generatedPassword = null;
+
     if (!patient) {
+      // ✅ Generate random password for new patient
+      const randomPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+      const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
       patient = new User({
         ...patientData,
         role: 'user',
-        email: `${patientData.phone}@qlinic.app` // Dummy email
+        email: patientData.email || `${patientData.phone}@qlinic.app`,
+        password: hashedPassword // ✅ FIX: Add hashed password
       });
+      
       await patient.save();
+      generatedPassword = randomPassword; // Store plain password to return to user
+      
+      console.log('✅ New patient created with ID:', patient._id);
     }
 
     // 2. Generate Token
@@ -53,11 +66,25 @@ export async function POST(req) {
       checkInTime: new Date(),
     });
 
-    return NextResponse.json({ success: true, appointment: newAppointment });
+    console.log('✅ Walk-in appointment created. Token:', nextToken);
+
+    return NextResponse.json({ 
+      success: true, 
+      appointment: newAppointment,
+      tokenNumber: nextToken,
+      generatedCredentials: generatedPassword ? {
+        phone: patientData.phone,
+        password: generatedPassword
+      } : null
+    });
 
   } catch (error) {
-    console.error('Error creating walk-in appointment:', error);
-    return NextResponse.json({ success: false, error: 'Server Error' }, { status: 500 });
+    console.error('❌ Error creating walk-in appointment:', error);
+    return NextResponse.json({ 
+      success: false, 
+      error: error.message || 'Server Error',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    }, { status: 500 });
   }
 }
 
@@ -108,7 +135,6 @@ export async function GET(req) {
         return NextResponse.json({ error: 'Invalid query parameters for your role' }, { status: 400 });
       }
     }
-
 
     if (filter) {
       const now = new Date();

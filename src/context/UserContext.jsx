@@ -19,14 +19,29 @@ export const UserProvider = ({ children }) => {
   const [medicalRecords, setMedicalRecords] = useState([])
   const [familyMembers, setFamilyMembers] = useState([])
   const [appointments, setAppointments] = useState([])
-  const [allAppointments, setAllAppointments] = useState([]) // Store all appointments
+  const [allAppointments, setAllAppointments] = useState([])
   const [loading, setLoading] = useState(true)
 
   const fetchAllUserData = useCallback(async () => {
-    if (status !== 'authenticated') return
+    // ✅ FIX: Only fetch if authenticated
+    if (status !== 'authenticated') {
+      setLoading(false)
+      return
+    }
+
+    // ✅ FIX: Only fetch if user role (patient/user)
+    const userRole = session?.user?.role
+    if (!userRole || (userRole !== 'user' && userRole !== 'patient')) {
+      console.log('Skipping user data fetch - role is:', userRole)
+      setLoading(false)
+      return
+    }
 
     try {
       setLoading(true)
+      
+      console.log('🔵 Fetching user data for role:', userRole)
+      
       const [profileRes, recordsRes, familyRes, appointmentsRes] = await Promise.all([
         fetch('/api/patient/profile'),
         fetch('/api/patient/records'),
@@ -37,21 +52,31 @@ export const UserProvider = ({ children }) => {
       if (profileRes.ok) {
          const data = await profileRes.json()
          setUser(data.user)
+      } else {
+        console.error('Profile fetch failed:', await profileRes.text())
       }
+      
       if (recordsRes.ok) {
          const data = await recordsRes.json()
          setMedicalRecords(data.records || [])
+      } else {
+        console.error('Records fetch failed:', await recordsRes.text())
       }
+      
       if (familyRes.ok) {
          const data = await familyRes.json()
-         // Some APIs return { members: [] } others { familyMembers: [] } - handle both
          setFamilyMembers(data.members || data.familyMembers || [])
+      } else {
+        console.error('Family fetch failed:', await familyRes.text())
       }
+      
       if (appointmentsRes.ok) {
          const data = await appointmentsRes.json()
          const fetchedAppointments = data.appointments || []
          setAppointments(fetchedAppointments)
-         setAllAppointments(fetchedAppointments) // Store all appointments
+         setAllAppointments(fetchedAppointments)
+      } else {
+        console.error('Appointments fetch failed:', await appointmentsRes.text())
       }
 
     } catch (err) {
@@ -60,7 +85,7 @@ export const UserProvider = ({ children }) => {
     } finally {
       setLoading(false)
     }
-  }, [status])
+  }, [status, session]) // ✅ FIX: Add session to dependencies
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -70,7 +95,10 @@ export const UserProvider = ({ children }) => {
       setFamilyMembers([])
       setMedicalRecords([])
       setAppointments([])
+      setAllAppointments([])
       setLoading(false)
+    } else if (status === 'loading') {
+      setLoading(true)
     }
   }, [status, fetchAllUserData])
 
@@ -106,7 +134,6 @@ export const UserProvider = ({ children }) => {
       if (!res.ok) throw new Error('Failed to add member')
       
       const newItem = await res.json()
-      // API usually returns { success: true, member: {...} }
       const member = newItem.member || newItem.familyMember
       
       if (member) {
@@ -124,7 +151,7 @@ export const UserProvider = ({ children }) => {
   const updateFamilyMember = async (id, memberData) => {
     try {
       const res = await fetch(`/api/patient/family/${id}`, {
-        method: 'PATCH', // or PUT depending on your API
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(memberData)
       })
@@ -162,33 +189,31 @@ export const UserProvider = ({ children }) => {
   // --- APPOINTMENTS ---
 
   const fetchAppointmentsWithFilter = async (familyMemberId = null) => {
-    console.log('Fetching appointments for familyMemberId:', familyMemberId);
+    console.log('Fetching appointments for familyMemberId:', familyMemberId)
     try {
-      let url = '/api/patient/appointments';
+      let url = '/api/patient/appointments'
       if (familyMemberId && familyMemberId !== 'self') {
-        url += `?familyMemberId=${familyMemberId}`;
+        url += `?familyMemberId=${familyMemberId}`
       }
       
-      const response = await fetch(url);
-      const data = await response.json();
+      const response = await fetch(url)
+      const data = await response.json()
       
       if (response.ok) {
-        setAppointments(data.appointments || []);
-        return { success: true, appointments: data.appointments || [] };
+        setAppointments(data.appointments || [])
+        return { success: true, appointments: data.appointments || [] }
       } else {
-        throw new Error(data.error || 'Failed to fetch appointments');
+        throw new Error(data.error || 'Failed to fetch appointments')
       }
     } catch (err) {
-      console.error('Error fetching appointments with filter:', err);
-      toast.error('Failed to load appointments');
-      return { success: false, error: err.message };
+      console.error('Error fetching appointments with filter:', err)
+      toast.error('Failed to load appointments')
+      return { success: false, error: err.message }
     }
-  };
+  }
 
   // --- MEDICAL RECORDS ---
 
-  // NOTE: This doesn't actually upload (since uploads use FormData),
-  // but acts as a helper to update local state after successful upload elsewhere.
   const addMedicalRecord = (newRecord) => {
     setMedicalRecords(prev => [newRecord, ...prev])
   }
@@ -212,7 +237,7 @@ export const UserProvider = ({ children }) => {
     medicalRecords,
     familyMembers,
     appointments,
-    allAppointments, // Expose all appointments
+    allAppointments,
     loading,
     isAuthenticated: status === 'authenticated',
     refreshData: fetchAllUserData,
@@ -228,10 +253,10 @@ export const UserProvider = ({ children }) => {
     // Appointments
     fetchAppointmentsWithFilter,
     
-    // Records (New!)
+    // Records
     addMedicalRecord, 
     deleteMedicalRecord,
-    setMedicalRecords // Expose setter just in case
+    setMedicalRecords
   }
 
   return (
