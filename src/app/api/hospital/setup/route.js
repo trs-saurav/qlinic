@@ -44,7 +44,7 @@ export async function POST(req) {
             success: true,
             message: "Hospital already exists",
             hospital: existing.toObject(),
-            redirect: "/hospital-admin"
+            redirect: "/hospital"
           },
           { status: 200 }
         )
@@ -222,7 +222,7 @@ export async function POST(req) {
             email: hospital.contactDetails.email,
           },
         },
-        redirect: "/hospital-admin"
+        redirect: "/hospital"
       },
       { status: 201 }
     )

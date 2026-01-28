@@ -1,142 +1,257 @@
+// auth.js
 import NextAuth from 'next-auth'
-import Google from 'next-auth/providers/google'
-import Facebook from 'next-auth/providers/facebook'
-import Apple from 'next-auth/providers/apple'
 import Credentials from 'next-auth/providers/credentials'
-import { authConfig } from './auth.config'
+import { baseAuthConfig } from './auth.config'
 import connectDB from '@/config/db'
 import User from '@/models/user'
-import { cookies } from 'next/headers'
+import {MongooseError} from "mongoose";
 
-export const authOptions = {
-  ...authConfig,
-  secret: process.env.AUTH_SECRET,
+// Regex to check if a string is a valid MongoDB ObjectId
+const objectIdRegex = /^[0-9a-fA-F]{24}$/;
+
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...baseAuthConfig,
+  trustHost: true,
   providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      authorization: { params: { prompt: 'consent', access_type: 'offline', response_type: 'code' } }
-    }),
-    Facebook({ clientId: process.env.FACEBOOK_CLIENT_ID, clientSecret: process.env.FACEBOOK_CLIENT_SECRET }),
-    Apple({ clientId: process.env.APPLE_CLIENT_ID, clientSecret: process.env.APPLE_CLIENT_SECRET }),
+    ...baseAuthConfig.providers,
     Credentials({
-      credentials: { email: { label: "Email", type: "email" }, password: { label: "Password", type: "password" } },
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+        role: { label: "Role", type: "text" }
+      },
       async authorize(credentials) {
+        console.log('AUTH.JS: authorize', { credentials });
         try {
           await connectDB()
-          const user = await User.findOne({ email: credentials.email }).select('+password')
-          if (!user || !(await user.comparePassword(credentials.password))) return null
-          
-          if (typeof user.updateLastLogin === 'function') await user.updateLastLogin()
-          else await User.findByIdAndUpdate(user._id, { lastLogin: new Date() })
-          
-          return { id: user._id.toString(), email: user.email, name: user.fullName, role: user.role, image: user.profileImage }
-        } catch (error) { return null }
+          const user = await User.findOne({ email: credentials?.email }).select('+password')
+
+          if (!user || credentials.role !== user.role) {
+             console.log('AUTH.JS: User not found or Role mismatch');
+             return null;
+          }
+
+          const isValid = await user.comparePassword(credentials.password)
+          if (!isValid) return null
+
+          console.log('AUTH.JS: Credentials verified');
+          return {
+            id: user._id.toString(),
+            email: user.email,
+            name: user.fullName || `${user.firstName} ${user.lastName}`,
+            role: user.role,
+            image: user.profileImage,
+          }
+        } catch (error) {
+          console.error('AUTH.JS: Authorize error:', error);
+          return null
+        }
       }
-    })
+    }),
   ],
-  
   callbacks: {
-    async redirect({ url, baseUrl }) {
-      return url;
-    },
-    
     async signIn({ user, account, profile }) {
+      console.log('============== AUTH.JS: signIn callback ==============');
+      console.log('[SIGNIN] user:', user);
+      console.log('[SIGNIN] account:', account);
+      console.log('[SIGNIN] profile:', profile);
+
+      if (account?.provider === 'credentials') {
+        console.log('[SIGNIN] Credentials provider sign-in complete.');
+        return true;
+      }
+      
+      // For OAuth providers
       try {
-        if (account?.provider !== 'credentials') {
-          await connectDB()
+        await connectDB();
+        let dbUser = await User.findOne({ email: user.email });
 
-          let dbUser = await User.findOne({
-            oauthProviders: { $elemMatch: { provider: account.provider, providerId: account.providerAccountId } }
-          })
+        if (!dbUser) {
+          console.log('[SIGNIN] OAuth user not found. Creating new user...');
+          dbUser = await User.create({
+            email: user.email,
+            firstName: user.name?.split(' ')[0] || 'User',
+            lastName: user.name?.split(' ')[1] || '',
+            role: 'user', // Default role for new OAuth users
+            profileImage: user.image,
+            oauthProviders: [{ provider: account.provider, providerId: account.providerAccountId }]
+          });
+           console.log('[SIGNIN] New user created:', dbUser);
+        } else {
+           console.log('[SIGNIN] Existing OAuth user found:', dbUser);
+        }
 
-          if (!dbUser && user?.email) {
-            dbUser = await User.findOne({ email: user.email })
-          }
+        // IMPORTANT: Attach database ID and role to the user object
+        // This is passed to the JWT callback.
+        user.role = dbUser.role;
+        user.id = dbUser._id.toString(); // Must be a string
+        
+        console.log('[SIGNIN] Attached DB info to user object:', user);
+        console.log('======================================================');
+        return true;
+      } catch (error) {
+        console.error('[SIGNIN] Error in signIn callback for OAuth:', error);
+        return false; // Prevent sign-in on error
+      }
+    },
+    async jwt({ token, user, trigger, session, account }) {
+      console.log('================ AUTH.JS: jwt callback =================');
+      console.log('[JWT] token received:', token);
+      console.log('[JWT] user object received:', user);
+      console.log('[JWT] account object received:', account);
+      console.log(`[JWT] trigger: ${trigger}`);
 
-          // Read role from cookie
-          let role = 'user';
-          try {
-            const cookieStore = await cookies();
-            const tokenCookie = cookieStore.get('oauth_role_token');
 
-            if (tokenCookie?.value) {
-              const parsed = JSON.parse(tokenCookie.value);
-              const validRoles = ['user', 'doctor', 'hospital_admin', 'admin', 'sub_admin'];
-              
-              if (validRoles.includes(parsed.role)) {
-                role = parsed.role;
-              }
+      // This block only runs on the initial sign-in
+      if (user) {
+        console.log('[JWT] Initial sign-in. Attaching info from user object to token...');
+        // The user object is from the `signIn` callback or the provider.
+        // We MUST use the `id` we attached in the `signIn` callback.
+        token.db_id = user.id;
+        token.role = user.role;
+        console.log('[JWT] Token after initial update:', token);
+      }
+
+      if (trigger === 'update' && session?.role) {
+         console.log('[JWT] Session update triggered. Updating role...');
+        token.role = session.role;
+        console.log('[JWT] Token after session update:', token);
+      }
+
+      // This block runs on every request to keep role fresh.
+      // CRITICAL FIX: Check if token.db_id is a valid ObjectId before querying the DB.
+      if (token.db_id && objectIdRegex.test(token.db_id)) {
+        console.log(`[JWT] Refreshing role. Searching user by ID: ${token.db_id}`);
+        try {
+            // Ensure database is connected before querying
+            await connectDB();
+            const dbUser = await User.findById(token.db_id);
+            if (dbUser) {
+              token.role = dbUser.role;
+              console.log(`[JWT] Role refreshed from DB. New role: ${dbUser.role}`);
+            } else {
+              console.log(`[JWT] User with ID ${token.db_id} not found in DB.`);
             }
-          } catch (e) {
-            // Cookie parsing failed, defaulting to 'user'
-          }
-
-          if (!dbUser) {
-            const [given, family] = [profile?.given_name, profile?.family_name]
-            dbUser = new User({
-              email: user.email,
-              firstName: given || user.name?.split(' ')?.[0] || '',
-              lastName: family || user.name?.split(' ')?.slice(1).join(' ') || '',
-              profileImage: user.image || '',
-              role: role, 
-              oauthProviders: [{ provider: account.provider, providerId: account.providerAccountId }],
-            })
-            await dbUser.save()
-          } else {
-            const exists = dbUser.oauthProviders?.some(p => p.provider === account.provider && p.providerId === account.providerAccountId)
-            if (!exists) {
-              dbUser.oauthProviders = dbUser.oauthProviders || []
-              dbUser.oauthProviders.push({ provider: account.provider, providerId: account.providerAccountId })
+        } catch(e) {
+            if (e instanceof MongooseError) {
+                console.log(`[JWT] Mongoose error while refreshing role: ${e.message}`)
+            } else {
+                console.log(`[JWT] UNKNOWN error while refreshing role: ${e.message}`)
             }
-            if (user.image && dbUser.profileImage !== user.image) dbUser.profileImage = user.image
-            
-            // Note: We intentionally do NOT update the role of existing users
-            await dbUser.save()
+        }
+      } else {
+        console.log(`[JWT] Did not refresh role. ID is missing or invalid: "${token.db_id}"`);
+      }
+
+
+      console.log('[JWT] Returning final token:', token);
+      console.log('======================================================');
+      return token;
+    },
+    async session({ session, token }) {
+      console.log('=============== AUTH.JS: session callback ===============');
+      console.log('[SESSION] session object received:', session);
+      console.log('[SESSION] token object received:', token);
+
+      if (session.user && token) {
+        // Expose database ID and role to the client-side session
+        session.user.id = token.db_id;
+        session.user.role = token.role;
+      }
+      console.log('[SESSION] Returning final session:', session);
+      console.log('======================================================');
+      return session;
+    },
+    async redirect({ url, baseUrl }) {
+      console.log('============== AUTH.JS: redirect callback ==============');
+      console.log({ url, baseUrl });
+      
+      try {
+        // Ensure URLs are properly formatted with protocol before parsing
+        const normalizedUrl = url.startsWith('http') ? url : `${baseUrl.split('://')[0]}://${url}`;
+        const normalizedBaseUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
+        
+        const urlObj = new URL(normalizedUrl);
+        const baseUrlObj = new URL(normalizedBaseUrl);
+        
+        const isDevelopment = process.env.NODE_ENV === 'development';
+        const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || (isDevelopment ? 'localhost' : 'yourdomain.com');
+        
+        // In development with localhost, handle subdomain redirects properly
+        if (isDevelopment) {
+          // Handle localhost subdomain redirects in development
+          // Allow redirect to subdomain if base URL is localhost and target is a localhost subdomain
+          if (baseUrlObj.hostname === 'localhost' && urlObj.hostname.endsWith('.localhost')) {
+            console.log(`[REDIRECT] Allowing redirect from localhost to subdomain: ${normalizedUrl}`);
+            return normalizedUrl;
           }
           
-          if (typeof dbUser.updateLastLogin === 'function') await dbUser.updateLastLogin()
-          else await User.findByIdAndUpdate(dbUser._id, { lastLogin: new Date() })
-        }
-        return true
-      } catch (error) {
-        console.error('Sign in error:', error)
-        return false
-      }
-    },
-    
-    async jwt({ token, user, trigger, session }) {
-      try {
-        if (user) {
-          await connectDB()
-          const dbUser = await User.findOne({ email: user.email })
-          if (dbUser) {
-            token.id = dbUser._id.toString()
-            token.role = dbUser.role
-            token.permissions = dbUser.adminPermissions
-            token.isActive = dbUser.isActive
+          // Allow redirect from localhost subdomain to another localhost subdomain
+          if (baseUrlObj.hostname.endsWith('.localhost') && urlObj.hostname.endsWith('.localhost')) {
+            console.log(`[REDIRECT] Allowing redirect between localhost subdomains: ${normalizedUrl}`);
+            return normalizedUrl;
+          }
+          
+          // Allow redirect from localhost subdomain to same subdomain
+          if (baseUrlObj.hostname === urlObj.hostname) {
+            console.log(`[REDIRECT] Allowing redirect to same hostname: ${normalizedUrl}`);
+            return normalizedUrl;
+          }
+          
+          // Allow redirect from localhost subdomain to main localhost
+          if (baseUrlObj.hostname.endsWith('.localhost') && urlObj.hostname === 'localhost') {
+            console.log(`[REDIRECT] Allowing redirect from subdomain to localhost: ${normalizedUrl}`);
+            return normalizedUrl;
+          }
+        } else {
+          // Production environment - handle real domain subdomains
+          // Remove protocol and www from main domain for comparison
+          const cleanMainDomain = mainDomain.replace(/^https?:\/\//, '').replace(/^www\./, '');
+          
+          // Allow redirect between subdomains of the same main domain
+          if (urlObj.hostname === cleanMainDomain || 
+              baseUrlObj.hostname === urlObj.hostname ||
+              (urlObj.hostname.endsWith('.' + cleanMainDomain) && 
+               baseUrlObj.hostname.endsWith('.' + cleanMainDomain))) {
+            console.log(`[REDIRECT] Allowing redirect in production: ${normalizedUrl}`);
+            return normalizedUrl;
+          }
+          
+          // Allow redirect from main domain to subdomain
+          if (baseUrlObj.hostname === cleanMainDomain && 
+              urlObj.hostname.endsWith('.' + cleanMainDomain)) {
+            console.log(`[REDIRECT] Allowing redirect from main domain to subdomain: ${normalizedUrl}`);
+            return normalizedUrl;
+          }
+          
+          // Allow redirect from subdomain to main domain
+          if (baseUrlObj.hostname.endsWith('.' + cleanMainDomain) && 
+              urlObj.hostname === cleanMainDomain) {
+            console.log(`[REDIRECT] Allowing redirect from subdomain to main domain: ${normalizedUrl}`);
+            return normalizedUrl;
           }
         }
-        if (trigger === 'update' && session) token.role = session.role
-        return token
-      } catch (error) {
-        return token
+      } catch (e) {
+        console.warn('Could not parse URL in redirect callback:', e);
+        // Fallback to original behavior
+        if (url.startsWith("/")) return `${baseUrl}${url}`
+        return baseUrl;
       }
-    },
-    
-    async session({ session, token }) {
-      if (token && session.user) {
-        session.user.id = token.id
-        session.user.role = token.role
-        session.user.permissions = token.permissions
-        session.user.isActive = token.isActive
+      
+      // Allows relative callback URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`
+      
+      // Fallback: allow same origin
+      try {
+        const normalizedUrl = url.startsWith('http') ? url : `${baseUrl.split('://')[0]}://${url}`;
+        const normalizedBaseUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
+        if (new URL(normalizedUrl).origin === new URL(normalizedBaseUrl).origin) return normalizedUrl
+      } catch (e) {
+        console.warn('Could not parse URL in fallback redirect check:', e);
       }
-      return session
+      
+      console.log('======================================================');
+      return baseUrl
     }
-  },
-  
-  session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
-  pages: { signIn: '/sign-in', error: '/auth/error' },
-}
-
-export const { handlers, auth, signIn, signOut } = NextAuth(authOptions)
+  }
+})

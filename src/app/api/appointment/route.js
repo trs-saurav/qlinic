@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/config/db';
 import Appointment from '@/models/appointment';
 import User from '@/models/user';
+import Hospital from '@/models/hospital';
 import { requireRole, getMyHospitalOrFail } from '@/lib/apiAuth';
 import { startOfDay, endOfDay } from 'date-fns';
 import bcrypt from 'bcryptjs';

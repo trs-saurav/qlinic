@@ -341,8 +341,9 @@ const Navbar = () => {
       {
         title: "Company",
         items: [
-          { label: "About us", href: "/aboutus", icon: Info },
-          { label: "Our offerings", href: "/services", icon: Award },
+          { label: "Why QLINIC?", href: "/why-qlinic", icon: Info },
+          { label: "Why QLINIC for Clinics?", href: "/why-qlinic-for-clinics", icon: Hospital },
+          { label: "Why QLINIC for Patients?", href: "/why-qlinic-for-patients", icon: UserIcon },
           { label: "How QLINIC works", href: "/how-it-works", icon: Target },
           { label: "Sustainability", href: "/sustainability", icon: Globe },
         ],
@@ -370,21 +371,21 @@ const Navbar = () => {
     {
       label: "user",
       icon: UserIcon,
-      href: "/sign-in?role=user",
+      href: "/user",
       description: "Book appointments & manage health",
       gradient: "from-blue-500 to-teal-500",
     },
     {
       label: "Doctor",
       icon: Stethoscope,
-      href: "/sign-in?role=doctor",
+      href: "/doctor",
       description: "Manage patients & appointments",
       gradient: "from-blue-500 to-cyan-500",
     },
     {
       label: "Hospital Admin",
       icon: Building2,
-      href: "/sign-in?role=hospital_admin",
+      href: "hospital",
       description: "Hospital management",
       gradient: "from-violet-500 to-purple-500",
     },
@@ -409,7 +410,7 @@ const Navbar = () => {
       case "doctor":
         return "/doctor";
       case "hospital_admin":
-        return "/hospital-admin";
+        return "/hospital";
       case "admin":
         return "/admin";
       case "sub_admin":
@@ -462,11 +463,11 @@ const Navbar = () => {
                     whileTap={{ scale: 0.95 }}
                   >
                     <Image
-                      src="/LOGO.png"
+                      src="/LOGO2.png"
                       alt="QLINIC"
-                      width={40}
-                      height={40}
-                      className="rounded object-contain"
+                      width={60}
+                      height={60}
+                      className="object-contain"
                       priority
                     />
                   </motion.div>
@@ -496,59 +497,49 @@ const Navbar = () => {
                     Home
                   </Link>
 
-                  <div className="relative" ref={aboutMenuRef}>
-                    <button
-                      onClick={() => setIsAboutMenuOpen(!isAboutMenuOpen)}
-                      className={`flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-full transition-all ${
-                        isAboutActive()
-                          ? "text-blue-700 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/30"
-                          : "text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/30 dark:hover:bg-blue-900/20"
-                      }`}
-                    >
-                      About
-                      <ChevronDown
-                        className={`w-3.5 h-3.5 transition-transform ${
-                          isAboutMenuOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
+                  <Link
+                    href="/aboutus"
+                    className={`relative px-4 py-2 text-sm font-medium rounded-full transition-all ${
+                      isActive("/aboutus")
+                        ? "text-blue-700 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/30"
+                        : "text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/30 dark:hover:bg-blue-900/20"
+                    }`}
+                  >
+                    About
+                  </Link>
 
-                    <AnimatePresence>
-                      {isAboutMenuOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                          className="absolute left-0 mt-2 w-[600px] rounded-2xl border-2 border-blue-200/50 dark:border-blue-800/50 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl shadow-2xl overflow-hidden z-50"
-                        >
-                          <div className="p-6 grid grid-cols-3 gap-6">
-                            {aboutMegaMenu.sections.map((section, idx) => (
-                              <div key={idx}>
-                                <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-3">
-                                  {section.title}
-                                </h3>
-                                <div className="space-y-1">
-                                  {section.items.map((item) => (
-                                    <Link
-                                      key={item.href}
-                                      href={item.href}
-                                      onClick={() => setIsAboutMenuOpen(false)}
-                                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-blue-50/50 dark:hover:bg-blue-900/20 group transition-all"
-                                    >
-                                      <item.icon className="w-4 h-4 text-gray-500 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
-                                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors">
-                                        {item.label}
-                                      </span>
-                                    </Link>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
+                  <Link
+                    href="/why-qlinic"
+                    className={`relative px-4 py-2 text-sm font-medium rounded-full transition-all ${
+                      isActive("/why-qlinic")
+                        ? "text-blue-700 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/30"
+                        : "text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/30 dark:hover:bg-blue-900/20"
+                    }`}
+                  >
+                    Why QLINIC?
+                  </Link>
+
+                  <Link
+                    href="/why-qlinic-for-clinics"
+                    className={`relative px-4 py-2 text-sm font-medium rounded-full transition-all ${
+                      isActive("/why-qlinic-for-clinics")
+                        ? "text-blue-700 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/30"
+                        : "text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/30 dark:hover:bg-blue-900/20"
+                    }`}
+                  >
+                    For Clinics
+                  </Link>
+
+                  <Link
+                    href="/why-qlinic-for-patients"
+                    className={`relative px-4 py-2 text-sm font-medium rounded-full transition-all ${
+                      isActive("/why-qlinic-for-patients")
+                        ? "text-blue-700 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/30"
+                        : "text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/30 dark:hover:bg-blue-900/20"
+                    }`}
+                  >
+                    For Patients
+                  </Link>
                 </div>
 
                 {/* Right section */}
@@ -565,12 +556,14 @@ const Navbar = () => {
                         >
                           <button
                             onClick={() => setShowLocationModal(true)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/30 dark:bg-blue-900/20 rounded-full text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors whitespace-nowrap"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/30 dark:bg-blue-900/20 rounded-full text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors whitespace-nowrap"
                           >
-                            <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                            <span className="truncate max-w-[100px]">
-                              {locationName || "Location"}
-                            </span>
+                            <div className="flex items-center gap-1">
+                              <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                              <span className="truncate max-w-[100px]">
+                                {locationName || "Location"}
+                              </span>
+                            </div>
                           </button>
                         </motion.div>
                       )}
@@ -1082,58 +1075,53 @@ const Navbar = () => {
                       Home
                     </Link>
 
-                    {/* About Submenu - Mobile */}
-                    <div className="space-y-1">
-                      <button
-                        onClick={() => setIsAboutMenuOpen(!isAboutMenuOpen)}
-                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                          isAboutActive()
-                            ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
-                            : "text-gray-700 dark:text-gray-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/20"
-                        }`}
-                      >
-                        <span>About</span>
-                        <ChevronDown
-                          className={`w-4 h-4 transition-transform ${
-                            isAboutMenuOpen ? "rotate-180" : ""
-                          }`}
-                        />
-                      </button>
+                    <Link
+                      href="/aboutus"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                        isActive("/aboutus")
+                          ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                          : "text-gray-700 dark:text-gray-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/20"
+                      }`}
+                    >
+                      About
+                    </Link>
 
-                      <AnimatePresence>
-                        {isAboutMenuOpen && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="ml-4 space-y-1 overflow-hidden"
-                          >
-                            {aboutMegaMenu.sections.map((section) => (
-                              <div key={section.title} className="space-y-1">
-                                <p className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
-                                  {section.title}
-                                </p>
-                                {section.items.map((item) => (
-                                  <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    onClick={() => {
-                                      setIsMobileMenuOpen(false);
-                                      setIsAboutMenuOpen(false);
-                                    }}
-                                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-all"
-                                  >
-                                    <item.icon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                                    {item.label}
-                                  </Link>
-                                ))}
-                              </div>
-                            ))}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
+                    <Link
+                      href="/why-qlinic"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                        isActive("/why-qlinic")
+                          ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                          : "text-gray-700 dark:text-gray-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/20"
+                      }`}
+                    >
+                      Why QLINIC
+                    </Link>
+
+                    <Link
+                      href="/why-qlinic-for-clinics"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                        isActive("/why-qlinic-for-clinics")
+                          ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                          : "text-gray-700 dark:text-gray-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/20"
+                      }`}
+                    >
+                      For Clinics
+                    </Link>
+
+                    <Link
+                      href="/why-qlinic-for-patients"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                        isActive("/why-qlinic-for-patients")
+                          ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                          : "text-gray-700 dark:text-gray-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/20"
+                      }`}
+                    >
+                      For Patients
+                    </Link>
 
                     {/* Dashboard Link - Mobile (if logged in) */}
                     {user && (
