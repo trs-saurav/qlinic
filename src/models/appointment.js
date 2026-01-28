@@ -11,7 +11,7 @@ const appointmentSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: ['User', 'FamilyMember'],
-    default: 'User' // ✅ ADDED DEFAULT
+    default: 'User'
   },
   doctorId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -22,6 +22,12 @@ const appointmentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Hospital',
     required: true
+  },
+  // ✅ NEW: Link to the specific affiliation (Crucial for schedule validation)
+  affiliationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'HospitalAffiliation',
+    required: false 
   },
   tokenNumber: {
     type: Number,
@@ -35,6 +41,10 @@ const appointmentSchema = new mongoose.Schema({
     type: Date,
     required: true
   },
+  // ✅ NEW: Store the readable slot string (e.g., "10:15")
+  timeSlot: {
+    type: String,
+  },
   status: {
     type: String,
     enum: ['BOOKED', 'CHECKED_IN', 'IN_CONSULTATION', 'COMPLETED', 'SKIPPED', 'CANCELLED'],
@@ -42,13 +52,20 @@ const appointmentSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['REGULAR', 'EMERGENCY', 'FOLLOW_UP'],
+    // ✅ UPDATED: Added 'WALK_IN' to supported types
+    enum: ['REGULAR', 'EMERGENCY', 'FOLLOW_UP', 'WALK_IN', 'SCHEDULED'],
     default: 'REGULAR'
   },
   paymentStatus: {
     type: String,
     enum: ['PENDING', 'PAID', 'REFUNDED'],
     default: 'PENDING'
+  },
+  // ✅ NEW: Store how the payment was made
+  paymentMethod: {
+    type: String,
+    enum: ['cash', 'upi', 'card', 'online', null],
+    default: null
   },
   vitals: {
     temperature: String,
@@ -97,6 +114,8 @@ appointmentSchema.index({ patientId: 1 })
 appointmentSchema.index({ doctorId: 1, scheduledTime: 1 })
 appointmentSchema.index({ status: 1 })
 appointmentSchema.index({ tokenNumber: 1, hospitalId: 1 })
+// ✅ NEW: Index for finding appointments by affiliation
+appointmentSchema.index({ affiliationId: 1, scheduledTime: 1 })
 
 const Appointment = mongoose.models.Appointment || mongoose.model('Appointment', appointmentSchema)
 

@@ -7,10 +7,11 @@ const userSchema = new mongoose.Schema(
     // ============ AUTH FIELDS ============
     email: { 
       type: String, 
-      required: true, 
+      required: false, // ✅ UPDATED: Allows walk-ins without email
       unique: true, 
       lowercase: true, 
-      trim: true 
+      trim: true,
+      sparse: true // ✅ UPDATED: Allows multiple nulls (critical for optional unique fields)
     },
     emailVerified: { type: Date, default: null },
     
@@ -18,6 +19,8 @@ const userSchema = new mongoose.Schema(
       type: String,
       select: false,
       required: function() {
+        // ✅ UPDATED: Not required if created via walk-in or OAuth
+        if (this.isWalkInCreated) return false;
         return !this.oauthProviders || this.oauthProviders.length === 0
       }
     },
@@ -34,14 +37,22 @@ const userSchema = new mongoose.Schema(
     // ============ IDENTITY ============
     firstName: { type: String, trim: true, default: '' },
     lastName: { type: String, trim: true, default: '' },
-    phoneNumber: { 
-  type: String, 
-  unique: true,     // ← Enforces unique
-  sparse: true,     // ← Should allow multiple nulls
-  index: true 
-},
-
     
+    // ✅ ADDED: Essential for walk-in patient identification
+    gender: { 
+      type: String, 
+      enum: ['male', 'female', 'other'], 
+      default: 'other' 
+    },
+    dateOfBirth: { type: Date }, 
+
+    phoneNumber: { 
+      type: String, 
+      unique: true,     
+      sparse: true,     
+      index: true 
+    },
+
     role: {
       type: String,
       enum: ['user', 'doctor', 'hospital_admin', 'admin', 'sub_admin'],
@@ -54,7 +65,7 @@ const userSchema = new mongoose.Schema(
     // ============ ACCOUNT STATUS ============
     isActive: { type: Boolean, default: true },
     isProfileComplete: { type: Boolean, default: false },
-    isWalkInCreated: { type: Boolean, default: false }, // Marks reception-created accounts
+    isWalkInCreated: { type: Boolean, default: false }, // ✅ Marks reception-created accounts
     requiresPasswordChange: { type: Boolean, default: false }, // Forces password reset on first login
     
     lastLogin: { type: Date, default: Date.now },
@@ -116,7 +127,8 @@ userSchema.virtual('shortId').get(function () {
 
 userSchema.virtual('fullName').get(function () {
   const name = `${this.firstName || ''} ${this.lastName || ''}`.trim()
-  return name || this.email.split('@')[0]
+  // Fallback to phone if email is missing (common for walk-ins)
+  return name || this.email?.split('@')[0] || this.phoneNumber || 'Unknown User'
 })
 
 // ============ METHODS ============

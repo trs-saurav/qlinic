@@ -276,9 +276,9 @@ const Navbar = () => {
   const productsMenu = {
       title: "Products",
       items: [
-          { label: "For Patients", href: "/user", icon: Heart, description: "Book appointments & manage health" },
-          { label: "For Hospitals", href: "/hospital", icon: Building2, description: "Streamline operations & queue" },
-          { label: "For Doctors", href: "/doctor", icon: Stethoscope, description: "Manage patients & schedule" },
+          { label: "For Patients", href: "/for-patients", icon: Heart, description: "Book appointments & manage health" },
+          { label: "For Hospitals", href: "/for-clinics", icon: Building2, description: "Streamline operations & queue" },
+          { label: "For Doctors", href: "/for-doctors", icon: Stethoscope, description: "Manage patients & schedule" },
       ]
   };
 

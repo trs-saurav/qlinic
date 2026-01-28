@@ -1,129 +1,179 @@
 import { NextResponse } from 'next/server'
-import connectDB from '@/config/db'
+import  connectDB  from '@/config/db'
 import User from '@/models/user'
 import Appointment from '@/models/appointment'
+import HospitalAffiliation from '@/models/hospitalAffiliation'
 import { auth } from '@/auth'
-import bcrypt from 'bcryptjs'
+import { startOfDay, endOfDay, format, isSameDay } from 'date-fns'
 
 export async function POST(req) {
   try {
     await connectDB()
     const session = await auth()
 
-    if (!session || session.user.role !== 'HOSPITAL_ADMIN') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 1. Authorization Check
+    // Allow Hospital Admins OR Doctors to create walk-ins
+    // Also allow 'user' if you plan to support self-booking here later, but for now stick to staff
+    if (!session || !['hospital_admin', 'doctor', 'staff'].includes(session.user.role)) {
+      return NextResponse.json({ error: 'Unauthorized access' }, { status: 401 })
     }
 
-    // Get hospital admin profile
-    const hospitalAdmin = await User.findOne({ _id: session.user._id, role: 'HOSPITAL_ADMIN' })
-      .populate('hospitalAdminProfile')
+    // 2. Parse Request
+    const body = await req.json()
+    const { 
+      patientId,      // If existing patient selected
+      patientData,    // If new patient being created
+      doctorId, 
+      appointmentType, // 'WALK_IN' or 'SCHEDULED'
+      date,            // YYYY-MM-DD (for future)
+      timeSlot,        // "HH:mm" (for future)
+      isEmergency,
+      paymentStatus,
+      paymentMethod
+    } = body
 
-    if (!hospitalAdmin?.hospitalAdminProfile) {
-      return NextResponse.json({ error: 'Hospital admin profile not found' }, { status: 404 })
-    }
+    if (!doctorId) return NextResponse.json({ error: 'Doctor ID required' }, { status: 400 })
 
-    const hospitalId = hospitalAdmin.hospitalAdminProfile._id
+    // 3. Resolve Patient (Find or Create)
+    let finalPatientId = patientId
+    let generatedCredentials = null
 
-    // Parse request body
-    const { patientData, doctorId, isEmergency } = await req.json()
+    if (!finalPatientId && patientData) {
+      // Robust Check: Search by Phone OR Email
+      const phoneInput = patientData.phone
+      const emailInput = patientData.email && patientData.email.trim() !== '' 
+          ? patientData.email.toLowerCase() 
+          : `${phoneInput}@qlinic.app`
 
-    console.log('📋 Walk-in Request:', { patientData, doctorId, isEmergency })
-
-    // Validate required fields
-    if (!patientData?.firstName || !patientData?.lastName || !patientData?.phoneNumber) {
-      return NextResponse.json({ 
-        error: 'Missing required patient data' 
-      }, { status: 400 })
-    }
-
-    if (!doctorId) {
-      return NextResponse.json({ error: 'Doctor ID required' }, { status: 400 })
-    }
-
-    // 1. Check if patient exists by phone number
-    let patient = await User.findOne({ 
-      phoneNumber: patientData.phoneNumber,
-      role: 'PATIENT'
-    })
-
-    let newAccountCreated = false
-    let generatedPassword = null
-
-    if (!patient) {
-      // Generate random password for new patient
-      generatedPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8)
-      const hashedPassword = await bcrypt.hash(generatedPassword, 10)
-
-      // Create new patient account
-      patient = new User({
-        firstName: patientData.firstName,
-        lastName: patientData.lastName,
-        phoneNumber: patientData.phoneNumber,
-        email: patientData.email || `${patientData.phoneNumber}@qlinic.temp`,
-        password: hashedPassword, // ✅ Required field
-        role: 'PATIENT',
-        age: patientData.age,
-        gender: patientData.gender
+      const existingUser = await User.findOne({
+        $or: [
+          { phoneNumber: phoneInput },
+          { email: emailInput }
+        ]
       })
-
-      await patient.save()
-      newAccountCreated = true
       
-      console.log('✅ New patient created:', patient._id)
-    } else {
-      console.log('✅ Existing patient found:', patient._id)
+      if (existingUser) {
+        finalPatientId = existingUser._id
+      } else {
+        // Create Shadow User
+        const randomPass = Math.random().toString(36).slice(-8)
+        
+        const newUser = await User.create({
+          firstName: patientData.firstName,
+          lastName: patientData.lastName,
+          phoneNumber: patientData.phone,
+          email: emailInput,
+          role: 'user',
+          isWalkInCreated: true, // Marks as shadow user
+          password: randomPass, 
+          gender: patientData.gender || 'other',
+          age: patientData.age
+        })
+        
+        finalPatientId = newUser._id
+        generatedCredentials = { password: randomPass }
+        console.log('✅ Created shadow user:', newUser._id)
+      }
     }
 
-    // 2. Generate token number for today
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
+    if (!finalPatientId) {
+      return NextResponse.json({ error: 'Patient identification failed' }, { status: 400 })
+    }
 
-    const todayAppointments = await Appointment.countDocuments({
-      hospitalId,
+    // 4. Resolve Hospital & Affiliation
+    // Link to the specific doctor's affiliation with the hospital
+    const affiliation = await HospitalAffiliation.findOne({
+      doctorId: doctorId,
+      status: 'APPROVED'
+    }).populate('hospitalId')
+
+    if (!affiliation) {
+      return NextResponse.json({ error: 'Doctor is not affiliated with this hospital' }, { status: 400 })
+    }
+
+    const hospitalId = affiliation.hospitalId._id
+
+    // 5. Determine Timing, Status & Tokens
+    let scheduledTime = new Date()
+    let status = 'CHECKED_IN' // Default for immediate
+    let finalTokenNumber = null
+    let finalType = isEmergency ? 'EMERGENCY' : (appointmentType || 'WALK_IN')
+
+    // Handle Mongoose Enum for 'type' (Map SCHEDULED -> REGULAR if needed, or keep SCHEDULED if supported)
+    // Assuming your Schema supports: ['WALK_IN', 'EMERGENCY', 'REGULAR', 'FOLLOW_UP']
+    if (finalType === 'SCHEDULED') finalType = 'REGULAR'
+
+    const isFutureBooking = appointmentType === 'SCHEDULED' && date && timeSlot
+
+    if (isFutureBooking) {
+      // --- FUTURE BOOKING LOGIC ---
+      scheduledTime = new Date(`${date}T${timeSlot}:00`)
+      
+      // Check if the "Future" date is actually TODAY
+      if (isSameDay(scheduledTime, new Date())) {
+         // It's today, so treat as a Check-In (with token)
+         status = 'CHECKED_IN'
+         finalType = 'WALK_IN' // Or keep as REGULAR/SCHEDULED based on preference
+      } else {
+         // It is truly in the future
+         status = 'BOOKED'
+         finalTokenNumber = null // No token for future dates yet
+      }
+
+    } else {
+      // --- IMMEDIATE WALK-IN LOGIC ---
+      scheduledTime = new Date()
+      status = 'CHECKED_IN'
+    }
+
+    // Generate Token ONLY if checking in now (Today)
+    if (status === 'CHECKED_IN') {
+      const start = startOfDay(new Date())
+      const end = endOfDay(new Date())
+      
+      const lastToken = await Appointment.findOne({
+        hospitalId,
+        doctorId,
+        scheduledTime: { $gte: start, $lte: end },
+        tokenNumber: { $exists: true, $ne: null }
+      }).sort({ tokenNumber: -1 })
+
+      finalTokenNumber = (lastToken?.tokenNumber || 0) + 1
+    }
+
+    // 6. Create Appointment
+    const newAppointment = await Appointment.create({
+      patientId: finalPatientId,
+      patientModel: 'User',
       doctorId,
-      scheduledTime: { $gte: today, $lt: tomorrow }
+      hospitalId,
+      affiliationId: affiliation._id,
+      scheduledTime,
+      timeSlot: timeSlot || format(scheduledTime, 'HH:mm'),
+      type: finalType,
+      status, // 'BOOKED' for future, 'CHECKED_IN' for today
+      tokenNumber: finalTokenNumber,
+      paymentStatus: paymentStatus || 'PENDING',
+      paymentMethod: paymentMethod || null,
+      reason: isEmergency ? 'Emergency Walk-in' : 'Reception Booking',
+      checkInTime: status === 'CHECKED_IN' ? new Date() : null,
+      synced: false
     })
 
-    const tokenNumber = todayAppointments + 1
+    console.log(`✅ Appointment Created: ${newAppointment._id} | Status: ${status} | Token: ${finalTokenNumber}`)
 
-    // 3. Create appointment
-    const appointment = new Appointment({
-      patientId: patient._id,
-      doctorId,
-      hospitalId,
-      scheduledTime: new Date(), // Current time for walk-in
-      type: 'WALK_IN',
-      status: 'BOOKED',
-      tokenNumber,
-      isEmergency: isEmergency || false,
-      bookingSource: 'HOSPITAL_RECEPTION',
-      paymentStatus: 'PENDING'
-    })
-
-    await appointment.save()
-
-    console.log('✅ Walk-in appointment created:', appointment._id, 'Token:', tokenNumber)
-
-    // 4. Return success with credentials if new account
+    // 7. Return Response
     return NextResponse.json({
       success: true,
-      tokenNumber,
-      appointmentId: appointment._id,
-      patientId: patient._id,
-      newAccount: newAccountCreated,
-      password: newAccountCreated ? generatedPassword : undefined,
-      message: newAccountCreated 
-        ? 'Patient registered and appointment created' 
-        : 'Appointment created for existing patient'
+      appointment: newAppointment,
+      generatedCredentials, // Only present if new account created
+      tokenNumber: finalTokenNumber
     })
 
   } catch (error) {
-    console.error('❌ Walk-in appointment error:', error)
+    console.error('❌ Appointment Creation Error:', error)
     return NextResponse.json({ 
-      error: error.message || 'Failed to create walk-in appointment',
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: error.message || 'Failed to create appointment' 
     }, { status: 500 })
   }
 }

@@ -443,17 +443,20 @@ export default function ReceptionPage() {
       </div>
 
       {/* Walk-In Modal */}
+           {/* Walk-In Modal */}
       <WalkInModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)}
         doctors={doctors}
         defaultDoctorId={selectedDoctorId} 
+        hospitalId={hospital?._id} // ✅ PASS HOSPITAL ID HERE
         onSuccess={() => { 
           refreshAll()
           toast.success('Walk-in appointment created')
           setIsModalOpen(false)
         }}
       />
+
     </div>
   )
 }
