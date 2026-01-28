@@ -1,1384 +1,682 @@
-"use client"
-import React, { useState, useEffect, useLayoutEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { motion, AnimatePresence, useInView } from 'framer-motion';
-import Image from 'next/image'
-import { 
-  ArrowRight, Zap, Shield, Star, TrendingUp, CheckCircle, 
-  Sparkles, Activity, Heart, Stethoscope, ChevronRight, MapPin,
-  Building2, Navigation, Clock, Phone, Award, Users, Calendar,
-  Loader2, Search, TrendingDown, Lock, Pill, TestTube, User
-} from 'lucide-react'
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import toast from 'react-hot-toast'
+"use client";
 
-// Marquee Component
-const Marquee = ({ children, reverse, duration = 20, pauseOnHover = true, className = '' }) => {
-  const containerRef = React.useRef(null);
-  const isInView = useInView(containerRef, { once: false, margin: '-100px' });
-  
-  return (
-    <div ref={containerRef} className={`flex flex-nowrap overflow-hidden ${className} hidden sm:flex`}>
-      <motion.div
-        className="flex flex-nowrap gap-8" // Increased gap for bigger spacing
-        animate={isInView ? {
-          x: [reverse ? 100 : -100, reverse ? -100 : 100],
-        } : {
-          x: reverse ? 100 : -100
-        }}
-        transition={{
-          duration: duration,
-          ease: "linear",
-          repeat: isInView ? Infinity : 0,
-          repeatType: "loop",
-        }}
-        style={{ width: 'max-content' }}
-        initial={{
-          x: reverse ? 100 : -100
-        }}
-        whileHover={{
-          animationPlayState: pauseOnHover ? "paused" : "running"
-        }}
-      >
-        {children}
-        {/* Removed duplicate children */}
-      </motion.div>
-    </div>
-  );
-};
+import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import {
+  ArrowRight,
+  Sparkles,
+  Shield,
+  Lock,
+  Zap,
+  Activity,
+  Search,
+  Stethoscope,
+  Calendar,
+  Heart,
+  Users,
+  MapPin,
+  CheckCircle,
+} from "lucide-react";
 
-// Vertical Marquee Component for Mobile
-const VerticalMarquee = ({ children, reverse, duration = 20, pauseOnHover = true, className = '' }) => {
-  const containerRef = React.useRef(null);
-  const isInView = useInView(containerRef, { once: false, margin: '-100px' });
-  
-  return (
-    <div ref={containerRef} className={`flex flex-col overflow-hidden ${className} sm:hidden`}>
-      <motion.div
-        className="flex flex-col gap-4" // Smaller gap for mobile
-        animate={isInView ? {
-          y: [reverse ? 100 : -100, reverse ? -100 : 100],
-        } : {
-          y: reverse ? 100 : -100
-        }}
-        transition={{
-          duration: duration,
-          ease: "linear",
-          repeat: isInView ? Infinity : 0,
-          repeatType: "loop",
-        }}
-        style={{ height: 'max-content' }}
-        initial={{
-          y: reverse ? 100 : -100
-        }}
-        whileHover={{
-          animationPlayState: pauseOnHover ? "paused" : "running"
-        }}
-      >
-        {children}
-      </motion.div>
-    </div>
-  );
-};
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
-const HomePage = () => {
-  const router = useRouter()
-  const [hydrated, setHydrated] = useState(false)
-  const [stats, setStats] = useState(null)
-  const [topDoctors, setTopDoctors] = useState([])
-  const [featuredHospitals, setFeaturedHospitals] = useState([])
-  const [nearbyHospitals, setNearbyHospitals] = useState([])
-  const [testimonials, setTestimonials] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [locationLoading, setLocationLoading] = useState(false)
-  const [userLocation, setUserLocation] = useState(null)
-  const [locationName, setLocationName] = useState('')
+export default function HomePage() {
+  const router = useRouter();
 
-  // Sample doctors fallback for the homepage carousel
-  const sampleDoctors = [
-    {
-      _id: 'doc-1',
-      firstName: 'Ananya',
-      lastName: 'Roy',
-      profileImage: 'https://images.unsplash.com/photo-1550831107-1553da8c8464?w=600&h=600&fit=crop&crop=face',
-      doctorProfile: { specialization: 'Cardiologist', rating: 4.9, reviews: 128, experience: 18, patients: 2000 },
-      hospitalName: 'Apollo Hospitals',
-      location: 'MG Road, Bengaluru'
-    },
-    {
-      _id: 'doc-2',
-      firstName: 'Rohan',
-      lastName: 'Mehta',
-      profileImage: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&h=600&fit=crop&crop=face',
-      doctorProfile: { specialization: 'Pediatrician', rating: 4.8, reviews: 98, experience: 12, patients: 1500 },
-      hospitalName: 'Cloud Nine Clinic',
-      location: 'Indiranagar, Bengaluru'
-    },
-    {
-      _id: 'doc-3',
-      firstName: 'Sneha',
-      lastName: 'Gupta',
-      profileImage: 'https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=600&h=600&fit=crop&crop=face',
-      doctorProfile: { specialization: 'Dermatologist', rating: 4.7, reviews: 76, experience: 10, patients: 900 },
-      hospitalName: 'GreenCare Hospital',
-      location: 'Koramangala, Bengaluru'
-    },
-    {
-      _id: 'doc-4',
-      firstName: 'Arjun',
-      lastName: 'Kumar',
-      profileImage: 'https://images.unsplash.com/photo-1595152772835-219674b2a8a6?w=600&h=600&fit=crop&crop=face',
-      doctorProfile: { specialization: 'Orthopedist', rating: 4.8, reviews: 110, experience: 15, patients: 1700 },
-      hospitalName: 'Swasthya Center',
-      location: 'Whitefield, Bengaluru'
-    }
-  ]
+  const [hydrated, setHydrated] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const displayDoctors = (topDoctors && topDoctors.length > 0) ? topDoctors : sampleDoctors
-  const carouselRef = React.useRef(null)
-  const rafRef = React.useRef(null)
-  const [isPaused, setIsPaused] = useState(false)
-  const [activeDot, setActiveDot] = useState(0)
-
-  // Auto-scroll loop: gentle continuous scroll that resets when reaching the end
-  useEffect(() => {
-    const el = carouselRef.current
-    if (!el) return
-
-    const speed = 0.6 // pixels per frame
-    let running = true
-
-    const step = () => {
-      if (!running) return
-      if (!isPaused) {
-        el.scrollLeft += speed
-        if (el.scrollLeft >= el.scrollWidth - el.clientWidth - 1) {
-          el.scrollLeft = 0
-        }
-        // update active dot based on nearest card
-        const card = el.querySelector('[data-doctor-card]')
-        if (card) {
-          const cardW = card.clientWidth + parseInt(getComputedStyle(card).marginRight || 0)
-          setActiveDot(Math.round(el.scrollLeft / cardW) % displayDoctors.length)
-        }
-      }
-      rafRef.current = requestAnimationFrame(step)
-    }
-
-    rafRef.current = requestAnimationFrame(step)
-    return () => {
-      running = false
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    }
-  }, [isPaused, displayDoctors.length])
-
-
-  useEffect(() => {
-    fetchHomeData()
-    loadSavedLocation()
-  }, [])
+  const [stats, setStats] = useState(null);
+  const [testimonials, setTestimonials] = useState([]);
 
   useLayoutEffect(() => {
-    setHydrated(true)
-  }, [])
+    setHydrated(true);
+  }, []);
 
+  useEffect(() => {
+    const fetchHomeData = async () => {
+      try {
+        const res = await fetch("/api/home/stats");
+        if (!res.ok) return;
 
-  const loadSavedLocation = () => {
-    const savedLocation = localStorage.getItem('userLocation')
-    if (savedLocation) {
-      const location = JSON.parse(savedLocation)
-      setUserLocation(location)
-      setLocationName(location.name)
-      fetchNearbyHospitals(location)
-    }
-  }
-
-
-  const fetchHomeData = async () => {
-    try {
-      const statsRes = await fetch('/api/home/stats')
-
-      if (statsRes.ok) {
-        const statsData = await statsRes.json()
-        if (statsData.success) {
-          setStats(statsData.stats)
-          setFeaturedHospitals(statsData.featuredHospitals || [])
-          setTestimonials(statsData.testimonials || [])
-          setTopDoctors(statsData.topDoctors || [])
+        const data = await res.json();
+        if (data?.success) {
+          setStats(data?.stats || null);
+          setTestimonials(Array.isArray(data?.testimonials) ? data.testimonials : []);
         }
+      } catch {
+        // Keep UI stable with fallbacks
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching home data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+    };
 
+    fetchHomeData();
+  }, []);
 
-  const getUserLocation = () => {
-    setLocationLoading(true)
-
-    if (!navigator.geolocation) {
-      toast.error('Geolocation not supported')
-      setLocationLoading(false)
-      return
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords
-
-        try {
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
-            { credentials: "omit" }
-          )
-          const data = await response.json()
-          const city = data.address?.city || data.address?.town || 'Your Location'
-          const state = data.address?.state || ''
-          const name = `${city}${state ? ', ' + state : ''}`
-
-          const location = {
-            latitude,
-            longitude,
-            name,
-            timestamp: new Date().toISOString(),
-          }
-
-          setUserLocation(location)
-          setLocationName(name)
-          localStorage.setItem('userLocation', JSON.stringify(location))
-          toast.success(`Location detected: ${name}`)
-
-          fetchNearbyHospitals(location)
-        } catch (err) {
-          console.error('Geocoding error:', err)
-          const location = {
-            latitude,
-            longitude,
-            name: 'Your Location',
-            timestamp: new Date().toISOString(),
-          }
-          setUserLocation(location)
-          setLocationName('Your Location')
-          localStorage.setItem('userLocation', JSON.stringify(location))
-          fetchNearbyHospitals(location)
-        }
-
-        setLocationLoading(false)
+  const fallbackTestimonials = useMemo(
+    () => [
+      {
+        quote: "Booking an appointment took less than a minute. Clean UI and fast flow.",
+        name: "Priya Sharma",
+        role: "Patient",
+        location: "Delhi",
+        avatar: "PS",
       },
-      (error) => {
-        console.error('Location error:', error)
-        toast.error('Unable to get location')
-        setLocationLoading(false)
+      {
+        quote: "Scheduling and patient queue feels organized. It saves time daily.",
+        name: "Dr. Rajesh Kumar",
+        role: "Cardiologist",
+        location: "Mumbai",
+        avatar: "RK",
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
-    )
+      {
+        quote: "Simple, reliable, and easy to use for my whole family.",
+        name: "Amit Patel",
+        role: "Patient",
+        location: "Bengaluru",
+        avatar: "AP",
+      },
+    ],
+    []
+  );
+
+  const shownTestimonials = testimonials.length > 0 ? testimonials.slice(0, 3) : fallbackTestimonials;
+
+  const shownStats = useMemo(() => {
+    const p = stats?.totalPatients ?? 10000;
+    const d = stats?.totalDoctors ?? 250;
+    const c = stats?.totalCities ?? 50;
+    const s = stats?.satisfaction ?? 99;
+
+    const patientsLabel = p >= 1000 ? `${(p / 1000).toFixed(p >= 10000 ? 0 : 1)}K+` : `${p}+`;
+
+    return [
+      { icon: Users, label: "Patients", value: patientsLabel },
+      { icon: Stethoscope, label: "Doctors", value: `${d}+` },
+      { icon: MapPin, label: "Cities", value: `${c}+` },
+      { icon: Heart, label: "Satisfaction", value: `${s}%` },
+    ];
+  }, [stats]);
+
+  if (!hydrated) {
+    return <div className="min-h-screen bg-white dark:bg-gray-950" />;
   }
-
-
-  const fetchNearbyHospitals = async (location = userLocation) => {
-    if (!location) return
-
-    try {
-      const params = new URLSearchParams({
-        lat: location.latitude.toString(),
-        lng: location.longitude.toString(),
-        radius: '20',
-        limit: '6',
-      })
-
-      const response = await fetch(`/api/search/nearby?${params}`)
-      const data = await response.json()
-
-      if (data.success) {
-        setNearbyHospitals(data.results.hospitals || [])
-      }
-    } catch (error) {
-      console.error('Nearby search error:', error)
-    }
-  }
-
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-950" suppressHydrationWarning>
-
-      {/* Hero Section */}
-      <section className="relative qlinic-hero pt-24 sm:pt-32 pb-16 sm:pb-20 overflow-hidden">
-        {/* Animated Background */}
-        <div className="absolute inset-0 opacity-30">
+    <div className="min-h-screen bg-white dark:bg-gray-950">
+      {/* HERO - Full Screen */}
+      <section className="relative min-h-screen flex items-center overflow-hidden">
+        {/* Animated Background blobs */}
+        <div className="absolute inset-0 opacity-30 pointer-events-none">
           <motion.div
             animate={{ 
-              scale: [1, 1.2, 1],
-              rotate: [0, 90, 0]
+              scale: [1, 1.15, 1], 
+              rotate: [0, 90, 0],
+              x: [0, 40, 0]
             }}
-            transition={{ duration: 20, repeat: Infinity }}
-            className="absolute top-1/4 -left-48 w-96 h-96 bg-gradient-to-r from-blue-400 to-blue-400 rounded-full blur-3xl"
+            transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute top-10 sm:top-20 -left-32 sm:-left-56 w-[400px] sm:w-[600px] h-[400px] sm:h-[600px] bg-gradient-to-r from-blue-400 to-cyan-300 rounded-full blur-3xl"
           />
           <motion.div
             animate={{ 
-              scale: [1, 1.3, 1],
-              rotate: [0, -90, 0]
+              scale: [1, 1.25, 1], 
+              rotate: [0, -90, 0],
+              x: [0, -40, 0]
             }}
-            transition={{ duration: 25, repeat: Infinity }}
-            className="absolute bottom-1/4 -right-48 w-96 h-96 bg-gradient-to-r from-cyan-400 to-blue-400 rounded-full blur-3xl"
+            transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute bottom-10 sm:bottom-12 -right-32 sm:-right-56 w-[400px] sm:w-[600px] h-[400px] sm:h-[600px] bg-gradient-to-r from-cyan-400 to-violet-400 rounded-full blur-3xl"
           />
         </div>
 
-
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
           <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
             {/* Left Content */}
-            <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6 }}
-            >
-              {/* Badge */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-100 rounded-full mb-4 sm:mb-6"
-              >
-                <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600" />
-                <span className="text-xs sm:text-sm font-semibold text-blue-700">
-                  India's #1 Healthcare Platform
+          <motion.div initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
+              <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-100/80 dark:bg-blue-900/30 rounded-full mb-5">
+                <Sparkles className="w-4 h-4 text-blue-700 dark:text-blue-300" />
+                <span className="text-xs sm:text-sm font-semibold text-blue-800 dark:text-blue-200">
+                  QLINIC • Smarter healthcare booking
                 </span>
-              </motion.div>
+              </div>
 
-
-              <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 mb-4 sm:mb-6 leading-tight">
-                Your Health,
-                <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-600">
-                  Instantly Connected
+              <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 dark:text-white leading-tight">
+                Book care faster.
+                <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-500">
+                  Stay in control.
                 </span>
               </h1>
 
-
-              <p className="text-base sm:text-xl text-slate-600 mb-6 sm:mb-8 leading-relaxed">
-                Book appointments with top doctors, get instant consultations, and access your health records - all in one place.
+              <p className="mt-5 text-base sm:text-xl text-slate-600 dark:text-gray-300 leading-relaxed max-w-xl">
+                QLINIC helps patients find verified doctors, book appointments quickly, and manage care with a simple,
+                modern experience.
               </p>
 
-
-              {/* CTA Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => router.push('/sign-up')}
-                  className="btn-primary px-6 sm:px-8 py-3 sm:py-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-102 text-base sm:text-lg flex items-center justify-center gap-2"
+              <div className="mt-7 flex flex-col sm:flex-row gap-3 sm:gap-4">
+                <Button
+                  onClick={() => router.push("/sign-up")}
+                  className="rounded-2xl bg-blue-600 hover:bg-blue-700 text-white px-7 py-6 text-base sm:text-lg shadow-lg"
                 >
                   Get Started Free
-                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
-                </motion.button>
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </Button>
 
-
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => router.push('/aboutus')}
-                  className="px-6 sm:px-8 py-3 sm:py-4 rounded-2xl border-2 text-base sm:text-lg transition-all duration-200 transform hover:scale-102"
-                  style={{ borderColor: '#2563eb', color: 'var(--qlinic-text)' }}
+                <Button
+                  variant="outline"
+                  onClick={() => router.push("/aboutus")}
+                  className="rounded-2xl px-7 py-6 text-base sm:text-lg border-2 border-blue-600 text-blue-700 dark:text-blue-300 dark:border-blue-500"
                 >
                   Learn More
-                </motion.button>
+                </Button>
               </div>
 
-
-              {/* Trust Indicators */}
-              <div className="mt-8 sm:mt-12 flex flex-wrap items-center gap-4 sm:gap-8">
-                <div>
-                </div>
-              </div>
-            </motion.div>
-
-
-            {/* Right Content - AI Robot Video - No Container */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="relative hidden lg:block"
-            >
-              <div className="relative">
-                {/* AI Robot Video - No Container */}
-                <div className="flex justify-center items-center">
-                  <motion.video
-                    src="/qliniagent.webm"
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    animate={{
-                      y: [-5, 5, -5],
-                      scale: [1.05, 1.1, 1.05],
-                      rotate: [0, 2, -2, 0]
-                    }}
-                    transition={{
-                      duration: 8,
-                      repeat: Infinity,
-                      ease: "easeInOut"
-                    }}
-                    className="w-full h-auto max-h-[500px] object-contain drop-shadow-2xl"
-                    style={{ filter: 'drop-shadow(0 25px 25px rgba(37, 99, 235, 0.3))' }}
-                    aria-label="Friendly AI doctor assistant mascot for QLINIC healthcare platform"
-                  />
-                </div>
-
-                {/* Clean Solid Floating Stats */}
-                <motion.div
-                  initial={{ opacity: 0, x: 50 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.4 }}
-                  className="absolute -right-4 top-20 qlinic-card shadow-xl p-4 bg-white rounded-xl border border-slate-200"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)' }}>
-                      <Zap className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-600">Always Available</p>
-                      <p className="text-lg font-bold text-slate-900">24/7</p>
-                    </div>
-                  </div>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0, x: -50 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.6 }}
-                  className="absolute -left-4 bottom-20 qlinic-card shadow-xl p-4 bg-white rounded-xl border border-slate-200"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #22c55e, #0ea5e9)' }}>
-                      <Shield className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-600">AI Secured</p>
-                      <p className="text-sm font-bold text-slate-900">Safe</p>
-                    </div>
-                  </div>
-                </motion.div>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Badge className="bg-white/90 dark:bg-gray-900/60 text-slate-700 dark:text-gray-200 border border-slate-200 dark:border-gray-700 px-3 py-2">
+                  <Shield className="w-4 h-4 mr-2" />
+                  Secure by design
+                </Badge>
+                <Badge className="bg-white/90 dark:bg-gray-900/60 text-slate-700 dark:text-gray-200 border border-slate-200 dark:border-gray-700 px-3 py-2">
+                  <Zap className="w-4 h-4 mr-2" />
+                  Fast booking flow
+                </Badge>
+                <Badge className="bg-white/90 dark:bg-gray-900/60 text-slate-700 dark:text-gray-200 border border-slate-200 dark:border-gray-700 px-3 py-2">
+                  <Lock className="w-4 h-4 mr-2" />
+                  Privacy-first
+                </Badge>
               </div>
             </motion.div>
+
+           {/* Right: Robot with UPPER HAND extending outside */}
+{/* Right: Robot - Clean layered approach */}
+{/* Right: Robot - Clean layered approach */}
+<div className="order-1 lg:order-2 relative flex justify-center items-center min-h-[350px] sm:min-h-[450px] lg:min-h-[500px]">
+  {/* Pulsing background ring */}
+  <motion.div
+    animate={{ 
+      scale: [1, 1.15, 1],
+      opacity: [0.4, 0.2, 0.4]
+    }}
+    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+    className="absolute w-[280px] h-[280px] sm:w-[380px] sm:h-[380px] lg:w-[450px] lg:h-[450px] rounded-full bg-gradient-to-br from-blue-400/40 via-cyan-400/40 to-violet-400/40 blur-2xl"
+  />
+
+  {/* Main Robot Container */}
+  <motion.div
+    initial={{ opacity: 0, scale: 0.85 }}
+    animate={{ opacity: 1, scale: 1 }}
+    transition={{ duration: 1, delay: 0.3, ease: "easeOut" }}
+    className="relative w-[280px] h-[280px] sm:w-[340px] sm:h-[340px] lg:w-[400px] lg:h-[400px]"
+  >
+    {/* LAYER 1: Rotating gradient border (bottom) */}
+    <motion.div
+      animate={{ rotate: 360 }}
+      transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
+      className="absolute inset-0 rounded-full p-[6px] sm:p-[8px] z-0"
+      style={{
+        background: 'linear-gradient(135deg, #3b82f6 0%, #06b6d4 50%, #8b5cf6 100%)',
+        boxShadow: '0 20px 60px rgba(37, 99, 235, 0.4)'
+      }}
+    />
+    
+    {/* LAYER 2: Static white ring background */}
+    <div className="absolute inset-[6px] sm:inset-[8px] rounded-full bg-white/80 dark:bg-gray-900/50 backdrop-blur-sm z-10">
+      {/* Inner padding for border */}
+      <div className="absolute inset-[6px] sm:inset-[8px] rounded-full bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-gray-800 dark:to-gray-900 z-10" />
+    </div>
+ 
+{/* LAYER 3: Robot video (bigger + controlled bottom cut) */}
+<div className="absolute inset-0 z-20 overflow-visible">
+  {/* Bottom cut mask (clips ONLY the bottom part) */}
+  <div className="absolute inset-0 overflow-hidden rounded-full">
+    <video
+      src="/robot.webm"
+      autoPlay
+      loop
+      muted
+      playsInline
+      className="absolute"
+      style={{
+        // width: "165%",
+        height: "100%",
+        objectFit: "cover",
+        objectPosition: "center 42%",     // a bit higher focus than before
+        transform: "translateX(4%) translateY(10%)", // push slightly right + down
+        filter: "drop-shadow(0 8px 20px rgba(37, 99, 235, 0.22))",
+      }}
+      aria-label="Friendly AI doctor assistant mascot for QLINIC"
+    />
+  </div>
+
+  {/* Hand pass-through (top overlay area is NOT clipped by circle) */}
+  <div className="absolute inset-0 pointer-events-none">
+    <video
+      src="/robot.webm"
+      autoPlay
+      loop
+      muted
+      playsInline
+      className="absolute"
+      style={{
+        // width: "165%",
+        height: "100%",
+        objectFit: "cover",
+        objectPosition: "center 42%",
+        transform: "translateX(4%) translateY(10%)",
+        // show only the left-top hand area so it can appear outside cleanly
+        clipPath: "polygon(0% 0%, 52% 0%, 52% 55%, 0% 55%)",
+        filter: "drop-shadow(0 10px 25px rgba(37, 99, 235, 0.28))",
+      }}
+      aria-hidden="true"
+    />
+  </div>
+</div>
+
+{/* LAYER 4: Circular border mask on top (crisp edge) */}
+<div className="absolute inset-[12px] sm:inset-[16px] rounded-full border-4 border-white dark:border-white/20 shadow-2xl z-15 pointer-events-none" />
+
+
+    {/* AI Assistant Badge */}
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 1.2, duration: 0.8 }}
+      className="absolute -bottom-4 sm:-bottom-5 left-1/2 -translate-x-1/2 z-40"
+    >
+      <motion.div
+        whileHover={{ scale: 1.1 }}
+        className="px-3 sm:px-5 py-1.5 sm:py-2.5 rounded-full bg-white dark:bg-gray-900 border-2 border-blue-500 dark:border-blue-400 shadow-xl"
+      >
+        <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-gray-100">AI Assistant</span>
+      </motion.div>
+    </motion.div>
+
+    {/* Floating stat card - Right (24/7) */}
+    <motion.div
+      initial={{ opacity: 0, x: 40 }}
+      animate={{ 
+        opacity: 1, 
+        x: 0,
+        y: [0, -10, 0]
+      }}
+      transition={{ 
+        opacity: { delay: 1.3, duration: 0.8 },
+        x: { delay: 1.3, duration: 0.8 },
+        y: { duration: 3, repeat: Infinity, ease: "easeInOut" }
+      }}
+      whileHover={{ scale: 1.08 }}
+      className="hidden sm:block absolute -right-2 lg:-right-6 top-16 lg:top-20 bg-white dark:bg-gray-900 rounded-xl sm:rounded-2xl shadow-2xl p-2.5 sm:p-4 border-2 border-blue-100 dark:border-blue-900/50 z-40"
+    >
+      <div className="flex items-center gap-2 sm:gap-3">
+        <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+          <Zap className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
+        </div>
+        <div>
+          <p className="text-[10px] sm:text-xs text-slate-600 dark:text-gray-400 font-medium">Available</p>
+          <p className="text-base sm:text-xl font-black text-slate-900 dark:text-white">24/7</p>
+        </div>
+      </div>
+    </motion.div>
+
+    {/* Floating stat card - Left (Secure) */}
+    <motion.div
+      initial={{ opacity: 0, x: -40 }}
+      animate={{ 
+        opacity: 1, 
+        x: 0,
+        y: [0, -12, 0]
+      }}
+      transition={{ 
+        opacity: { delay: 1.5, duration: 0.8 },
+        x: { delay: 1.5, duration: 0.8 },
+        y: { duration: 3.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }
+      }}
+      whileHover={{ scale: 1.08 }}
+      className="hidden sm:block absolute -left-2 lg:-left-6 bottom-20 lg:bottom-24 bg-white dark:bg-gray-900 rounded-xl sm:rounded-2xl shadow-2xl p-2.5 sm:p-4 border-2 border-emerald-100 dark:border-emerald-900/50 z-40"
+    >
+      <div className="flex items-center gap-2 sm:gap-3">
+        <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
+          <Shield className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
+        </div>
+        <div>
+          <p className="text-[10px] sm:text-xs text-slate-600 dark:text-gray-400 font-medium">Secure</p>
+          <p className="text-base sm:text-xl font-black text-slate-900 dark:text-white">100%</p>
+        </div>
+      </div>
+    </motion.div>
+
+    {/* Floating particles */}
+    {[...Array(5)].map((_, i) => (
+      <motion.div
+        key={i}
+        animate={{
+          y: [0, -25, 0],
+          x: [0, Math.random() * 15 - 7.5, 0],
+          opacity: [0.2, 0.6, 0.2],
+          scale: [0.8, 1.2, 0.8]
+        }}
+        transition={{
+          duration: 2.5 + i * 0.5,
+          repeat: Infinity,
+          ease: "easeInOut",
+          delay: i * 0.4
+        }}
+        className="hidden lg:block absolute w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-blue-400/60 z-35"
+        style={{
+          top: `${15 + i * 12}%`,
+          left: `${8 + i * 18}%`
+        }}
+      />
+    ))}
+  </motion.div>
+</div>
+
+
+
+
+
+
           </div>
         </div>
       </section>
 
-
-      {/* Quick Services */}
-      <section className="py-12 sm:py-16 bg-white">
+      {/* QUICK ACTIONS */}
+      <section className="py-12 sm:py-16 lg:py-20 bg-white dark:bg-gray-950">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} 
+            whileInView={{ opacity: 1, y: 0 }} 
             viewport={{ once: true }}
-            className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 mb-6 sm:mb-8"
+            transition={{ duration: 0.6 }}
           >
-            What are you looking for?
-          </motion.h2>
-
-          <div className="relative overflow-hidden py-4">
-            <div className="flex flex-nowrap gap-4">
-              <div className="flex justify-center w-full">
-                <div className="flex justify-center w-full">
-                  <div className="relative w-full max-w-4xl overflow-hidden">
-                    <div className="hidden sm:block">
-                      <Marquee pauseOnHover={true} duration={5}>
-                        {[
-                          { icon: '🩺', title: 'Find Doctors', subtitle: '500+ specialists', color: 'blue' },
-                          { icon: '🏥', title: 'Hospitals', subtitle: 'Verified centers', color: 'green' },
-                          { icon: '💊', title: 'Medicines', subtitle: 'Order online', color: 'blue' },
-                          { icon: '🩹', title: 'Lab Tests', subtitle: 'At home', color: 'green' }
-                        ].map((service, idx) => (
-                          <motion.button
-                            key={idx}
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => {
-                              if(service.link) {
-                                router.push(service.link);
-                              } else {
-                                // Handle default routing for services
-                                if(service.title === 'Find Doctors') {
-                                  router.push('/user/doctors');
-                                } else if(service.title === 'Hospitals') {
-                                  router.push('/user/hospitals');
-                                } else if(service.title === 'Medicines') {
-                                  router.push('/user/medicines');
-                                } else if(service.title === 'Lab Tests') {
-                                  router.push('/user/lab-tests');
-                                }
-                              }
-                            }}
-                            className="flex-shrink-0 w-full sm:w-64 p-6 sm:p-8 bg-white rounded-2xl shadow-sm border border-slate-200 transition-all text-left group"
-                          >
-                            <div className="w-20 h-20 bg-sky-100 rounded-full flex items-center justify-center text-3xl mb-4">
-                              {service.icon}
-                            </div>
-                            <p className="font-bold text-lg text-slate-900 mb-2">{service.title}</p>
-                            <p className="text-base text-slate-600">{service.subtitle}</p>
-                          </motion.button>
-                        ))}
-                      </Marquee>
-                    </div>
-                    <div className="flex flex-col gap-4 sm:hidden">
-                      {[
-                        { icon: '🩺', title: 'Find Doctors', subtitle: '500+ specialists', color: 'blue' },
-                        { icon: '🏥', title: 'Hospitals', subtitle: 'Verified centers', color: 'green' },
-                        { icon: '💊', title: 'Medicines', subtitle: 'Order online', color: 'blue' },
-                        { icon: '🩹', title: 'Lab Tests', subtitle: 'At home', color: 'green' }
-                      ].map((service, idx) => (
-                        <motion.button
-                          key={idx}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => {
-                            if(service.link) {
-                              router.push(service.link);
-                            } else {
-                              // Handle default routing for services
-                              if(service.title === 'Find Doctors') {
-                                router.push('/user/doctors');
-                              } else if(service.title === 'Hospitals') {
-                                router.push('/user/hospitals');
-                              } else if(service.title === 'Medicines') {
-                                router.push('/user/medicines');
-                              } else if(service.title === 'Lab Tests') {
-                                router.push('/user/lab-tests');
-                              }
-                            }
-                          }}
-                          className="w-full p-6 bg-white rounded-2xl shadow-sm border border-slate-200 transition-all text-left group"
-                        >
-                          <div className="w-20 h-20 bg-sky-100 rounded-full flex items-center justify-center text-3xl mb-4">
-                            {service.icon}
-                          </div>
-                          <p className="font-bold text-lg text-slate-900 mb-2">{service.title}</p>
-                          <p className="text-base text-slate-600">{service.subtitle}</p>
-                        </motion.button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-
-      {/* Section Separator */}
-      <div className="h-px bg-gray-200 dark:bg-gray-800 w-full max-w-7xl mx-auto"></div>
-
-
-      {/* Clinics/Patients mini-banner removed */}
-
-
-      {/* How It Works Section */}
-      <section className="py-12 sm:py-16 bg-white dark:bg-gray-950">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
-          >
-            <h2 className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white mb-4 flex items-center gap-3">
-              <Activity className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-              How It Works
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 dark:text-white">
+              What do you want to do?
             </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-400">
-              Simple steps to connect with healthcare
+            <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-gray-300">
+              Jump straight to the most common actions on QLINIC.
             </p>
           </motion.div>
-          
-          <div className="grid md:grid-cols-3 gap-8">
+
+          <div className="mt-6 sm:mt-10 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
             {[
-              { 
-                icon: Search, 
-                title: 'Search', 
-                description: 'Find doctors, hospitals, or book appointments',
-                color: 'blue'
-              },
-              { 
-                icon: Stethoscope, 
-                title: 'Choose', 
-                description: 'Select your preferred doctor or hospital',
-                color: 'violet'
-              },
-              { 
-                icon: Calendar, 
-                title: 'Book & Consult', 
-                description: 'Schedule appointment and get treated',
-                color: 'green'
-              }
-            ].map((step, idx) => (
-              <motion.div
-                key={idx}
+              { icon: "🩺", title: "Find Doctors", subtitle: "Verified specialists", href: "/user/doctors" },
+              { icon: "🏥", title: "Hospitals", subtitle: "Trusted centers", href: "/user/hospitals" },
+              { icon: "💊", title: "Medicines", subtitle: "Order online", href: "/user/medicines" },
+              { icon: "🧪", title: "Lab Tests", subtitle: "Book from home", href: "/user/lab-tests" },
+            ].map((x, idx) => (
+              <motion.button
+                key={x.title}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: idx * 0.2 }}
-                className="text-center"
+                transition={{ delay: idx * 0.1, duration: 0.5 }}
+                whileHover={{ y: -8, scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => router.push(x.href)}
+                className="text-left p-4 sm:p-6 lg:p-7 rounded-xl sm:rounded-2xl bg-white dark:bg-gray-900 border border-slate-200 dark:border-gray-800 shadow-sm hover:shadow-xl transition-shadow"
               >
-                <div className={`w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-${step.color}-500 to-${step.color}-600 rounded-2xl flex items-center justify-center`}>
-                  <step.icon className="w-10 h-10 text-white" />
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
-                  {step.title}
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400">
-                  {step.description}
-                </p>
-              </motion.div>
+                <motion.div 
+                  whileHover={{ rotate: [0, -10, 10, 0] }}
+                  transition={{ duration: 0.5 }}
+                  className="w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-xl sm:rounded-2xl bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center text-xl sm:text-2xl lg:text-3xl mb-3 sm:mb-4"
+                >
+                  {x.icon}
+                </motion.div>
+                <div className="font-bold text-sm sm:text-base lg:text-lg text-slate-900 dark:text-white">{x.title}</div>
+                <div className="text-xs sm:text-sm text-slate-600 dark:text-gray-300 mt-1">{x.subtitle}</div>
+              </motion.button>
             ))}
           </div>
         </div>
       </section>
 
+      <div className="h-px bg-gray-200 dark:bg-gray-800 w-full max-w-7xl mx-auto" />
 
-      {/* Section Separator */}
-      <div className="h-px bg-gray-200 dark:bg-gray-800 w-full max-w-7xl mx-auto"></div>
-
-
-      {/* Specialties Section */}
-      <section className="py-12 sm:py-16 bg-gradient-to-br from-violet-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
+      {/* HOW IT WORKS */}
+      <section className="py-12 sm:py-16 lg:py-20 bg-white dark:bg-gray-950">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-12"
+            transition={{ duration: 0.6 }}
+            className="text-center"
           >
-            <h2 className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white mb-4 flex items-center gap-3">
-              <Stethoscope className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-              Popular Specialties
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 dark:text-white flex items-center justify-center gap-2 sm:gap-3">
+              <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 dark:text-blue-400" />
+              How QLINIC works
             </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-400">
-              Find doctors in your preferred specialty
-            </p>
-          </motion.div>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
-            {[
-              { name: 'Cardiology', icon: Heart, color: 'red' },
-              { name: 'Dermatology', icon: Activity, color: 'amber' },
-              { name: 'Pediatrics', icon: Users, color: 'emerald' },
-              { name: 'Orthopedics', icon: Shield, color: 'blue' },
-              { name: 'Neurology', icon: Activity, color: 'violet' },
-              { name: 'Gynecology', icon: Users, color: 'pink' },
-              { name: 'Dentistry', icon: Shield, color: 'gray' },
-              { name: 'Ophthalmology', icon: Activity, color: 'cyan' },
-              { name: 'ENT', icon: Activity, color: 'orange' },
-              { name: 'Psychiatry', icon: Sparkles, color: 'purple' },
-              { name: 'General Medicine', icon: Stethoscope, color: 'indigo' },
-              { name: 'Diabetology', icon: Activity, color: 'sky' }
-            ].map((specialty, idx) => (
-              <motion.div
-                key={specialty.name}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: idx * 0.1 }}
-                whileHover={{ y: -10, scale: 1.02 }}
-                onClick={() => router.push(`/search?q=${specialty.name.toLowerCase()}`)}
-                className="qlinic-card p-6 shadow-lg hover:shadow-xl cursor-pointer transition-all text-center group card-hover"
-              >
-                <div className={`w-12 h-12 mx-auto mb-4 bg-gradient-to-br from-${specialty.color}-500 to-${specialty.color}-600 rounded-xl flex items-center justify-center`}>
-                  <specialty.icon className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="font-bold text-[var(--qlinic-text)] group-hover:text-[var(--qlinic-primary)] transition-colors">
-                  {specialty.name}
-                </h3>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-
-      {/* Section Separator */}
-      <div className="h-px bg-gray-200 dark:bg-gray-800 w-full max-w-7xl mx-auto"></div>
-
-
-      {/* Nearby Hospitals - NEW SECTION */}
-      <section className="py-12 sm:py-16 bg-gradient-to-br from-blue-50 via-blue-50 to-violet-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 sm:mb-8">
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white mb-2 flex items-center gap-3">
-                <Building2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                Hospitals Near You
-              </h2>
-              {locationName && (
-                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <MapPin className="w-4 h-4 text-blue-600" />
-                  <span>{locationName}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3">
-              {!userLocation ? (
-                <Button 
-                  onClick={getUserLocation}
-                  disabled={locationLoading}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  {locationLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Detecting...
-                    </>
-                  ) : (
-                    <>
-                      <Navigation className="w-4 h-4 mr-2" />
-                      Enable Location
-                    </>
-                  )}
-                </Button>
-              ) : nearbyHospitals.length > 0 && (
-                <button 
-                  onClick={() => router.push('/user/hospitals')}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-blue-600 dark:text-blue-400 font-medium hover:text-blue-700 dark:hover:text-blue-300 transition-colors group"
-                >
-                  View All
-                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-                </button>
-              )}
-            </div>
-          </div>
-
-
-          {!userLocation ? (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-center py-16 bg-white dark:bg-gray-800 rounded-3xl border-2 border-dashed border-gray-300 dark:border-gray-700"
-            >
-              <Navigation className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                Find Hospitals Near You
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
-                Enable location to discover verified hospitals in your area with real-time availability
-              </p>
-              <Button 
-                onClick={getUserLocation}
-                disabled={locationLoading}
-                size="lg"
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                {locationLoading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Detecting Location...
-                  </>
-                ) : (
-                  <>
-                    <Navigation className="w-5 h-5 mr-2" />
-                    Enable Location
-                  </>
-                )}
-              </Button>
-            </motion.div>
-          ) : nearbyHospitals.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              {nearbyHospitals.map((hospital, idx) => (
-                <motion.div
-                  key={hospital.id || hospital._id}
-                  initial={{ opacity: 0, y: 30 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: idx * 0.1 }}
-                  whileHover={{ y: -10, scale: 1.02 }}
-                  className="group"
-                >
-                      <Card className="h-full hover:shadow-2xl transition-all border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 overflow-hidden">
-                    <CardContent className="p-0">
-                      {/* Hospital Image */}
-                      <div className="relative h-48 bg-gradient-to-br from-blue-100 to-blue-100 dark:from-blue-900/30 dark:to-blue-900/30 overflow-hidden">
-                        {hospital.logo || hospital.image ? (
-                          <Image
-                            src={hospital.logo || hospital.image}
-                            alt={hospital.name}
-                            fill
-                            className="object-cover group-hover:scale-110 transition-transform duration-300"
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <Building2 className="w-20 h-20 text-blue-600/30" />
-                          </div>
-                        )}
-
-                        {/* Distance Badge */}
-                        {hospital.distance && (
-                          <div className="absolute top-3 right-3">
-                            <Badge className="bg-white/95 dark:bg-gray-900/95 text-blue-600 dark:text-blue-400 border-0 font-bold">
-                              <MapPin className="w-3 h-3 mr-1" />
-                              {hospital.distance.toFixed(1)} km
-                            </Badge>
-                          </div>
-                        )}
-
-                        {/* Rating Badge */}
-                        {hospital.rating > 0 && (
-                          <div className="absolute top-3 left-3">
-                            <Badge className="bg-yellow-100 dark:bg-yellow-900/80 text-yellow-700 dark:text-yellow-300 border-0 font-bold">
-                              <Star className="w-3 h-3 mr-1 fill-current" />
-                              {hospital.rating.toFixed(1)}
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Hospital Info */}
-                      <div className="p-5">
-                        <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2 line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                          {hospital.name}
-                        </h3>
-
-                        <div className="space-y-2 mb-4">
-                          {/* Location */}
-                          <div className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                            <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-600" />
-                            <span className="line-clamp-2">
-                              {hospital.fullAddress || 
-                                (typeof hospital.address === 'object' && hospital.address !== null
-                                  ? [hospital.address.street, hospital.address.city, hospital.address.state].filter(Boolean).join(', ')
-                                  : hospital.address) || 
-                                hospital.city || hospital.location || 'Location not available'}
-                            </span>
-                          </div>
-
-                          {/* Specialties */}
-                          {hospital.specialties && hospital.specialties.length > 0 && (
-                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                              <Stethoscope className="w-4 h-4 flex-shrink-0 text-blue-600" />
-                              <span className="truncate">
-                                {hospital.specialties.slice(0, 2).join(', ')}
-                                {hospital.specialties.length > 2 && ` +${hospital.specialties.length - 2}`}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Stats */}
-                          <div className="flex items-center gap-4 pt-2">
-                            {hospital.totalDoctors > 0 && (
-                              <div className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
-                                <Users className="w-3.5 h-3.5" />
-                                <span>{hospital.totalDoctors} Doctors</span>
-                              </div>
-                            )}
-                            {hospital.establishedYear && (
-                              <div className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
-                                <Award className="w-3.5 h-3.5" />
-                                <span>Est. {hospital.establishedYear}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex gap-2">
-                          <Button 
-                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                            onClick={() => router.push(`/user/hospitals/${hospital.id || hospital._id}`)}
-                          >
-                            View Details
-                            <ArrowRight className="w-4 h-4 ml-2" />
-                          </Button>
-                          <Button 
-                            variant="outline"
-                            size="icon"
-                            className="border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                            onClick={() => window.open(`tel:${hospital.phone || hospital.contactNumber}`, '_self')}
-                          >
-                            <Phone className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </div>
-          ) : (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-8"
-            >
-              {/* Location Header with Map Icon */}
-              <div className="flex items-center justify-center gap-3 mb-6">
-                <Building2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Featured Hospitals
-                </h3>
-              </div>
-              
-              {/* Recommended Popular Hospitals */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {featuredHospitals.map((hospital, idx) => (
-                  <motion.div
-                    key={hospital.id || hospital._id}
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.1 }}
-                    whileHover={{ y: -10, scale: 1.02 }}
-                    className="group"
-                  >
-                    <Card className="h-full hover:shadow-2xl transition-all border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 overflow-hidden">
-                      <CardContent className="p-0">
-                        {/* Hospital Image */}
-                        <div className="relative h-40 bg-gradient-to-br from-blue-100 to-blue-100 dark:from-blue-900/30 dark:to-blue-900/30 overflow-hidden">
-                          <Image
-                            src={hospital.logo || hospital.image}
-                            alt={hospital.name}
-                            fill
-                            className="object-cover group-hover:scale-110 transition-transform duration-300"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <Building2 className="w-16 h-16 text-white/70" />
-                          </div>
-                          
-                          {/* Rating Badge */}
-                          <div className="absolute top-3 left-3">
-                            <Badge className="bg-yellow-100 dark:bg-yellow-900/80 text-yellow-700 dark:text-yellow-300 border-0 font-bold">
-                              <Star className="w-3 h-3 mr-1 fill-current" />
-                              {hospital.rating?.toFixed(1) || 'N/A'}
-                            </Badge>
-                          </div>
-                        </div>
-                        
-                        {/* Hospital Info */}
-                        <div className="p-5">
-                          <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2 line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                            {hospital.name}
-                          </h3>
-                          
-                          <div className="space-y-2 mb-4">
-                            {/* Location */}
-                            <div className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                              <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-600" />
-                              <span className="line-clamp-2">
-                                {hospital.fullAddress || 
-                                (typeof hospital.address === 'object' && hospital.address !== null
-                                  ? [hospital.address.street, hospital.address.city, hospital.address.state].filter(Boolean).join(', ')
-                                  : hospital.address) || 
-                                hospital.city || 'Location not available'}
-                              </span>
-                            </div>
-                            
-                            {/* Specialties */}
-                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                              <Stethoscope className="w-4 h-4 flex-shrink-0 text-blue-600" />
-                              <span className="truncate">
-                                {hospital.specialties?.join(', ') || 'General'}
-                              </span>
-                            </div>
-                            
-                            {/* Stats */}
-                            <div className="flex items-center gap-4 pt-2">
-                              <div className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
-                                <Users className="w-3.5 h-3.5" />
-                                <span>{hospital.totalDoctors || 0} Doctors</span>
-                              </div>
-                              <div className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
-                                <Award className="w-3.5 h-3.5" />
-                                <span>Est. {hospital.establishedYear || 'N/A'}</span>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* Action Buttons */}
-                          <div className="flex gap-2">
-                            <Button 
-                              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                              onClick={() => router.push(`/user/hospitals/${hospital.id || hospital._id}`)}
-                            >
-                              View Details
-                              <ArrowRight className="w-4 h-4 ml-2" />
-                            </Button>
-                            <Button 
-                              variant="outline"
-                              size="icon"
-                              className="border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                              onClick={() => window.open(`tel:${hospital.phone || hospital.contactNumber}`, '_self')}
-                            >
-                              <Phone className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                ))}
-              </div>
-              
-              <div className="text-center pt-4">
-                <Button 
-                  onClick={() => router.push('/user/hospitals')}
-                  variant="outline"
-                  className="border-blue-600 text-blue-600 hover:bg-blue-50"
-                >
-                  Browse All Hospitals in India
-                </Button>
-              </div>
-            </motion.div>
-          )}
-        </div>
-      </section>
-
-
-      {/* Section Separator */}
-      <div className="h-px bg-gray-200 dark:bg-gray-800 w-full max-w-7xl mx-auto"></div>
-
-
-      {/* Top rated doctors near you */}
-      <section className="py-12 sm:py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between mb-6 sm:mb-8">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-blue-600 mb-1">Top rated doctors near you</div>
-              <h2 className="text-2xl sm:text-3xl font-semibold text-slate-900 flex items-center gap-3">
-                <Stethoscope className="w-6 h-6 text-blue-600" />
-              </h2>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                aria-label="Previous"
-                onClick={() => {
-                  const el = carouselRef.current
-                  if (!el) return
-                  el.scrollBy({ left: -Math.round(el.clientWidth / 3), behavior: 'smooth' })
-                }}
-                className="p-2 rounded-full bg-white border border-slate-200 shadow-sm hover:shadow-md hover:bg-blue-50 hover:border-blue-300"
-              >
-                <ChevronRight className="w-5 h-5 rotate-180 text-slate-700" />
-              </button>
-              <button
-                aria-label="Next"
-                onClick={() => {
-                  const el = carouselRef.current
-                  if (!el) return
-                  el.scrollBy({ left: Math.round(el.clientWidth / 3), behavior: 'smooth' })
-                }}
-                className="p-2 rounded-full bg-white border border-slate-200 shadow-sm hover:shadow-md hover:bg-blue-50 hover:border-blue-300"
-              >
-                <ChevronRight className="w-5 h-5 text-slate-700" />
-              </button>
-            </div>
-          </div>
-
-          <div
-            ref={carouselRef}
-            onMouseEnter={() => setIsPaused(true)}
-            onMouseLeave={() => setIsPaused(false)}
-            className="relative overflow-hidden"
-          >
-            <div className="flex gap-4 py-2 px-2 md:px-4 overflow-x-auto scrollbar-hide items-stretch" style={{scrollBehavior: 'smooth'}}>
-              {displayDoctors.map((doc, idx) => (
-                <article key={doc._id || idx} data-doctor-card className="flex-shrink-0 w-72 sm:w-80 lg:w-80" >
-                  <motion.div whileHover={{ scale: 1.03 }} className="h-full">
-                    <Card className="h-full border border-slate-200 shadow-sm hover:shadow-lg transition-all">
-                      <CardContent className="p-4 sm:p-5">
-                        <div className="flex items-start gap-4">
-                          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-sky-50 to-green-50 flex items-center justify-center overflow-hidden border border-slate-100">
-                            <Image src={doc.profileImage} alt={`${doc.firstName} ${doc.lastName}`} width={80} height={80} className="object-cover w-20 h-20 rounded-full" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-bold text-sm sm:text-base text-slate-900 truncate">Dr. {doc.firstName} {doc.lastName}</h3>
-                            <p className="text-xs text-sky-600 mt-1 truncate">{doc.doctorProfile?.specialization}</p>
-                            <div className="flex items-center gap-2 mt-2">
-                              <div className="flex items-center gap-1 text-sm text-yellow-600">
-                                <Star className="w-4 h-4" />
-                                <span className="font-bold">{(doc.doctorProfile?.rating || 4.8).toFixed(1)}</span>
-                              </div>
-                              <span className="text-xs text-slate-500">({doc.doctorProfile?.reviews || 120} reviews)</span>
-                            </div>
-                            <p className="text-xs text-slate-600 mt-2 truncate">{doc.hospitalName} – {doc.location}</p>
-                            <p className="text-xs text-slate-500 mt-2">{doc.doctorProfile?.experience}+ years experience • Trusted by {doc.doctorProfile?.patients?.toLocaleString?.() || '2,000+'} patients</p>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 flex items-center gap-3">
-                          <Button onClick={() => router.push(`/user/doctors/${doc._id}`)} className="flex-1 bg-sky-600 hover:bg-sky-700 shadow-sm hover:shadow-md transition-all duration-200 transform hover:scale-102">Book Appointment</Button>
-                          <button onClick={() => router.push(`/user/doctors/${doc._id}`)} className="text-sm text-sky-600 underline hover:text-sky-700">View Profile</button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                </article>
-              ))}
-            </div>
-
-            {/* Dots */}
-            <div className="absolute left-1/2 transform -translate-x-1/2 bottom-2 flex items-center gap-2">
-              {displayDoctors.map((_, i) => (
-                <button key={i} onClick={() => {
-                  const el = carouselRef.current
-                  const card = el?.querySelector('[data-doctor-card]')
-                  if (el && card) {
-                    const cardW = card.clientWidth + parseInt(getComputedStyle(card).marginRight || 0)
-                    el.scrollTo({ left: i * cardW, behavior: 'smooth' })
-                  }
-                }} className={`w-2 h-2 rounded-full ${i === activeDot ? 'bg-blue-600' : 'bg-slate-300'}`} aria-label={`Go to slide ${i+1}`} />
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-
-      {/* Social Proof - Testimonials */}
-      <section className="py-12 sm:py-16 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
-          >
-            <h2 className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white mb-4 flex items-center gap-3">
-              <Heart className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-              Trusted by Thousands
-            </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-400">
-              Hear what our patients and doctors have to say
+            <p className="mt-2 sm:mt-3 text-sm sm:text-base lg:text-lg text-gray-600 dark:text-gray-300">
+              Simple steps designed for speed and clarity.
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-8 mb-16">
+          <div className="mt-8 sm:mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
             {[
               {
-                quote: "QLINIC made booking so easy. Got an appointment with a cardiologist within minutes!",
-                name: "Priya Sharma",
-                role: "Patient",
-                location: "Delhi",
-                avatar: "PS"
+                icon: Search,
+                title: "Search",
+                desc: "Find doctors and hospitals quickly with verified profiles.",
+                bg: "from-blue-500 to-cyan-500",
               },
               {
-                quote: "As a doctor, I appreciate the streamlined process. QLINIC helps me manage my schedule efficiently.",
-                name: "Dr. Rajesh Kumar",
-                role: "Cardiologist",
-                location: "Mumbai",
-                avatar: "RK"
+                icon: Stethoscope,
+                title: "Choose",
+                desc: "Compare experience, ratings, and availability confidently.",
+                bg: "from-violet-500 to-indigo-500",
               },
               {
-                quote: "The platform is intuitive and reliable. My family trusts QLINIC for all our healthcare needs.",
-                name: "Amit Patel",
-                role: "Patient",
-                location: "Bangalore",
-                avatar: "AP"
-              }
-            ].map((testimonial, idx) => (
+                icon: Calendar,
+                title: "Book",
+                desc: "Pick a slot and confirm your appointment in seconds.",
+                bg: "from-emerald-500 to-teal-500",
+              },
+            ].map((s, idx) => (
               <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 30 }}
+                key={s.title}
+                initial={{ opacity: 0, y: 40 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: idx * 0.2 }}
+                transition={{ delay: idx * 0.15, duration: 0.6 }}
                 whileHover={{ y: -10 }}
-                className="qlinic-card p-6 shadow-lg"
               >
-                <div className="flex items-center mb-4">
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg mr-4" style={{ background: 'linear-gradient(135deg, var(--qlinic-primary), #6D28D9)' }}>
-                    {testimonial.avatar}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-[var(--qlinic-text)]">{testimonial.name}</h4>
-                    <p className="text-sm text-[var(--qlinic-text-muted)]">
-                      {testimonial.role} • {testimonial.location}
-                    </p>
-                  </div>
-                </div>
-                <p className="text-gray-700 dark:text-gray-300 italic">"{testimonial.quote}"</p>
-                <div className="flex mt-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                  ))}
-                </div>
+                <Card className="border border-slate-200 dark:border-gray-800 shadow-sm hover:shadow-xl transition-shadow bg-white dark:bg-gray-900 h-full">
+                  <CardContent className="p-5 sm:p-6 lg:p-7">
+                    <motion.div 
+                      whileHover={{ rotate: 360, scale: 1.1 }}
+                      transition={{ duration: 0.6 }}
+                      className={`w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br ${s.bg} flex items-center justify-center`}
+                    >
+                      <s.icon className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 text-white" />
+                    </motion.div>
+                    <h3 className="mt-4 sm:mt-6 text-lg sm:text-xl font-bold text-gray-900 dark:text-white">{s.title}</h3>
+                    <p className="mt-2 sm:mt-3 text-sm sm:text-base text-gray-600 dark:text-gray-300">{s.desc}</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div className="h-px bg-gray-200 dark:bg-gray-800 w-full max-w-7xl mx-auto" />
+
+      {/* TESTIMONIALS + STATS */}
+      <section className="py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-center"
+          >
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 dark:text-white flex items-center justify-center gap-2 sm:gap-3">
+              <Heart className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 dark:text-blue-400" />
+              Trusted by users
+            </h2>
+            <p className="mt-2 sm:mt-3 text-sm sm:text-base lg:text-lg text-gray-600 dark:text-gray-300">
+              Real feedback from patients and doctors.
+            </p>
+          </motion.div>
+
+          <div className="mt-8 sm:mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {shownTestimonials.map((t, idx) => (
+              <motion.div
+                key={`${t.name}-${t.location}`}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: idx * 0.1, duration: 0.6 }}
+                whileHover={{ y: -8, scale: 1.02 }}
+              >
+                <Card className="bg-white dark:bg-gray-900 border border-slate-200 dark:border-gray-800 shadow-sm hover:shadow-xl transition-shadow h-full">
+                  <CardContent className="p-4 sm:p-6">
+                    <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                      <motion.div 
+                        whileHover={{ rotate: 360 }}
+                        transition={{ duration: 0.6 }}
+                        className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-sm sm:text-base flex-shrink-0"
+                      >
+                        {t.avatar}
+                      </motion.div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">{t.name}</div>
+                        <div className="text-xs sm:text-sm text-slate-600 dark:text-gray-300 truncate">
+                          {t.role} • {t.location}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-700 dark:text-gray-200 italic leading-relaxed">"{t.quote}"</p>
+                  </CardContent>
+                </Card>
               </motion.div>
             ))}
           </div>
 
-          {/* Trust Stats */}
-          <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 shadow-xl border border-gray-200 dark:border-gray-700">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-              {[
-                { 
-                  number: stats?.totalPatients ? `${(stats.totalPatients / 1000).toFixed(1)}K+` : "10K+", 
-                  label: "Patients", 
-                  icon: Users 
-                },
-                { 
-                  number: stats?.totalDoctors ? `${stats.totalDoctors}+` : "200+", 
-                  label: "Doctors", 
-                  icon: Stethoscope 
-                },
-                { 
-                  number: stats?.totalCities ? `${stats.totalCities}+` : "50+", 
-                  label: "Cities", 
-                  icon: MapPin 
-                },
-                { 
-                  number: stats?.satisfaction ? `${stats.satisfaction}%` : "99%", 
-                  label: "Satisfaction", 
-                  icon: Heart 
-                }
-              ].map((stat, idx) => (
-                <motion.div
-                  key={idx}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.3, duration: 0.6 }}
+            className="mt-10 sm:mt-14 bg-white dark:bg-gray-900 rounded-2xl sm:rounded-3xl p-6 sm:p-8 lg:p-10 border border-gray-200 dark:border-gray-800 shadow-lg"
+          >
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 text-center">
+              {shownStats.map((s, idx) => (
+                <motion.div 
+                  key={s.label} 
                   initial={{ opacity: 0, scale: 0.8 }}
                   whileInView={{ opacity: 1, scale: 1 }}
                   viewport={{ once: true }}
-                  transition={{ delay: idx * 0.1 }}
+                  transition={{ delay: 0.4 + (idx * 0.1), duration: 0.5 }}
+                  whileHover={{ scale: 1.1, y: -5 }}
                   className="flex flex-col items-center"
                 >
-                  <stat.icon className="w-8 h-8 text-blue-600 dark:text-blue-400 mb-3" />
-                  <div className="text-3xl font-black text-gray-900 dark:text-white mb-1">
-                    {stat.number}
+                  <s.icon className="w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 text-blue-600 dark:text-blue-400 mb-2 sm:mb-3" />
+                  <div className="text-2xl sm:text-3xl lg:text-4xl font-black text-gray-900 dark:text-white">
+                    {loading ? "…" : s.value}
                   </div>
-                  <div className="text-gray-600 dark:text-gray-400 font-medium">
-                    {stat.label}
-                  </div>
+                  <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium mt-1 sm:mt-2">{s.label}</div>
                 </motion.div>
               ))}
             </div>
-          </div>
 
-          {/* Trust Badges */}
-          <div className="flex flex-wrap justify-center gap-6 mt-12">
-            {[
-              { icon: Shield, text: "ISO Certified Data Security", color: "green" },
-              { icon: Award, text: "HIPAA-like Standards", color: "blue" },
-              { icon: Lock, text: "End-to-End Encryption", color: "purple" },
-              { icon: CheckCircle, text: "100% Secure", color: "indigo" }
-            ].map((badge, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: idx * 0.1 }}
-                className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 rounded-full border border-gray-200 dark:border-gray-700 shadow-sm"
-              >
-                <badge.icon className={`w-4 h-4 text-${badge.color}-600 dark:text-${badge.color}-400`} />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {badge.text}
-                </span>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Section Separator */}
-      <div className="h-px bg-gray-200 dark:bg-gray-800 w-full max-w-7xl mx-auto"></div>
-
-      {/* Features */}
-      <section className="py-12 sm:py-16 bg-gray-50 dark:bg-gray-900">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-8 sm:mb-12"
-          >
-            <h2 className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white mb-3 sm:mb-4">
-              Why Choose QLINIC?
-            </h2>
-            <p className="text-base sm:text-xl text-gray-600 dark:text-gray-400">
-              Healthcare made simple and accessible
-            </p>
+            <div className="mt-6 sm:mt-10 flex flex-wrap justify-center gap-2 sm:gap-3">
+              {[
+                { icon: Shield, text: "Secure platform" },
+                { icon: Lock, text: "Privacy-first" },
+                { icon: Zap, text: "Fast booking" },
+                { icon: CheckCircle, text: "Verified listings" },
+              ].map((b, idx) => (
+                <motion.div
+                  key={b.text}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 0.8 + (idx * 0.1), duration: 0.4 }}
+                  whileHover={{ scale: 1.1 }}
+                  className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-white dark:bg-gray-950 rounded-full border border-gray-200 dark:border-gray-800 shadow-sm"
+                >
+                  <b.icon className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200">{b.text}</span>
+                </motion.div>
+              ))}
+            </div>
           </motion.div>
-
-
-          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-8">
-            {[
-              { icon: Zap, title: 'Instant Booking', desc: 'Book in 30 seconds', color: 'blue' },
-              { icon: Shield, title: '100% Secure', desc: 'Your data is safe', color: 'blue' },
-              { icon: TrendingUp, title: 'Track Health', desc: 'Monitor progress', color: 'violet' },
-              { icon: MapPin, title: 'Nearby Hospitals', desc: 'Find hospitals near you', color: 'orange' },
-              { icon: Clock, title: '24/7 Support', desc: 'Always available', color: 'pink' },
-              { icon: Award, title: 'Top Doctors', desc: 'Verified experts', color: 'indigo' }
-            ].map((feature, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: idx * 0.1 }}
-                whileHover={{ y: -10, scale: 1.02 }}
-                className="p-6 sm:p-8 qlinic-card sm:rounded-3xl hover:border-[var(--qlinic-primary)] transition-all card-hover"
-              >
-                <div className={`w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-${feature.color}-500 to-${feature.color}-600 rounded-xl sm:rounded-2xl flex items-center justify-center mb-4 sm:mb-6`}>
-                  <feature.icon className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
-                </div>
-                <h3 className="text-lg sm:text-2xl font-bold text-[var(--qlinic-text)] mb-2">
-                  {feature.title}
-                </h3>
-                <p className="text-sm sm:text-base text-[var(--qlinic-text-muted)]">{feature.desc}</p>
-              </motion.div>
-            ))}
-          </div>
         </div>
       </section>
 
-
-      {/* Section Separator */}
-      <div className="h-px bg-gray-200 dark:bg-gray-800 w-full max-w-7xl mx-auto"></div>
-
-
-      {/* CTA */}
-      <section className="py-16 sm:py-20 bg-gradient-to-br from-blue-500 via-blue-600 to-blue-600 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
+      {/* FINAL CTA */}
+      <section className="py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-20 pointer-events-none">
+          <motion.div
+            animate={{ 
+              scale: [1, 1.5, 1],
+              rotate: [0, 180, 360]
+            }}
+            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+            className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,white,transparent_60%)]"
+          />
+        </div>
 
         <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }} 
+            whileInView={{ opacity: 1, y: 0 }} 
             viewport={{ once: true }}
+            transition={{ duration: 0.8 }}
           >
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-white mb-4 sm:mb-6">
-              Ready to Get Started?
-            </h2>
-            <p className="text-lg sm:text-xl text-white/90 mb-8 sm:mb-10">
-              Join {stats?.totalPatients ? `${(stats.totalPatients/1000).toFixed(0)}K+` : '10K+'} patients experiencing better healthcare
-            </p>
-
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => router.push('/sign-up')}
-              className="px-8 sm:px-12 py-4 sm:py-5 bg-white text-blue-600 rounded-2xl font-black text-lg sm:text-xl shadow-2xl inline-flex items-center gap-2 sm:gap-3"
+            <motion.h2 
+              initial={{ opacity: 0, scale: 0.9 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+              className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-white"
             >
-              Book Your First Appointment
-              <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6" />
-            </motion.button>
+              Ready to try QLINIC?
+            </motion.h2>
+            <motion.p 
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.4, duration: 0.6 }}
+              className="mt-3 sm:mt-5 text-sm sm:text-lg lg:text-xl text-white/90"
+            >
+              Create your account and start booking appointments with confidence.
+            </motion.p>
+
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.6, duration: 0.6 }}
+              className="mt-6 sm:mt-10 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center"
+            >
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Button
+                  onClick={() => router.push("/sign-up")}
+                  className="w-full sm:w-auto px-8 sm:px-10 py-5 sm:py-6 rounded-2xl bg-white text-blue-700 hover:bg-white/95 font-black text-base sm:text-lg shadow-2xl"
+                >
+                  Create Free Account
+                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2" />
+                </Button>
+              </motion.div>
+
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push("/user/doctors")}
+                  className="w-full sm:w-auto px-8 sm:px-10 py-5 sm:py-6 rounded-2xl border-2 border-white/80 text-white hover:bg-white/10 font-bold text-base sm:text-lg"
+                >
+                  Browse Doctors
+                </Button>
+              </motion.div>
+            </motion.div>
           </motion.div>
         </div>
       </section>
-
-
-      <style jsx global>{`
-        .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-        }
-        .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>
     </div>
-  )
+  );
 }
-
-
-export default HomePage

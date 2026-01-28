@@ -37,9 +37,10 @@ import {
   Navigation,
   ArrowRight,
   ArrowLeft,
-  Hospital,
-  CheckCircle, // Added for Verified Badge
-  Clock // Added for Open Status
+  CheckCircle,
+  Clock,
+  Heart,    // Added for Products
+  Activity  // Added for Products
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -69,6 +70,7 @@ const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isLoginMenuOpen, setIsLoginMenuOpen] = useState(false);
   const [isAboutMenuOpen, setIsAboutMenuOpen] = useState(false);
+  const [isProductsMenuOpen, setIsProductsMenuOpen] = useState(false); // New Product State
   const [isMobile, setIsMobile] = useState(false);
 
   // Search States
@@ -92,6 +94,7 @@ const Navbar = () => {
   // REFS
   const loginMenuRef = useRef(null);
   const aboutMenuRef = useRef(null);
+  const productsMenuRef = useRef(null); // New Product Ref
   const navbarRef = useRef(null); 
   const searchContainerRef = useRef(null); 
   const searchInputRef = useRef(null);
@@ -99,7 +102,7 @@ const Navbar = () => {
   // 1. Handle Scroll & Resize
   useEffect(() => {
     const handleResize = () => {
-      const mobile = window.innerWidth < 768;
+      const mobile = window.innerWidth < 1024; // Changed breakpoint to lg (1024px) for better responsive handling
       setIsMobile(mobile);
       if (!mobile && isMobileMenuOpen) setIsMobileMenuOpen(false);
     };
@@ -122,6 +125,7 @@ const Navbar = () => {
       }
       if (loginMenuRef.current && !loginMenuRef.current.contains(event.target)) setIsLoginMenuOpen(false);
       if (aboutMenuRef.current && !aboutMenuRef.current.contains(event.target)) setIsAboutMenuOpen(false);
+      if (productsMenuRef.current && !productsMenuRef.current.contains(event.target)) setIsProductsMenuOpen(false);
     };
 
     const handleEscKey = (event) => {
@@ -129,6 +133,7 @@ const Navbar = () => {
         setSearchExpanded(false);
         setIsLoginMenuOpen(false);
         setIsAboutMenuOpen(false);
+        setIsProductsMenuOpen(false);
       }
     };
 
@@ -164,7 +169,6 @@ const Navbar = () => {
   }, [searchExpanded]);
 
   // --- SMART SEARCH LOGIC ---
-
   const fetchNearbyHospitals = async (location = userLocation) => {
     if (!location) return;
     setSearchLoading(true);
@@ -226,7 +230,6 @@ const Navbar = () => {
   }, [searchQuery, searchExpanded, userLocation]);
 
   // --- Handlers ---
-
   const handleInputFocus = () => {
     setSearchExpanded(true);
     if (searchQuery.length === 0 && userLocation) fetchNearbyHospitals();
@@ -270,6 +273,15 @@ const Navbar = () => {
     ],
   };
 
+  const productsMenu = {
+      title: "Products",
+      items: [
+          { label: "For Patients", href: "/user", icon: Heart, description: "Book appointments & manage health" },
+          { label: "For Hospitals", href: "/hospital", icon: Building2, description: "Streamline operations & queue" },
+          { label: "For Doctors", href: "/doctor", icon: Stethoscope, description: "Manage patients & schedule" },
+      ]
+  };
+
   const loginOptions = [
     { label: "User", icon: UserIcon, href: "/user", description: "Book appointments", gradient: "from-blue-500 to-teal-500" },
     { label: "Doctor", icon: Stethoscope, href: "/doctor", description: "Manage patients", gradient: "from-blue-500 to-cyan-500" },
@@ -278,6 +290,7 @@ const Navbar = () => {
 
   const isActive = (href) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
   const isAboutActive = () => aboutMegaMenu.sections.some((s) => s.items.some((i) => pathname.startsWith(i.href)));
+  const isProductsActive = () => productsMenu.items.some((i) => pathname.startsWith(i.href));
 
   const getDashboardUrl = () => {
     const role = userRole || user?.role;
@@ -317,9 +330,11 @@ const Navbar = () => {
 
                 {/* 2. CENTER NAV (Desktop Only) */}
                 <div className={`hidden lg:flex items-center gap-1 ${searchExpanded ? 'lg:opacity-0 pointer-events-none duration-200' : 'opacity-100'}`}>
-                  <Link href="/" className={`relative px-4 py-2 text-sm font-medium rounded-full transition-all ${isActive("/") ? "text-blue-700 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/30" : "text-gray-600 dark:text-gray-400 hover:text-blue-600 hover:bg-blue-50/30"}`}>Home</Link>
+                  <Link href="/" className={`relative px-4 py-2 text-sm font-medium rounded-full transition-all ${isActive("/") ? "text-blue-700 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/30" : "text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/30 dark:hover:bg-blue-900/20"}`}>Home</Link>
+                  
+                  {/* About Menu */}
                   <div className="relative" ref={aboutMenuRef}>
-                    <button onClick={() => setIsAboutMenuOpen(!isAboutMenuOpen)} className={`flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-full transition-all ${isAboutActive() ? "text-blue-700 bg-blue-50/50" : "text-gray-600 hover:bg-blue-50/30"}`}>
+                    <button onClick={() => setIsAboutMenuOpen(!isAboutMenuOpen)} className={`flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-full transition-all ${isAboutActive() ? "text-blue-700 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/30" : "text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/30 dark:hover:bg-blue-900/20"}`}>
                       About <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isAboutMenuOpen ? "rotate-180" : ""}`} />
                     </button>
                     <AnimatePresence>
@@ -327,13 +342,40 @@ const Navbar = () => {
                         <motion.div initial={{ opacity: 0, y: -10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.95 }} className="absolute left-0 mt-2 w-[600px] rounded-2xl border-2 border-blue-200/50 dark:border-blue-800/50 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl shadow-2xl overflow-hidden z-50">
                           <div className="p-6 grid grid-cols-3 gap-6">
                             {aboutMegaMenu.sections.map((section, idx) => (
-                              <div key={idx}><h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">{section.title}</h3><div className="space-y-1">{section.items.map(item => (<Link key={item.href} href={item.href} onClick={() => setIsAboutMenuOpen(false)} className="flex items-center gap-2 p-2 rounded-lg hover:bg-blue-50/50 group"><item.icon className="w-4 h-4 text-gray-500 group-hover:text-blue-600" /><span className="text-sm font-medium text-gray-700 group-hover:text-blue-700">{item.label}</span></Link>))}</div></div>
+                              <div key={idx}><h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-3">{section.title}</h3><div className="space-y-1">{section.items.map(item => (<Link key={item.href} href={item.href} onClick={() => setIsAboutMenuOpen(false)} className="flex items-center gap-2 p-2 rounded-lg hover:bg-blue-50/50 dark:hover:bg-blue-900/20 group"><item.icon className="w-4 h-4 text-gray-500 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" /><span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-700 dark:group-hover:text-blue-400">{item.label}</span></Link>))}</div></div>
                             ))}
                           </div>
                         </motion.div>
                       )}
                     </AnimatePresence>
                   </div>
+
+                  {/* Products Menu - Added Here */}
+                  <div className="relative" ref={productsMenuRef}>
+                    <button onClick={() => setIsProductsMenuOpen(!isProductsMenuOpen)} className={`flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-full transition-all ${isProductsActive() ? "text-blue-700 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/30" : "text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/30 dark:hover:bg-blue-900/20"}`}>
+                      Products <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isProductsMenuOpen ? "rotate-180" : ""}`} />
+                    </button>
+                    <AnimatePresence>
+                      {isProductsMenuOpen && (
+                        <motion.div initial={{ opacity: 0, y: -10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.95 }} className="absolute left-0 mt-2 w-72 rounded-2xl border-2 border-blue-200/50 dark:border-blue-800/50 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl shadow-2xl overflow-hidden z-50">
+                          <div className="p-3">
+                              {productsMenu.items.map((item) => (
+                                  <Link key={item.href} href={item.href} onClick={() => setIsProductsMenuOpen(false)} className="flex items-start gap-3 p-3 rounded-xl hover:bg-blue-50/50 dark:hover:bg-blue-900/20 group transition-colors">
+                                      <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                          <item.icon className="w-4 h-4" />
+                                      </div>
+                                      <div>
+                                          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 group-hover:text-blue-700 dark:group-hover:text-blue-400">{item.label}</div>
+                                          <div className="text-xs text-gray-500 dark:text-gray-400">{item.description}</div>
+                                      </div>
+                                  </Link>
+                              ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
                 </div>
 
                 {/* 3. RIGHT SECTION (Search + Auth) */}
@@ -342,11 +384,11 @@ const Navbar = () => {
                   {/* --- SEARCH CONTAINER --- */}
                   <div ref={searchContainerRef} className={`flex items-center gap-2 ${isMobile && searchExpanded ? 'w-full' : ''}`}>
                     
-                    {/* Location Badge */}
+                    {/* Location Badge - Hidden on Mobile unless in dropdown */}
                     <AnimatePresence>
-                      {(!searchExpanded || !isMobile) && (
+                      {(!searchExpanded && !isMobile) && (
                         <motion.div initial={{ opacity: 1, width: "auto" }} exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.2 }}>
-                          <button onClick={() => setShowLocationModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/30 dark:bg-blue-900/20 rounded-full text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 transition-colors whitespace-nowrap">
+                          <button onClick={() => setShowLocationModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/30 dark:bg-blue-900/20 rounded-full text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/40 transition-colors whitespace-nowrap border border-transparent hover:border-blue-100 dark:hover:border-blue-800">
                             <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                             <span className="truncate max-w-[80px] sm:max-w-[100px]">{locationName || "Location"}</span>
                           </button>
@@ -365,7 +407,7 @@ const Navbar = () => {
                       className="relative z-20"
                     >
                       {isMobile && searchExpanded ? (
-                        <ArrowLeft onClick={handleMobileSearchClose} className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 cursor-pointer z-20" />
+                        <ArrowLeft onClick={handleMobileSearchClose} className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 dark:text-gray-400 cursor-pointer z-20" />
                       ) : (
                         <Search 
                           onClick={isMobile && !searchExpanded ? () => setSearchExpanded(true) : undefined}
@@ -381,14 +423,14 @@ const Navbar = () => {
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onFocus={handleInputFocus}
                         onKeyDown={handleSearchEnter}
-                        className={`w-full h-9 sm:h-8 text-sm sm:text-xs rounded-full border-0 transition-all ${isMobile && !searchExpanded ? "pl-8 pr-0 bg-transparent cursor-pointer" : "pl-9 pr-9 bg-blue-50/50 dark:bg-blue-900/20 focus:bg-white dark:focus:bg-gray-900 focus:ring-2 focus:ring-blue-500 shadow-sm"}`}
+                        className={`w-full h-9 sm:h-8 text-sm sm:text-xs rounded-full border-0 transition-all ${isMobile && !searchExpanded ? "pl-8 pr-0 bg-transparent cursor-pointer" : "pl-9 pr-9 bg-blue-50/50 dark:bg-blue-900/20 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:bg-white dark:focus:bg-gray-900 focus:ring-2 focus:ring-blue-500 shadow-sm"}`}
                         readOnly={isMobile && !searchExpanded} 
                         onClick={isMobile && !searchExpanded ? () => setSearchExpanded(true) : undefined}
                         autoComplete="off"
                       />
                       
                       {(searchQuery || (isMobile && searchExpanded)) && (
-                        <button onClick={() => { setSearchQuery(""); if(isMobile) handleInputFocus(); }} className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-blue-100 rounded-full transition-colors z-10">
+                        <button onClick={() => { setSearchQuery(""); if(isMobile) handleInputFocus(); }} className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-blue-100 dark:hover:bg-blue-900 rounded-full transition-colors z-10">
                           <X className="w-3.5 h-3.5 text-gray-400" />
                         </button>
                       )}
@@ -398,9 +440,9 @@ const Navbar = () => {
                   {/* DESKTOP AUTH & THEME */}
                   <div className={`flex items-center gap-2 ${isMobile && searchExpanded ? 'hidden' : 'flex'}`}>
                     
-                    <div className="hidden md:block"><ModeToggle /></div>
+                    <div className="hidden lg:block"><ModeToggle /></div>
                     
-                    <div className="hidden md:flex items-center gap-2">
+                    <div className="hidden lg:flex items-center gap-2">
                       {user ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -409,18 +451,18 @@ const Navbar = () => {
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-56 rounded-2xl border-2 border-blue-200/50 dark:border-blue-800/50 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl shadow-2xl">
-                              <DropdownMenuLabel><div className="flex flex-col space-y-1"><p className="text-sm font-semibold">{user.name}</p><p className="text-xs text-gray-500">{user.email}</p></div></DropdownMenuLabel>
-                              <DropdownMenuSeparator className="bg-blue-200/50" />
-                              <DropdownMenuItem onClick={() => router.push(getDashboardUrl())}><LayoutDashboard className="mr-2 h-4 w-4"/>Dashboard</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => router.push("/settings")}><Settings className="mr-2 h-4 w-4"/>Settings</DropdownMenuItem>
-                              <DropdownMenuSeparator className="bg-blue-200/50" />
-                              <DropdownMenuItem onClick={handleSignOut} className="text-red-600"><LogOut className="mr-2 h-4 w-4"/>Sign out</DropdownMenuItem>
+                              <DropdownMenuLabel><div className="flex flex-col space-y-1"><p className="text-sm font-semibold text-gray-900 dark:text-white">{user.name}</p><p className="text-xs text-gray-500">{user.email}</p></div></DropdownMenuLabel>
+                              <DropdownMenuSeparator className="bg-blue-200/50 dark:bg-blue-800/50" />
+                              <DropdownMenuItem onClick={() => router.push(getDashboardUrl())} className="text-gray-700 dark:text-gray-300 focus:bg-blue-50 dark:focus:bg-blue-900/30"><LayoutDashboard className="mr-2 h-4 w-4"/>Dashboard</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => router.push("/settings")} className="text-gray-700 dark:text-gray-300 focus:bg-blue-50 dark:focus:bg-blue-900/30"><Settings className="mr-2 h-4 w-4"/>Settings</DropdownMenuItem>
+                              <DropdownMenuSeparator className="bg-blue-200/50 dark:bg-blue-800/50" />
+                              <DropdownMenuItem onClick={handleSignOut} className="text-red-600 dark:text-red-400 focus:bg-red-50 dark:focus:bg-red-900/20"><LogOut className="mr-2 h-4 w-4"/>Sign out</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       ) : (
                         <div className="relative" ref={loginMenuRef}>
-                          <button onClick={() => setIsLoginMenuOpen(!isLoginMenuOpen)} className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50/50 rounded-full"><LogIn className="w-4 h-4" /> Login <ChevronDown className="w-3.5 h-3.5" /></button>
-                          <AnimatePresence>{isLoginMenuOpen && (<motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute right-0 mt-2 w-72 rounded-2xl bg-white shadow-xl border-2 border-blue-200/50 p-2 z-[9999]">{loginOptions.map((opt) => (<button key={opt.href} onClick={() => router.push(opt.href)} className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-blue-50/50 transition-all text-left"><div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${opt.gradient} flex items-center justify-center shadow-sm`}><opt.icon className="w-5 h-5 text-white"/></div><div><div className="font-semibold text-sm">{opt.label}</div><div className="text-xs text-gray-600">{opt.description}</div></div></button>))}</motion.div>)}</AnimatePresence>
+                          <button onClick={() => setIsLoginMenuOpen(!isLoginMenuOpen)} className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 rounded-full transition-colors"><LogIn className="w-4 h-4" /> Login <ChevronDown className="w-3.5 h-3.5" /></button>
+                          <AnimatePresence>{isLoginMenuOpen && (<motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute right-0 mt-2 w-72 rounded-2xl bg-white dark:bg-gray-900 shadow-xl border-2 border-blue-200/50 dark:border-blue-800/50 p-2 z-[9999]">{loginOptions.map((opt) => (<button key={opt.href} onClick={() => router.push(opt.href)} className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-all text-left"><div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${opt.gradient} flex items-center justify-center shadow-sm`}><opt.icon className="w-5 h-5 text-white"/></div><div><div className="font-semibold text-sm text-gray-900 dark:text-white">{opt.label}</div><div className="text-xs text-gray-600 dark:text-gray-400">{opt.description}</div></div></button>))}</motion.div>)}</AnimatePresence>
                         </div>
                       )}
                       {!user && <Link href="/sign-up" className="px-5 py-2 bg-gradient-to-r from-blue-500 to-cyan-600 text-white text-sm font-semibold rounded-full hover:shadow-lg shadow-blue-500/30 transition-all">Sign up</Link>}
@@ -428,12 +470,11 @@ const Navbar = () => {
                   </div>
 
                   {/* MOBILE MENU TOGGLE + MOBILE THEME TOGGLE */}
-                  <div className={`flex md:hidden items-center gap-2 ${isMobile && searchExpanded ? 'hidden' : 'flex'}`}>
-                    {/* ✅ Added ModeToggle for Mobile */}
+                  <div className={`flex lg:hidden items-center gap-2 ${isMobile && searchExpanded ? 'hidden' : 'flex'}`}>
                     <ModeToggle />
                     
-                    <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="w-9 h-9 flex items-center justify-center rounded-full bg-blue-50/50 hover:bg-blue-100 transition-colors">
-                      {isMobileMenuOpen ? <X className="w-5 h-5 text-gray-700" /> : <Menu className="w-5 h-5 text-gray-700" />}
+                    <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="w-9 h-9 flex items-center justify-center rounded-full bg-blue-50/50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors">
+                      {isMobileMenuOpen ? <X className="w-5 h-5 text-gray-700 dark:text-gray-300" /> : <Menu className="w-5 h-5 text-gray-700 dark:text-gray-300" />}
                     </button>
                   </div>
                 </div>
@@ -524,36 +565,37 @@ const Navbar = () => {
           {/* 5. RICH MOBILE MENU */}
           <AnimatePresence>
             {isMobileMenuOpen && (
-              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }} className="mt-2 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-2 border-blue-200/70 rounded-2xl shadow-2xl overflow-hidden max-h-[calc(100vh-5rem)] overflow-y-auto">
+              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }} className="mt-2 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-2 border-blue-200/70 dark:border-blue-800/70 rounded-2xl shadow-2xl overflow-hidden max-h-[calc(100vh-5rem)] overflow-y-auto">
                 <div className="p-4 space-y-3">
                   {/* User Profile Section */}
                   {user && (
-                    <div className="flex items-center gap-3 p-3 bg-blue-50/50 rounded-xl">
+                    <div className="flex items-center gap-3 p-3 bg-blue-50/50 dark:bg-blue-900/30 rounded-xl">
                       <Avatar className="w-12 h-12"><AvatarImage src={user.image} /><AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-600 text-white text-sm font-semibold">{getUserInitials()}</AvatarFallback></Avatar>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{user.name}</p>
-                        <p className="text-xs text-gray-600 truncate">{user.email}</p>
-                        <p className="text-xs text-blue-600 font-medium mt-0.5 capitalize">{userRole?.replace("_", " ")}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{user.email}</p>
+                        <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mt-0.5 capitalize">{userRole?.replace("_", " ")}</p>
                       </div>
                     </div>
                   )}
 
                   {/* Mobile Search Input (Backup) */}
                   <div className="relative">
-                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-600" />
-                     <Input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setIsMobileMenuOpen(false)} className="w-full pl-10 h-11 rounded-xl border-2 border-blue-200/50" />
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <Input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setIsMobileMenuOpen(false)} className="w-full pl-10 h-11 rounded-xl border-2 border-blue-200/50 dark:border-blue-800/50 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100" />
                   </div>
 
-                  <button onClick={() => { setShowLocationModal(true); setIsMobileMenuOpen(false); }} className="w-full flex items-center gap-2 px-4 py-3 bg-blue-50/30 rounded-xl text-sm font-medium text-gray-700">
-                    <MapPin className="w-4 h-4 text-blue-600" /> <span className="flex-1 text-left truncate">{locationName || "Set Location"}</span>
+                  {/* Location Selector - Moved to Mobile Menu */}
+                  <button onClick={() => { setShowLocationModal(true); setIsMobileMenuOpen(false); }} className="w-full flex items-center gap-2 px-4 py-3 bg-blue-50/30 dark:bg-blue-900/20 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
+                    <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400" /> <span className="flex-1 text-left truncate">{locationName || "Set Location"}</span>
                   </button>
 
                   <div className="space-y-1">
-                    <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium ${isActive("/") ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-blue-50/50"}`}>Home</Link>
+                    <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium ${isActive("/") ? "bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : "text-gray-700 dark:text-gray-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/20"}`}>Home</Link>
                     
                     {/* About Accordion */}
                     <div className="space-y-1">
-                      <button onClick={() => setIsAboutMenuOpen(!isAboutMenuOpen)} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium ${isAboutActive() ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-blue-50/50"}`}>
+                      <button onClick={() => setIsAboutMenuOpen(!isAboutMenuOpen)} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium ${isAboutActive() ? "bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : "text-gray-700 dark:text-gray-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/20"}`}>
                         <span>About</span> <ChevronDown className={`w-4 h-4 transition-transform ${isAboutMenuOpen ? "rotate-180" : ""}`} />
                       </button>
                       <AnimatePresence>
@@ -561,8 +603,8 @@ const Navbar = () => {
                           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="ml-4 space-y-1 overflow-hidden">
                             {aboutMegaMenu.sections.map((section) => (
                               <div key={section.title} className="space-y-1">
-                                <p className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase">{section.title}</p>
-                                {section.items.map((item) => (<Link key={item.href} href={item.href} onClick={() => { setIsMobileMenuOpen(false); setIsAboutMenuOpen(false); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-700 hover:bg-blue-50/50"><item.icon className="w-4 h-4 text-gray-500" />{item.label}</Link>))}
+                                <p className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">{section.title}</p>
+                                {section.items.map((item) => (<Link key={item.href} href={item.href} onClick={() => { setIsMobileMenuOpen(false); setIsAboutMenuOpen(false); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/20"><item.icon className="w-4 h-4 text-gray-500 dark:text-gray-400" />{item.label}</Link>))}
                               </div>
                             ))}
                           </motion.div>
@@ -570,22 +612,41 @@ const Navbar = () => {
                       </AnimatePresence>
                     </div>
 
-                    {user && (<Link href={getDashboardUrl()} onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-blue-50/50"><LayoutDashboard className="w-4 h-4" /> Dashboard</Link>)}
+                    {/* Products Accordion - Added Here */}
+                    <div className="space-y-1">
+                        <button onClick={() => setIsProductsMenuOpen(!isProductsMenuOpen)} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium ${isProductsActive() ? "bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : "text-gray-700 dark:text-gray-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/20"}`}>
+                            <span>Products</span> <ChevronDown className={`w-4 h-4 transition-transform ${isProductsMenuOpen ? "rotate-180" : ""}`} />
+                        </button>
+                        <AnimatePresence>
+                            {isProductsMenuOpen && (
+                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="ml-4 space-y-1 overflow-hidden">
+                                    {productsMenu.items.map((item) => (
+                                        <Link key={item.href} href={item.href} onClick={() => { setIsMobileMenuOpen(false); setIsProductsMenuOpen(false); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/20">
+                                            <item.icon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                                            {item.label}
+                                        </Link>
+                                    ))}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
+                    {user && (<Link href={getDashboardUrl()} onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/20"><LayoutDashboard className="w-4 h-4" /> Dashboard</Link>)}
                   </div>
 
                   {/* Auth Actions */}
                   {user ? (
-                    <button onClick={() => { handleSignOut(); setIsMobileMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 mt-3 border-2 border-red-200 hover:bg-red-50/50 rounded-xl font-semibold text-red-600 transition-all">
+                    <button onClick={() => { handleSignOut(); setIsMobileMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 mt-3 border-2 border-red-200 dark:border-red-800 hover:bg-red-50/50 dark:hover:bg-red-900/20 rounded-xl font-semibold text-red-600 dark:text-red-400 transition-all">
                       <LogOut className="w-4 h-4" /> Sign out
                     </button>
                   ) : (
-                    <div className="pt-3 border-t border-blue-200/50 space-y-3">
+                    <div className="pt-3 border-t border-blue-200/50 dark:border-blue-800/50 space-y-3">
                       <div className="space-y-2">
-                        <p className="px-2 text-xs font-semibold text-gray-500 uppercase">Login as</p>
+                        <p className="px-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Login as</p>
                         {loginOptions.map((option) => (
-                          <Link key={option.href} href={option.href} onClick={() => setIsMobileMenuOpen(false)} className="w-full flex items-start gap-3 p-3 rounded-xl border-2 border-blue-200/50 hover:border-blue-500 hover:bg-blue-50/50 transition-all">
+                          <Link key={option.href} href={option.href} onClick={() => setIsMobileMenuOpen(false)} className="w-full flex items-start gap-3 p-3 rounded-xl border-2 border-blue-200/50 dark:border-blue-800/50 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-all">
                             <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${option.gradient} flex items-center justify-center shadow-sm shrink-0`}><option.icon className="w-5 h-5 text-white" /></div>
-                            <div className="text-left flex-1 min-w-0"><div className="font-semibold text-sm text-gray-900">{option.label}</div><div className="text-xs text-gray-600">{option.description}</div></div>
+                            <div className="text-left flex-1 min-w-0"><div className="font-semibold text-sm text-gray-900 dark:text-white">{option.label}</div><div className="text-xs text-gray-600 dark:text-gray-400">{option.description}</div></div>
                           </Link>
                         ))}
                       </div>
