@@ -187,34 +187,44 @@ const onSubmit = async (data) => {
 
 
   const handleSocialSignUp = async (provider) => {
-    if (!selectedRole) {
-      toast.error('Please select a role first')
-      return
-    }
-
     setSocialLoading(provider)
     
-    // ✅ FIXED: Using JSON.stringify and encodeURIComponent for proper encoding
-    const roleRoutes = {
-      user: '/user',
-      doctor: '/doctor',
-      hospital_admin: '/hospital-admin',
-    };
-    const callbackUrl = roleRoutes[selectedRole] || '/user';
-
-    const cookieData = JSON.stringify({
-      role: selectedRole,
-      timestamp: Date.now()
+    console.log('🔐 [SIGNUP PAGE] Social signup initiated', {
+      provider,
+      selectedRole: selectedRole || 'user',
+      timestamp: new Date().toISOString()
     });
     
-    // Set cookie with proper encoding (accessible to backend)
-    console.log('[SIGN-UP] Setting oauth role cookie with:', cookieData);
-    document.cookie = `oauth_role_token=${encodeURIComponent(cookieData)}; path=/; max-age=300; SameSite=Lax;`; 
-
+    // ✅ Pass role through multiple channels for reliability
+    const roleToPass = selectedRole || 'user';
+    
+    // Method 1: localStorage (accessible to signIn callback via middleware)
+    localStorage.setItem('oauth_role_selection', roleToPass);
+    console.log('💾 [SIGNUP PAGE] Stored role in localStorage:', roleToPass);
+    
+    // Method 2: Cookie (in case localStorage isn't accessible)
+    document.cookie = `oauth_role=${roleToPass}; path=/; max-age=3600; SameSite=Lax`;
+    console.log('🍪 [SIGNUP PAGE] Set oauth_role cookie:', roleToPass);
+    
+    // Determine callback URL based on role
+    const callbackUrls = {
+      user: '/user',
+      doctor: '/doctor',
+      hospital_admin: '/hospital',
+    };
+    const baseCallbackUrl = callbackUrls[roleToPass] || '/user';
+    
+    console.log('📋 [SIGNUP PAGE] OAuth Configuration:', {
+      provider,
+      role: roleToPass,
+      callbackUrl: baseCallbackUrl,
+      timestamp: new Date().toISOString()
+    });
+    
     await signIn(provider, { 
-      callbackUrl,
-      redirect: true
-    })
+      callbackUrl: baseCallbackUrl,
+      redirect: true,
+    });
   }
 
   const selectedRoleObj = roles.find((r) => r.value === selectedRole)

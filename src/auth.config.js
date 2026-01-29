@@ -16,15 +16,51 @@ export const baseAuthConfig = {
           access_type: "offline",
           response_type: "code"
         }
-      }
+      },
+      // ✅ Map role from profile or use pre-selected role
+      profile(profile) {
+        console.log('📝 [AUTH.CONFIG] Google profile callback', {
+          email: profile.email,
+          hasRole: !!profile.role
+        });
+        
+        return {
+          ...profile,
+          role: profile.role ?? "user", // Default to 'user' if not provided
+        };
+      },
     }),
     FacebookProvider({
       clientId: process.env.FACEBOOK_CLIENT_ID,
       clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
+      // ✅ Map role from profile
+      profile(profile) {
+        console.log('📝 [AUTH.CONFIG] Facebook profile callback', {
+          email: profile.email,
+          hasRole: !!profile.role
+        });
+        
+        return {
+          ...profile,
+          role: profile.role ?? "user",
+        };
+      },
     }),
     AppleProvider({
       clientId: process.env.APPLE_CLIENT_ID,
       clientSecret: process.env.APPLE_CLIENT_SECRET,
+      // ✅ Map role from profile
+      profile(profile) {
+        console.log('📝 [AUTH.CONFIG] Apple profile callback', {
+          email: profile.email,
+          hasRole: !!profile.role
+        });
+        
+        return {
+          ...profile,
+          role: profile.role ?? "user",
+        };
+      },
     }),
   ],
 

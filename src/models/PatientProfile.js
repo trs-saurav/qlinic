@@ -74,23 +74,33 @@ patientProfileSchema.index({ lastVisitDate: -1 })
 patientProfileSchema.index({ 'address.city': 1, 'address.state': 1 })
 
 // ============ AUTO-GENERATE QCLINIC ID ============
-// ✅✅✅ CHANGED FROM pre('save') TO pre('validate') ✅✅✅
-patientProfileSchema.pre('validate', async function (next) {
+// ✅ Using pre('save') for guaranteed execution before document is saved
+patientProfileSchema.pre('save', async function () {
   try {
+    // Generate qclinicId if new document and ID not set
     if (this.isNew && !this.qlinicId) {
-      console.log('🔢 [PRE-VALIDATE] Generating qlinicId...')
+      console.log('🔢 [PRE-SAVE] Generating qlinicId for new patient...')
       
       const PatientProfile = mongoose.models.PatientProfile || mongoose.model('PatientProfile', patientProfileSchema)
       const count = await PatientProfile.countDocuments()
       const year = new Date().getFullYear()
       
       this.qlinicId = `QL${year}${String(count + 1).padStart(6, '0')}`
-      console.log(`✅ [PRE-VALIDATE] Generated: ${this.qlinicId}`)
+      console.log(`✅ [PRE-SAVE] Generated qclinicId: ${this.qlinicId}`)
     }
     
-  } catch (error) {
-    console.error('❌ [PRE-VALIDATE] Error:', error)
+    // Safety check: ensure qlinicId is never null (would cause unique index violations)
+    if (!this.qlinicId && this.isNew) {
+      console.warn('⚠️  [PRE-SAVE] qlinicId is still null, generating fallback...')
+      const fallbackId = `QL${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      this.qlinicId = fallbackId
+      console.log(`✅ [PRE-SAVE] Generated fallback qclinicId: ${fallbackId}`)
+    }
     
+    // For async middleware, just return - don't call next()
+  } catch (error) {
+    console.error('❌ [PRE-SAVE] Error generating qclinicId:', error.message)
+    throw error // Throw to reject the promise
   }
 })
 
