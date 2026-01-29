@@ -194,6 +194,7 @@ const onSubmit = async (data) => {
 
     setSocialLoading(provider)
     
+    // ✅ FIXED: Using JSON.stringify and encodeURIComponent for proper encoding
     const roleRoutes = {
       user: '/user',
       doctor: '/doctor',
@@ -201,14 +202,14 @@ const onSubmit = async (data) => {
     };
     const callbackUrl = roleRoutes[selectedRole] || '/user';
 
-    // ✅ FIXED: Using JSON.stringify ensures roles like "hospital_admin" are not split incorrectly
     const cookieData = JSON.stringify({
       role: selectedRole,
       timestamp: Date.now()
     });
     
-    // Set cookie (accessible to backend)
-    document.cookie = `oauth_role_token=${cookieData}; path=/; max-age=300; SameSite=Lax;`; 
+    // Set cookie with proper encoding (accessible to backend)
+    console.log('[SIGN-UP] Setting oauth role cookie with:', cookieData);
+    document.cookie = `oauth_role_token=${encodeURIComponent(cookieData)}; path=/; max-age=300; SameSite=Lax;`; 
 
     await signIn(provider, { 
       callbackUrl,

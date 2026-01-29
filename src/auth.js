@@ -4,6 +4,9 @@ import Credentials from 'next-auth/providers/credentials'
 import { baseAuthConfig } from './auth.config'
 import connectDB from '@/config/db'
 import User from '@/models/user'
+import PatientProfile from '@/models/PatientProfile'
+import DoctorProfile from '@/models/DoctorProfile'
+import HospitalAdminProfile from '@/models/HospitalAdminProfile'
 import {MongooseError} from "mongoose";
 
 // Regex to check if a string is a valid MongoDB ObjectId
@@ -74,20 +77,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Extract role from cookie if available
         let roleFromCookie = 'user'; // default
         if (req?.headers?.cookie) {
+          console.log('[SIGNIN] Checking cookies for role...');
           const cookies = req.headers.cookie.split(';');
           const roleToken = cookies.find(c => c.trim().startsWith('oauth_role_token='));
           if (roleToken) {
             try {
-              const tokenValue = roleToken.split('=')[1];
-              const decoded = JSON.parse(decodeURIComponent(tokenValue));
+              const tokenValue = decodeURIComponent(roleToken.split('=')[1]);
+              console.log('[SIGNIN] Raw token value:', tokenValue);
+              const decoded = JSON.parse(tokenValue);
               if (decoded.role && ['user', 'doctor', 'hospital_admin'].includes(decoded.role)) {
                 roleFromCookie = decoded.role;
-                console.log('[SIGNIN] Role from cookie:', roleFromCookie);
+                console.log('[SIGNIN] ✅ Role extracted from cookie:', roleFromCookie);
               }
             } catch (e) {
-              console.error('[SIGNIN] Failed to parse role cookie:', e);
+              console.error('[SIGNIN] Failed to parse role cookie:', e.message);
             }
+          } else {
+            console.log('[SIGNIN] No oauth_role_token found in cookies:', req.headers.cookie);
           }
+        } else {
+          console.log('[SIGNIN] No cookies available in request');
         }
 
         if (!dbUser) {
@@ -100,38 +109,43 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             profileImage: user.image,
             oauthProviders: [{ provider: account.provider, providerId: account.providerAccountId }]
           });
-          console.log('[SIGNIN] New user created with role:', roleFromCookie);
+          console.log('[SIGNIN] ✅ New user created with role:', roleFromCookie);
           
           // Create role-specific profile for OAuth users
-          if (roleFromCookie === 'doctor') {
-            const DoctorProfile = require('@/models/DoctorProfile').default;
-            await DoctorProfile.create({
-              userId: dbUser._id,
-              specialization: 'General Medicine',
-              qualifications: [],
-              experience: 0,
-              consultationFee: 0,
-            });
-          } else if (roleFromCookie === 'hospital_admin') {
-            const HospitalAdminProfile = require('@/models/HospitalAdminProfile').default;
-            await HospitalAdminProfile.create({
-              userId: dbUser._id,
-              hospitalId: null,
-              designation: '',
-              department: '',
-            });
-          } else {
-            const PatientProfile = require('@/models/PatientProfile').default;
-            await PatientProfile.create({
-              userId: dbUser._id,
-              dateOfBirth: null,
-              gender: null,
-              bloodGroup: null,
-              address: {},
-            });
+          try {
+            if (roleFromCookie === 'doctor') {
+              await DoctorProfile.create({
+                userId: dbUser._id,
+                specialization: 'General Medicine',
+                qualifications: [],
+                experience: 0,
+                consultationFee: 0,
+              });
+              console.log('[SIGNIN] ✅ DoctorProfile created');
+            } else if (roleFromCookie === 'hospital_admin') {
+              await HospitalAdminProfile.create({
+                userId: dbUser._id,
+                hospitalId: null,
+                designation: '',
+                department: '',
+              });
+              console.log('[SIGNIN] ✅ HospitalAdminProfile created');
+            } else {
+              await PatientProfile.create({
+                userId: dbUser._id,
+                dateOfBirth: null,
+                gender: null,
+                bloodGroup: null,
+                address: {},
+              });
+              console.log('[SIGNIN] ✅ PatientProfile created');
+            }
+          } catch (profileError) {
+            console.error('[SIGNIN] Error creating profile:', profileError.message);
+            // Don't fail the entire signin, profile can be created later
           }
         } else {
-           console.log('[SIGNIN] Existing OAuth user found:', dbUser.email);
+           console.log('[SIGNIN] Existing OAuth user found:', dbUser.email, 'with role:', dbUser.role);
         }
 
         // IMPORTANT: Attach database ID and role to the user object
