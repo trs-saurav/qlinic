@@ -7,14 +7,11 @@ import DoctorProfile from '@/models/DoctorProfile'
 import HospitalAdminProfile from '@/models/HospitalAdminProfile'
 
 export async function POST(req) {
-  console.log('📝 === USER CREATE API CALLED ===')
-  
   let requestBody = null;
   
   try {
     // Validate request exists
     if (!req.body) {
-      console.error('❌ Empty request body')
       return NextResponse.json(
         { error: 'Request body is required' },
         { status: 400 }
@@ -25,7 +22,6 @@ export async function POST(req) {
     try {
       requestBody = await req.json()
     } catch (parseError) {
-      console.error('❌ Failed to parse request JSON:', parseError)
       return NextResponse.json(
         { error: 'Invalid JSON in request' },
         { status: 400 }
@@ -34,44 +30,27 @@ export async function POST(req) {
 
     const { firstName, lastName, email, password, role, profileData = {} } = requestBody
     
-    console.log('📦 Request body:', {
-      firstName,
-      lastName,
-      email,
-      password: '***',
-      role,
-      profileData
-    })
-
     // Validate required fields
     if (!email || !password || !role) {
-      console.error('❌ Missing required fields')
       return NextResponse.json(
         { error: 'Email, password, and role are required' },
         { status: 400 }
       )
     }
 
-    console.log('🔌 Connecting to MongoDB...')
     await connectDB()
-    console.log('✅ MongoDB connected')
 
     // Check if user already exists
-    console.log('🔍 Checking for existing user...')
     const existingUser = await User.findOne({ email: email.toLowerCase() })
     
     if (existingUser) {
-      console.log('❌ User already exists')
       return NextResponse.json(
         { error: 'User with this email already exists' },
         { status: 409 }
       )
     }
     
-    console.log('✅ Email available')
-
     // Create user
-    console.log('👤 Creating new user...')
     let newUser
     try {
       newUser = await User.create({
@@ -83,18 +62,14 @@ export async function POST(req) {
         isProfileComplete: false,
       })
     } catch (createError) {
-      console.error('❌ Error creating user:', createError.message, createError.name)
       throw new Error(`User creation failed: ${createError.message}`)
     }
     
-    console.log(`✅ User created: ${newUser._id}`)
-
     // Create role-specific profile
     let profile = null
 
     if (role === 'user') {
       try {
-        console.log('🏥 Creating PatientProfile...')
         profile = await PatientProfile.create({
           userId: newUser._id,
           dateOfBirth: profileData.dateOfBirth || null,
@@ -102,16 +77,13 @@ export async function POST(req) {
           bloodGroup: profileData.bloodGroup || null,
           address: profileData.address || {},
         })
-        console.log(`✅ PatientProfile created: ${profile.qlinicId}`)
       } catch (profileError) {
-        console.error('❌ Error creating PatientProfile:', profileError.message)
         throw new Error(`PatientProfile creation failed: ${profileError.message}`)
       }
     }
 
     if (role === 'doctor') {
       try {
-        console.log('👨‍⚕️ Creating DoctorProfile...')
         profile = await DoctorProfile.create({
           userId: newUser._id,
           specialization: profileData.specialization || 'General Medicine',
@@ -119,36 +91,25 @@ export async function POST(req) {
           experience: profileData.experience || 0,
           consultationFee: profileData.consultationFee || 0,
         })
-        console.log(`✅ DoctorProfile created: ${profile._id}`)
       } catch (profileError) {
-        console.error('❌ Error creating DoctorProfile:', profileError.message)
         throw new Error(`DoctorProfile creation failed: ${profileError.message}`)
       }
     }
 
     if (role === 'hospital_admin') {
       try {
-        console.log('🏢 Creating HospitalAdminProfile...')
         profile = await HospitalAdminProfile.create({
           userId: newUser._id,
           hospitalId: profileData.hospitalId || null,  // ✅ Allow null
           designation: profileData.designation || '',
           department: profileData.department || '',
         })
-        console.log(`✅ HospitalAdminProfile created: ${profile._id}`)
         
-        // Mark as incomplete if no hospital assigned
-        if (!profileData.hospitalId) {
-          console.log('⚠️ Profile incomplete - no hospital assigned')
-        }
       } catch (profileError) {
-        console.error('❌ Error creating HospitalAdminProfile:', profileError.message)
         throw new Error(`HospitalAdminProfile creation failed: ${profileError.message}`)
       }
     }
 
-    console.log('📤 Sending response: success')
-    
     return NextResponse.json({
       success: true,
       user: {
@@ -168,19 +129,11 @@ export async function POST(req) {
     }, { status: 201 })
 
   } catch (error) {
-    console.error('❌ ====== ERROR IN USER CREATE ======')
-    console.error('Error name:', error.name)
-    console.error('Error message:', error.message)
-    console.error('Error stack:', error.stack)
-    console.error('=====================================')
-
     // Rollback user if profile creation failed
     if (error.message && error.message.includes('Profile') && requestBody?.email) {
       try {
-        console.log('⚠️ Rolling back: Deleting user due to profile creation failure')
         await User.findOneAndDelete({ email: requestBody.email.toLowerCase() })
       } catch (rollbackError) {
-        console.error('❌ Rollback failed:', rollbackError)
       }
     }
 

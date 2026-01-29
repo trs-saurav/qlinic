@@ -50,7 +50,6 @@ const userSchema = new mongoose.Schema(
       type: String, 
       unique: true,     
       sparse: true,     
-      index: true 
     },
 
     role: {
@@ -91,7 +90,6 @@ const userSchema = new mongoose.Schema(
 
 // ============ INDEXES ============
 userSchema.index({ email: 1, role: 1 })
-userSchema.index({ phoneNumber: 1 }, { sparse: true })
 userSchema.index({ role: 1, isActive: 1 })
 userSchema.index({ 'oauthProviders.provider': 1, 'oauthProviders.providerId': 1 })
 userSchema.index({ deletedAt: 1 })

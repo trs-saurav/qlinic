@@ -17,7 +17,7 @@ export const baseAuthConfig = {
           response_type: "code"
         }
       },
-      // ✅ Map role from profile or use pre-selected role
+      // ✅ Map role from profile
       profile(profile) {
         console.log('📝 [AUTH.CONFIG] Google profile callback', {
           email: profile.email,

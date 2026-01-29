@@ -91,7 +91,6 @@ const doctorProfileSchema = new mongoose.Schema(
 )
 
 // ============ INDEXES ============
-doctorProfileSchema.index({ userId: 1 })
 doctorProfileSchema.index({ specialization: 1, isAvailable: 1 })
 doctorProfileSchema.index({ affiliatedHospitals: 1 })
 doctorProfileSchema.index({ location: '2dsphere' })

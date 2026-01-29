@@ -209,29 +209,15 @@ export default function SignInClient() {
   }
 
   const handleSocialLogin = async (provider) => {
-    setSocialLoading(provider)
+    setSocialLoading(provider);
     
-    const currentOrigin = window.location.origin
-    let targetUrl
-    if (redirectTo) {
-      targetUrl = redirectTo.startsWith('http') 
-        ? redirectTo 
-        : `${currentOrigin}${redirectTo}`
-    } else {
-      targetUrl = `${currentOrigin}${currentRole.redirectUrl}`
-    }
-
-    const cookieData = JSON.stringify({
-      role: roleFromUrl,
-      timestamp: Date.now()
-    })
-    
-    document.cookie = `oauth_role_token=${cookieData}; path=/; max-age=300; SameSite=Lax;`
+    const roleToPass = roleFromUrl || 'user';
+    document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
 
     await signIn(provider, { 
-      callbackUrl: targetUrl, 
+      callbackUrl: redirectTo || '/', 
       redirect: true 
-    })
+    });
   }
 
   if (status === 'loading') {

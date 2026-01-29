@@ -19,7 +19,6 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 
-// ... (Schema and Roles array remain unchanged) ...
 const signUpSchema = z.object({
   firstName: z.string().min(2, 'Min 2 chars'),
   lastName: z.string().min(2, 'Min 2 chars'),
@@ -71,165 +70,77 @@ export default function SignUpPage() {
     defaultValues: { firstName: '', lastName: '', email: '', password: '', confirmPassword: '' },
   })
 
-  // ... (onSubmit remains unchanged) ...
-const onSubmit = async (data) => {
-  setLoading(true)
-  const loadingToast = toast.loading('Creating your account...')
-  try {
-    // Step 1: Check if email exists
-    console.log('📝 Checking if email exists:', data.email)
-    const checkRes = await fetch('/api/user/check', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: data.email }),
-    })
+  const onSubmit = async (data) => {
+    setLoading(true)
+    const loadingToast = toast.loading('Creating your account...')
+    try {
+      const createRes = await fetch('/api/user/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email: data.email,
+          password: data.password,
+          role: selectedRole,
+          profileData: {},
+        }),
+      })
 
-    if (!checkRes.ok) {
-      const errorData = await checkRes.json().catch(() => ({ error: 'Check failed' }))
-      throw new Error(errorData.error || `Email check failed with status ${checkRes.status}`)
-    }
-
-    const checkData = await checkRes.json()
-    if (checkData.exists) {
+      if (!createRes.ok) {
+        const errorData = await createRes.json().catch(() => ({ error: 'Creation failed' }))
+        throw new Error(errorData.error || `Account creation failed`)
+      }
+      
       toast.dismiss(loadingToast)
-      toast.error('Account already exists')
-      setLoading(false)
-      return
-    }
-    
-    // Step 2: Create user account
-    console.log('📝 Creating user account for role:', selectedRole)
-    const createRes = await fetch('/api/user/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        firstName: data.firstName,
-        lastName: data.lastName,
+      toast.success('Account created! Signing you in...')
+      
+      const signInResult = await signIn('credentials', {
         email: data.email,
         password: data.password,
         role: selectedRole,
-        profileData: {},
-      }),
-    })
+        redirect: false,
+      })
 
-    if (!createRes.ok) {
-      const errorData = await createRes.json().catch(() => ({ error: 'Creation failed' }))
-      throw new Error(errorData.error || `Account creation failed with status ${createRes.status}`)
+      if (signInResult.error) {
+        throw new Error(signInResult.error)
+      }
+
+      const roleRoutes = {
+        user: '/user',
+        doctor: '/doctor',
+        hospital_admin: '/hospital',
+      };
+      router.push(roleRoutes[selectedRole] || '/user');
+
+    } catch (err) {
+      toast.dismiss(loadingToast)
+      toast.error(err.message)
+      setLoading(false)
     }
+  }
+
+  const handleSocialSignUp = async (provider) => {
+    setSocialLoading(provider)
+    const roleToPass = selectedRole || 'user';
     
-    const result = await createRes.json()
-    
-    if (!result.success && !result.user) {
-      throw new Error(result.error || 'Account creation failed')
-    }
-    
-    toast.dismiss(loadingToast)
-    toast.success('Account created!', { icon: '🎉' })
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Set cookie to pass role to the server-side callback
+    document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
     
     const roleRoutes = {
       user: '/user',
       doctor: '/doctor',
-      hospital_admin: '/hospital-admin',
-    };
-    
-    console.log('🔐 Attempting automatic sign-in for:', data.email, 'with role:', selectedRole)
-    
-    try {
-      const signInResult = await signIn('credentials', {
-        email: data.email,
-        password: data.password,
-        role: selectedRole,  // ✅ ADDED: Pass role for verification
-        redirect: false, // ✅ CHANGED: Don't let signIn redirect, we'll handle it
-        callbackUrl: roleRoutes[selectedRole] || '/user'
-      })
-
-      console.log('🔐 SignIn result:', signInResult)
-
-      if (!signInResult) {
-        console.error('❌ SignIn returned null')
-        toast.error('Sign in failed. Please try signing in manually.')
-        setTimeout(() => router.push('/sign-in'), 2000)
-        setLoading(false)
-        return
-      }
-
-      if (signInResult.error) {
-        console.error('❌ SignIn error:', signInResult.error)
-        toast.error('Login failed: ' + signInResult.error)
-        setTimeout(() => router.push('/sign-in'), 2000)
-        setLoading(false)
-        return
-      }
-
-      if (signInResult.ok) {
-        console.log('✅ SignIn successful, redirecting to:', roleRoutes[selectedRole])
-        // Manually redirect since we set redirect: false
-        router.push(roleRoutes[selectedRole] || '/user')
-      } else {
-        console.error('❌ SignIn status not ok:', signInResult)
-        toast.error('Sign in failed. Please try signing in manually.')
-        setTimeout(() => router.push('/sign-in'), 2000)
-        setLoading(false)
-      }
-    } catch (signInError) {
-      console.error('❌ SignIn exception:', signInError)
-      toast.error('Sign in failed. Please try signing in manually.')
-      setTimeout(() => router.push('/sign-in'), 2000)
-      setLoading(false)
-    }
-  } catch (err) {
-    toast.dismiss(loadingToast)
-    toast.error(err.message)
-    setLoading(false)
-  }
-}
-
-
-  const handleSocialSignUp = async (provider) => {
-    setSocialLoading(provider)
-    
-    console.log('🔐 [SIGNUP PAGE] Social signup initiated', {
-      provider,
-      selectedRole: selectedRole || 'user',
-      timestamp: new Date().toISOString()
-    });
-    
-    // ✅ Pass role through multiple channels for reliability
-    const roleToPass = selectedRole || 'user';
-    
-    // Method 1: localStorage (accessible to signIn callback via middleware)
-    localStorage.setItem('oauth_role_selection', roleToPass);
-    console.log('💾 [SIGNUP PAGE] Stored role in localStorage:', roleToPass);
-    
-    // Method 2: Cookie (in case localStorage isn't accessible)
-    document.cookie = `oauth_role=${roleToPass}; path=/; max-age=3600; SameSite=Lax`;
-    console.log('🍪 [SIGNUP PAGE] Set oauth_role cookie:', roleToPass);
-    
-    // Determine callback URL based on role
-    const callbackUrls = {
-      user: '/user',
-      doctor: '/doctor',
       hospital_admin: '/hospital',
     };
-    const baseCallbackUrl = callbackUrls[roleToPass] || '/user';
-    
-    console.log('📋 [SIGNUP PAGE] OAuth Configuration:', {
-      provider,
-      role: roleToPass,
-      callbackUrl: baseCallbackUrl,
-      timestamp: new Date().toISOString()
-    });
     
     await signIn(provider, { 
-      callbackUrl: baseCallbackUrl,
+      callbackUrl: roleRoutes[roleToPass] || '/user',
       redirect: true,
     });
   }
 
   const selectedRoleObj = roles.find((r) => r.value === selectedRole)
 
-  // ... (Return JSX remains unchanged) ...
   return (
     <div className="h-screen w-screen overflow-hidden relative bg-[#F8FAFC] dark:bg-[#020617] flex items-center justify-center">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
