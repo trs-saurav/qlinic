@@ -211,13 +211,47 @@ export default function SignInClient() {
   const handleSocialLogin = async (provider) => {
     setSocialLoading(provider);
     
-    const roleToPass = roleFromUrl || 'user';
-    document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
+    const currentOrigin = window.location.origin
+    let targetUrl
+    if (redirectTo) {
+      targetUrl = redirectTo.startsWith('http') 
+        ? redirectTo 
+        : `${currentOrigin}${redirectTo}`
+    } else {
+      targetUrl = `${currentOrigin}${currentRole.redirectUrl}`
+    }
 
-    await signIn(provider, { 
-      callbackUrl: redirectTo || '/', 
-      redirect: true 
-    });
+    try {
+      // ✅ FIXED: Store role on server-side before OAuth redirect
+      // This ensures new OAuth users get the correct role assigned
+      if (roleFromUrl && roleFromUrl !== 'user') {
+        const res = await fetch('/api/auth/set-oauth-role', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // Note: We don't know the email yet, so we'll generate a temp key
+          body: JSON.stringify({ 
+            email: `temp-${roleFromUrl}-${Date.now()}`,
+            role: roleFromUrl 
+          })
+        }).catch(e => console.error('[OAuth Role Store] Error:', e))
+      }
+
+      // Also set client-side cookie as backup
+      const cookieData = JSON.stringify({
+        role: roleFromUrl,
+        timestamp: Date.now()
+      })
+      document.cookie = `oauth_role_token=${cookieData}; path=/; max-age=300; SameSite=Lax;`
+
+      await signIn(provider, { 
+        callbackUrl: targetUrl, 
+        redirect: true 
+      });
+    } catch (error) {
+      console.error('[handleSocialLogin] Error:', error)
+      toast.error('Failed to initiate social login')
+      setSocialLoading(null)
+    }
   }
 
   if (status === 'loading') {

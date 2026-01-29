@@ -17,50 +17,19 @@ export const baseAuthConfig = {
           response_type: "code"
         }
       },
-      // ✅ Map role from profile
-      profile(profile) {
-        console.log('📝 [AUTH.CONFIG] Google profile callback', {
-          email: profile.email,
-          hasRole: !!profile.role
-        });
-        
-        return {
-          ...profile,
-          role: profile.role ?? "user", // Default to 'user' if not provided
-        };
-      },
+      // ✅ FIXED: Use 'state' check in development instead of 'pkce'
+      // PKCE has cookie persistence issues in dev environments
+      checks: isDevelopment ? ['state'] : ['pkce', 'state']
     }),
     FacebookProvider({
       clientId: process.env.FACEBOOK_CLIENT_ID,
       clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
-      // ✅ Map role from profile
-      profile(profile) {
-        console.log('📝 [AUTH.CONFIG] Facebook profile callback', {
-          email: profile.email,
-          hasRole: !!profile.role
-        });
-        
-        return {
-          ...profile,
-          role: profile.role ?? "user",
-        };
-      },
+      checks: isDevelopment ? ['state'] : ['state']
     }),
     AppleProvider({
       clientId: process.env.APPLE_CLIENT_ID,
       clientSecret: process.env.APPLE_CLIENT_SECRET,
-      // ✅ Map role from profile
-      profile(profile) {
-        console.log('📝 [AUTH.CONFIG] Apple profile callback', {
-          email: profile.email,
-          hasRole: !!profile.role
-        });
-        
-        return {
-          ...profile,
-          role: profile.role ?? "user",
-        };
-      },
+      checks: isDevelopment ? ['state'] : ['state']
     }),
   ],
 

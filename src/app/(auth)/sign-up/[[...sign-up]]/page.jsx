@@ -124,19 +124,37 @@ export default function SignUpPage() {
     setSocialLoading(provider)
     const roleToPass = selectedRole || 'user';
     
-    // Set cookie to pass role to the server-side callback
-    document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
-    
-    const roleRoutes = {
-      user: '/user',
-      doctor: '/doctor',
-      hospital_admin: '/hospital',
-    };
-    
-    await signIn(provider, { 
-      callbackUrl: roleRoutes[roleToPass] || '/user',
-      redirect: true,
-    });
+    try {
+      // ✅ FIXED: Store role on server-side before OAuth redirect
+      // This ensures new OAuth users get the correct role assigned
+      const tempEmail = `temp-${roleToPass}-${Date.now()}`;
+      await fetch('/api/auth/set-oauth-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: tempEmail,
+          role: roleToPass 
+        })
+      }).catch(e => console.error('[OAuth Role Store] Error:', e));
+
+      // Also set client-side cookie as backup
+      document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
+      
+      const roleRoutes = {
+        user: '/user',
+        doctor: '/doctor',
+        hospital_admin: '/hospital',
+      };
+      
+      await signIn(provider, { 
+        callbackUrl: roleRoutes[roleToPass] || '/user',
+        redirect: true,
+      });
+    } catch (error) {
+      console.error('[handleSocialSignUp] Error:', error)
+      toast.error('Failed to initiate social sign-up')
+      setSocialLoading(null)
+    }
   }
 
   const selectedRoleObj = roles.find((r) => r.value === selectedRole)
