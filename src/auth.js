@@ -58,7 +58,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account, profile, req }) {
 
 
       if (account?.provider === 'credentials') {
@@ -71,19 +71,67 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         await connectDB();
         let dbUser = await User.findOne({ email: user.email });
 
+        // Extract role from cookie if available
+        let roleFromCookie = 'user'; // default
+        if (req?.headers?.cookie) {
+          const cookies = req.headers.cookie.split(';');
+          const roleToken = cookies.find(c => c.trim().startsWith('oauth_role_token='));
+          if (roleToken) {
+            try {
+              const tokenValue = roleToken.split('=')[1];
+              const decoded = JSON.parse(decodeURIComponent(tokenValue));
+              if (decoded.role && ['user', 'doctor', 'hospital_admin'].includes(decoded.role)) {
+                roleFromCookie = decoded.role;
+                console.log('[SIGNIN] Role from cookie:', roleFromCookie);
+              }
+            } catch (e) {
+              console.error('[SIGNIN] Failed to parse role cookie:', e);
+            }
+          }
+        }
+
         if (!dbUser) {
-          console.log('[SIGNIN] OAuth user not found. Creating new user...');
+          console.log('[SIGNIN] OAuth user not found. Creating new user with role:', roleFromCookie);
           dbUser = await User.create({
             email: user.email,
             firstName: user.name?.split(' ')[0] || 'User',
             lastName: user.name?.split(' ')[1] || '',
-            role: 'user', // Default role for new OAuth users
+            role: roleFromCookie,  // ✅ Use role from cookie
             profileImage: user.image,
             oauthProviders: [{ provider: account.provider, providerId: account.providerAccountId }]
           });
-           console.log('[SIGNIN] New user created:', dbUser);
+          console.log('[SIGNIN] New user created with role:', roleFromCookie);
+          
+          // Create role-specific profile for OAuth users
+          if (roleFromCookie === 'doctor') {
+            const DoctorProfile = require('@/models/DoctorProfile').default;
+            await DoctorProfile.create({
+              userId: dbUser._id,
+              specialization: 'General Medicine',
+              qualifications: [],
+              experience: 0,
+              consultationFee: 0,
+            });
+          } else if (roleFromCookie === 'hospital_admin') {
+            const HospitalAdminProfile = require('@/models/HospitalAdminProfile').default;
+            await HospitalAdminProfile.create({
+              userId: dbUser._id,
+              hospitalId: null,
+              designation: '',
+              department: '',
+            });
+          } else {
+            const PatientProfile = require('@/models/PatientProfile').default;
+            await PatientProfile.create({
+              userId: dbUser._id,
+              dateOfBirth: null,
+              gender: null,
+              bloodGroup: null,
+              address: {},
+            });
+          }
         } else {
-           console.log('[SIGNIN] Existing OAuth user found:', dbUser);
+           console.log('[SIGNIN] Existing OAuth user found:', dbUser.email);
         }
 
         // IMPORTANT: Attach database ID and role to the user object

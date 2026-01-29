@@ -187,6 +187,11 @@ const onSubmit = async (data) => {
 
 
   const handleSocialSignUp = async (provider) => {
+    if (!selectedRole) {
+      toast.error('Please select a role first')
+      return
+    }
+
     setSocialLoading(provider)
     
     const roleRoutes = {
