@@ -57,6 +57,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     ...baseAuthConfig.providers,
     Credentials({
+      id: 'credentials',
+      name: 'Credentials',
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
@@ -68,30 +70,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // This function validates user credentials and returns user object if valid
         
         try {
-
-          
-          await connectDB()
-
-          
-          const user = await User.findOne({ email: credentials?.email }).select('+password')
-
-
-          if (!user) {
-  
+          if (!credentials?.email || !credentials?.password) {
+            console.error('[CREDENTIALS] Missing email or password');
             return null;
           }
 
-          if (credentials.role !== user.role) {
-  
+          await connectDB()
+
+          const user = await User.findOne({ email: credentials.email.toLowerCase().trim() }).select('+password')
+
+          if (!user) {
+            console.error('[CREDENTIALS] User not found:', credentials.email);
+            return null;
+          }
+
+          // ✅ FIXED: Only validate role if provided in credentials
+          // If role is provided and doesn't match, reject
+          if (credentials.role && credentials.role !== user.role) {
+            console.error('[CREDENTIALS] Role mismatch - Expected:', credentials.role, 'Got:', user.role);
             return null;
           }
 
           const isValid = await user.comparePassword(credentials.password)
           if (!isValid) {
-  
+            console.error('[CREDENTIALS] Password invalid for user:', credentials.email);
             return null;
           }
-
 
           const authorizedUser = {
             id: user._id.toString(),
@@ -101,9 +105,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             image: user.profileImage,
           };
 
+          console.log('[CREDENTIALS] ✅ Authorization successful for:', credentials.email, 'with role:', user.role);
           return authorizedUser;
         } catch (error) {
-    
+          console.error('[CREDENTIALS] Authorization error:', error.message);
+          console.error('[CREDENTIALS] Stack:', error.stack);
           return null
         }
       }
@@ -314,26 +320,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // Docs: https://authjs.dev/reference/nextjs#events
       // Called when user signs in. isNewUser is true for new OAuth/credentials users
       
-      console.log(`[SIGNIN_EVENT] User signed in - Email: ${user?.email}, IsNew: ${isNewUser}, Provider: ${account?.provider}`);
+      const provider = account?.provider || 'credentials'
+      console.log(`[SIGNIN_EVENT] User signed in - Email: ${user?.email}, IsNew: ${isNewUser}, Provider: ${provider}`);
+      
+      // ✅ FIXED: Only create profiles for OAuth users
+      // Credentials users have profiles created by /api/user/create endpoint
+      // OAuth users need profiles created here because they bypass that endpoint
+      if (provider === 'credentials') {
+        console.log(`[SIGNIN_EVENT] Credentials user - profile already created by signup API`);
+        return;
+      }
       
       // Use either the isNewUser parameter or the flag we set in signIn callback
       const isActuallyNewUser = isNewUser || user?.isNewUser;
       
-      // Only run for new users
+      // Only run for new OAuth users
       if (!isActuallyNewUser) {
-        console.log(`[SIGNIN_EVENT] Existing user, skipping profile creation`);
-        return;
-      }
-      
-      if (!account?.provider) {
-        console.log(`[SIGNIN_EVENT] No provider info, skipping profile creation`);
+        console.log(`[SIGNIN_EVENT] Existing OAuth user, skipping profile creation`);
         return;
       }
       
       try {
         await connectDB();
         
-        console.log(`[SIGNIN_EVENT] Creating profile for new user - ID: ${user.id}, Role: ${user.role}`);
+        console.log(`[SIGNIN_EVENT] Creating profile for new OAuth user - ID: ${user.id}, Role: ${user.role}`);
         
         // Verify user exists in database with correct role before creating profile
         const dbUser = await User.findById(user.id);

@@ -74,6 +74,8 @@ export default function SignUpPage() {
     setLoading(true)
     const loadingToast = toast.loading('Creating your account...')
     try {
+      console.log('[SIGNUP] Creating account for:', data.email, 'with role:', selectedRole)
+      
       const createRes = await fetch('/api/user/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -89,11 +91,17 @@ export default function SignUpPage() {
 
       if (!createRes.ok) {
         const errorData = await createRes.json().catch(() => ({ error: 'Creation failed' }))
+        console.error('[SIGNUP] Account creation failed:', errorData)
         throw new Error(errorData.error || `Account creation failed`)
       }
       
+      const createData = await createRes.json()
+      console.log('[SIGNUP] Account created successfully:', { id: createData.user?.id, email: createData.user?.email })
+      
       toast.dismiss(loadingToast)
       toast.success('Account created! Signing you in...')
+      
+      console.log('[SIGNUP] Attempting sign-in with credentials:', { email: data.email, role: selectedRole })
       
       const signInResult = await signIn('credentials', {
         email: data.email,
@@ -102,10 +110,19 @@ export default function SignUpPage() {
         redirect: false,
       })
 
-      if (signInResult.error) {
-        throw new Error(signInResult.error)
+      console.log('[SIGNUP] Sign-in result:', signInResult)
+
+      if (signInResult?.error) {
+        console.error('[SIGNUP] Sign-in error:', signInResult.error)
+        throw new Error(signInResult.error || 'Sign-in failed after account creation')
       }
 
+      if (!signInResult?.ok) {
+        console.error('[SIGNUP] Sign-in not ok:', signInResult)
+        throw new Error('Sign-in failed. Please try signing in manually.')
+      }
+
+      console.log('[SIGNUP] Sign-in successful, redirecting...')
       const roleRoutes = {
         user: '/user',
         doctor: '/doctor',
@@ -114,8 +131,9 @@ export default function SignUpPage() {
       router.push(roleRoutes[selectedRole] || '/user');
 
     } catch (err) {
+      console.error('[SIGNUP] Error:', err)
       toast.dismiss(loadingToast)
-      toast.error(err.message)
+      toast.error(err.message || 'An error occurred during sign-up')
       setLoading(false)
     }
   }
@@ -140,15 +158,8 @@ export default function SignUpPage() {
       // Also set client-side cookie as backup
       document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
       
-      const roleRoutes = {
-        user: '/user',
-        doctor: '/doctor',
-        hospital_admin: '/hospital',
-      };
-      
       await signIn(provider, { 
-        callbackUrl: roleRoutes[roleToPass] || '/user',
-        redirect: true,
+        redirect: true
       });
     } catch (error) {
       console.error('[handleSocialSignUp] Error:', error)

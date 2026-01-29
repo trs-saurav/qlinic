@@ -132,25 +132,20 @@ export default function SignInClient() {
     setLoading(true)
     const loadingToast = toast.loading('Signing in...')
     
-    const currentOrigin = window.location.origin
-    let targetUrl
-    if (redirectTo) {
-      targetUrl = redirectTo.startsWith('http') 
-        ? redirectTo 
-        : `${currentOrigin}${redirectTo}`
-    } else {
-      targetUrl = `${currentOrigin}${currentRole.redirectUrl}`
-    }
-    
     try {
+      console.log('[SIGNIN] Attempting credentials sign-in:', {
+        email: data.email,
+        role: roleFromUrl
+      })
+
       const result = await signIn('credentials', {
         email: data.email,
         password: data.password,
         role: roleFromUrl,
-        redirect: false,
-        callbackUrl: targetUrl
+        redirect: false
       })
 
+      console.log('[SIGNIN] Sign-in result:', result)
       toast.dismiss(loadingToast)
       
       if (result?.error) {
@@ -166,8 +161,7 @@ export default function SignInClient() {
               email: data.email,
               password: data.password,
               role: roleFromUrl,
-              redirect: false,
-              callbackUrl: targetUrl
+              redirect: false
             })
             
             if (retryResult?.error) {
@@ -188,7 +182,8 @@ export default function SignInClient() {
             return
           }
         } else {
-          toast.error(result.error)
+          console.error('[SIGNIN] Error:', result.error)
+          toast.error(result.error || 'Sign in failed')
         }
         setLoading(false)
         return
@@ -196,6 +191,18 @@ export default function SignInClient() {
       
       if (result?.ok) {
         toast.success('Signed in successfully!')
+        // Redirect to appropriate dashboard based on role
+        const roleRoutes = {
+          user: '/user',
+          doctor: '/doctor',
+          hospital_admin: '/hospital',
+          admin: '/admin',
+          sub_admin: '/sub-admin'
+        }
+        const destination = redirectTo || roleRoutes[roleFromUrl] || '/user'
+        setTimeout(() => {
+          window.location.href = destination
+        }, 500)
       } else {
         toast.error('Sign in failed. Please try again.')
         setLoading(false)
@@ -210,16 +217,6 @@ export default function SignInClient() {
 
   const handleSocialLogin = async (provider) => {
     setSocialLoading(provider);
-    
-    const currentOrigin = window.location.origin
-    let targetUrl
-    if (redirectTo) {
-      targetUrl = redirectTo.startsWith('http') 
-        ? redirectTo 
-        : `${currentOrigin}${redirectTo}`
-    } else {
-      targetUrl = `${currentOrigin}${currentRole.redirectUrl}`
-    }
 
     try {
       // ✅ FIXED: Store role on server-side before OAuth redirect
@@ -244,7 +241,6 @@ export default function SignInClient() {
       document.cookie = `oauth_role_token=${cookieData}; path=/; max-age=300; SameSite=Lax;`
 
       await signIn(provider, { 
-        callbackUrl: targetUrl, 
         redirect: true 
       });
     } catch (error) {
