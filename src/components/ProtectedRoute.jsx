@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 
 const ROLES = {
-  PATIENT: 'patient',
+  USER: 'user',
   DOCTOR: 'doctor',
   HOSPITAL_ADMIN: 'hospital_admin',
   ADMIN: 'admin',
@@ -71,8 +71,8 @@ const ProtectedRoute = ({
           
           // Redirect to user's actual role dashboard
           switch(currentRole) {
-            case ROLES.PATIENT:
-              router.push('/patient')
+            case ROLES.USER:
+              router.push('/user')
               break
             case ROLES.DOCTOR:
               router.push('/doctor')

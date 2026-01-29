@@ -43,40 +43,56 @@ export const UserProvider = ({ children }) => {
       console.log('🔵 Fetching user data for role:', userRole)
       
       const [profileRes, recordsRes, familyRes, appointmentsRes] = await Promise.all([
-        fetch('/api/patient/profile'),
-        fetch('/api/patient/records'),
-        fetch('/api/patient/family'),
-        fetch('/api/patient/appointments')
+        fetch('/api/patient/profile', { signal: AbortSignal.timeout(10000) }),
+        fetch('/api/patient/records', { signal: AbortSignal.timeout(10000) }),
+        fetch('/api/patient/family', { signal: AbortSignal.timeout(10000) }),
+        fetch('/api/patient/appointments', { signal: AbortSignal.timeout(10000) })
       ])
 
       if (profileRes.ok) {
-         const data = await profileRes.json()
-         setUser(data.user)
+        try {
+          const data = await profileRes.json()
+          setUser(data.user)
+        } catch (parseError) {
+          console.error('❌ Failed to parse profile response:', parseError)
+        }
       } else {
-        console.error('Profile fetch failed:', await profileRes.text())
+        console.error('❌ Profile fetch failed:', profileRes.status, await profileRes.text().catch(() => 'No text'))
       }
       
       if (recordsRes.ok) {
-         const data = await recordsRes.json()
-         setMedicalRecords(data.records || [])
+        try {
+          const data = await recordsRes.json()
+          setMedicalRecords(data.records || [])
+        } catch (parseError) {
+          console.error('❌ Failed to parse records response:', parseError)
+        }
       } else {
-        console.error('Records fetch failed:', await recordsRes.text())
+        console.error('❌ Records fetch failed:', recordsRes.status, await recordsRes.text().catch(() => 'No text'))
       }
       
       if (familyRes.ok) {
-         const data = await familyRes.json()
-         setFamilyMembers(data.members || data.familyMembers || [])
+        try {
+          const data = await familyRes.json()
+          setFamilyMembers(data.members || data.familyMembers || [])
+        } catch (parseError) {
+          console.error('❌ Failed to parse family response:', parseError)
+        }
       } else {
-        console.error('Family fetch failed:', await familyRes.text())
+        console.error('❌ Family fetch failed:', familyRes.status, await familyRes.text().catch(() => 'No text'))
       }
       
       if (appointmentsRes.ok) {
-         const data = await appointmentsRes.json()
-         const fetchedAppointments = data.appointments || []
-         setAppointments(fetchedAppointments)
-         setAllAppointments(fetchedAppointments)
+        try {
+          const data = await appointmentsRes.json()
+          const fetchedAppointments = data.appointments || []
+          setAppointments(fetchedAppointments)
+          setAllAppointments(fetchedAppointments)
+        } catch (parseError) {
+          console.error('❌ Failed to parse appointments response:', parseError)
+        }
       } else {
-        console.error('Appointments fetch failed:', await appointmentsRes.text())
+        console.error('❌ Appointments fetch failed:', appointmentsRes.status, await appointmentsRes.text().catch(() => 'No text'))
       }
 
     } catch (err) {

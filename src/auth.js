@@ -144,9 +144,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
     async redirect({ url, baseUrl }) {
-  
-      
       try {
+        // If it's a relative URL (starts with /), just return it as-is
+        if (url.startsWith('/')) {
+          console.log(`[REDIRECT] Relative URL, allowing: ${url}`);
+          return url;
+        }
+
         // Ensure URLs are properly formatted with protocol before parsing
         const normalizedUrl = url.startsWith('http') ? url : `${baseUrl.split('://')[0]}://${url}`;
         const normalizedBaseUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;

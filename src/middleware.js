@@ -14,6 +14,8 @@ export default async function middleware(req) {
     nextUrl.pathname.startsWith('/api/auth') ||
     nextUrl.pathname.startsWith('/api/inngest') ||
     nextUrl.pathname.startsWith('/api/webhooks') ||
+    nextUrl.pathname.startsWith('/api/user/check') ||  // ✅ Allow email check for sign-up
+    nextUrl.pathname.startsWith('/api/user/create') ||  // ✅ Allow account creation for sign-up
     nextUrl.pathname.match(/\.(jpg|jpeg|png|gif|svg|css|js|woff|woff2|ttf|webp|ico|mp4|webm)$/)
   ) {
     return NextResponse.next()

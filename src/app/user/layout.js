@@ -10,7 +10,7 @@ export const metadata = {
 
 export default function PatientLayout({ children }) {
   return (
-    <ProtectedRoute requiredRole="user"> {/* Changed "user" to "patient" to match your schema role */}
+    <ProtectedRoute requiredRole="user">
       <UserProvider>
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
           <UserNavbar/>

@@ -53,21 +53,44 @@ export function DoctorProvider({ children }) {
 
     try {
       setDoctorLoading(true)
-      const res = await fetch('/api/doctor/profile')
-      const data = await res.json()
+      const res = await fetch('/api/doctor/profile', {
+        signal: AbortSignal.timeout(10000), // 10s timeout
+      })
 
       if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }))
         setDoctor(null)
-        setDoctorError(data?.error || 'Failed to load doctor profile')
+        setDoctorError(errorData?.error || `Failed to load doctor profile (${res.status})`)
         return
       }
 
-      const doctorData = data?.profile || data?.doctor || null
+      let data
+      try {
+        data = await res.json()
+      } catch (parseError) {
+        console.error('❌ Failed to parse doctor profile response:', parseError)
+        setDoctor(null)
+        setDoctorError('Invalid response from server')
+        return
+      }
+
+      const doctorData = data?.doctor || data?.profile || null
+      if (!doctorData) {
+        setDoctor(null)
+        setDoctorError('No doctor data in response')
+        return
+      }
+
       setDoctor(doctorData)
+      setDoctorError(null)
     } catch (err) {
-      console.error('❌ fetchDoctorProfile:', err)
+      console.error('❌ fetchDoctorProfile error:', err)
+      if (err.name === 'AbortError') {
+        setDoctorError('Request timed out')
+      } else {
+        setDoctorError(err.message || 'Failed to load doctor profile')
+      }
       setDoctor(null)
-      toast.error('Failed to load doctor profile')
     } finally {
       setDoctorLoading(false)
     }

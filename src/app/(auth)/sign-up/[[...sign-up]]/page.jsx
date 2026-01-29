@@ -76,11 +76,19 @@ const onSubmit = async (data) => {
   setLoading(true)
   const loadingToast = toast.loading('Creating your account...')
   try {
+    // Step 1: Check if email exists
+    console.log('📝 Checking if email exists:', data.email)
     const checkRes = await fetch('/api/user/check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: data.email }),
     })
+
+    if (!checkRes.ok) {
+      const errorData = await checkRes.json().catch(() => ({ error: 'Check failed' }))
+      throw new Error(errorData.error || `Email check failed with status ${checkRes.status}`)
+    }
+
     const checkData = await checkRes.json()
     if (checkData.exists) {
       toast.dismiss(loadingToast)
@@ -89,7 +97,9 @@ const onSubmit = async (data) => {
       return
     }
     
-    const res = await fetch('/api/user/create', {
+    // Step 2: Create user account
+    console.log('📝 Creating user account for role:', selectedRole)
+    const createRes = await fetch('/api/user/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -98,12 +108,20 @@ const onSubmit = async (data) => {
         email: data.email,
         password: data.password,
         role: selectedRole,
-        profileData: {} // ← ADDED: Empty profile data (will use defaults)
+        profileData: {},
       }),
     })
+
+    if (!createRes.ok) {
+      const errorData = await createRes.json().catch(() => ({ error: 'Creation failed' }))
+      throw new Error(errorData.error || `Account creation failed with status ${createRes.status}`)
+    }
     
-    const result = await res.json()
-    if (!res.ok) throw new Error(result.error || 'Failed to create account')
+    const result = await createRes.json()
+    
+    if (!result.success && !result.user) {
+      throw new Error(result.error || 'Account creation failed')
+    }
     
     toast.dismiss(loadingToast)
     toast.success('Account created!', { icon: '🎉' })
@@ -115,16 +133,50 @@ const onSubmit = async (data) => {
       hospital_admin: '/hospital-admin',
     };
     
-    const signInResult = await signIn('credentials', {
-      email: data.email,
-      password: data.password,
-      redirect: true,
-      callbackUrl: roleRoutes[selectedRole] || '/user'
-    })
+    console.log('🔐 Attempting automatic sign-in for:', data.email, 'with role:', selectedRole)
+    
+    try {
+      const signInResult = await signIn('credentials', {
+        email: data.email,
+        password: data.password,
+        role: selectedRole,  // ✅ ADDED: Pass role for verification
+        redirect: false, // ✅ CHANGED: Don't let signIn redirect, we'll handle it
+        callbackUrl: roleRoutes[selectedRole] || '/user'
+      })
 
-    if (signInResult?.error) {
-      toast.error('Login failed: ' + signInResult.error)
+      console.log('🔐 SignIn result:', signInResult)
+
+      if (!signInResult) {
+        console.error('❌ SignIn returned null')
+        toast.error('Sign in failed. Please try signing in manually.')
+        setTimeout(() => router.push('/sign-in'), 2000)
+        setLoading(false)
+        return
+      }
+
+      if (signInResult.error) {
+        console.error('❌ SignIn error:', signInResult.error)
+        toast.error('Login failed: ' + signInResult.error)
+        setTimeout(() => router.push('/sign-in'), 2000)
+        setLoading(false)
+        return
+      }
+
+      if (signInResult.ok) {
+        console.log('✅ SignIn successful, redirecting to:', roleRoutes[selectedRole])
+        // Manually redirect since we set redirect: false
+        router.push(roleRoutes[selectedRole] || '/user')
+      } else {
+        console.error('❌ SignIn status not ok:', signInResult)
+        toast.error('Sign in failed. Please try signing in manually.')
+        setTimeout(() => router.push('/sign-in'), 2000)
+        setLoading(false)
+      }
+    } catch (signInError) {
+      console.error('❌ SignIn exception:', signInError)
+      toast.error('Sign in failed. Please try signing in manually.')
       setTimeout(() => router.push('/sign-in'), 2000)
+      setLoading(false)
     }
   } catch (err) {
     toast.dismiss(loadingToast)
@@ -132,6 +184,7 @@ const onSubmit = async (data) => {
     setLoading(false)
   }
 }
+
 
   const handleSocialSignUp = async (provider) => {
     setSocialLoading(provider)
