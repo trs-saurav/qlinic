@@ -1,7 +1,7 @@
 'use client'
 
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import toast from 'react-hot-toast'
 
@@ -13,11 +13,28 @@ const ProtectedRoute = ({
 }) => {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const pathname = usePathname()
+
+  // ✅ Detect context from current subdomain
+  const getContextRole = () => {
+    if (typeof window === 'undefined') return null
+    
+    const hostname = window.location.hostname
+    if (hostname.includes('doctor.')) return 'doctor'
+    if (hostname.includes('hospital.')) return 'hospital_admin'
+    if (hostname.includes('admin.')) return 'admin'
+    if (hostname.includes('user.') || hostname === 'localhost') return 'user'
+    return null
+  }
 
   useEffect(() => {
     if (status === 'unauthenticated') {
-      toast.error('Please sign in to access this page')
-      router.push('/sign-in')
+      // Redirect to sign-in with context role
+      const contextRole = getContextRole()
+      const signInUrl = contextRole 
+        ? `/sign-in?role=${contextRole}` 
+        : '/sign-in'
+      router.push(signInUrl)
     }
   }, [status, router])
 
@@ -59,8 +76,15 @@ const ProtectedRoute = ({
   }
 
   if (!hasPermission) {
-    toast.error('You do not have permission to access this page')
-    router.push('/')
+    // ✅ Context-aware redirect
+    const contextRole = getContextRole()
+    if (contextRole) {
+      toast.error('You do not have permission to access this page')
+      router.push(`/sign-in?role=${contextRole}`)
+    } else {
+      toast.error('You do not have permission to access this page')
+      router.push('/sign-in')
+    }
     return null
   }
 
