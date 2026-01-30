@@ -116,7 +116,7 @@ const handleSocialSignUp = async (provider) => {
   try {
     // 1. Store role on server-side 
     const tempEmail = `temp-${roleToPass}-${Date.now()}`;
-    const storeResponse = await fetch('/api/auth/set-oauth-role', {
+    await fetch('/api/auth/set-oauth-role', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -124,40 +124,32 @@ const handleSocialSignUp = async (provider) => {
         role: roleToPass,
         expires: Date.now() + 300000 // 5 minutes
       })
-    });
-    
-    if (!storeResponse.ok) {
-      throw new Error('Failed to store OAuth role');
-    }
+    }).catch(e => console.error('[OAuth Role Store] Error:', e));
 
-    // 2. Set client-side cookie
-    const cookieAttributes = [
-      `oauth_role=${roleToPass}`,
-      'path=/',
-      'max-age=300',
-      'SameSite=Lax'
-    ];
-    
-    if (process.env.NODE_ENV === "production") {
-      cookieAttributes.push('Domain=.qlinichealth.com');
-      cookieAttributes.push('Secure');
-    }
-    
-    document.cookie = cookieAttributes.join('; ');
+    // 2. Set client-side cookie with domain-specific settings
+    const cookieDomain = process.env.NODE_ENV === "production" 
+      ? "Domain=.qlinichealth.com;" 
+      : "";
+      
+    document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax; ${cookieDomain}${
+      process.env.NODE_ENV === "production" ? " Secure;" : ""
+    }`;
 
-    // 3. Use direct sign-in with role parameter (simpler approach)
-    const signInResult = await signIn(provider, { 
-      callbackUrl: `${window.location.origin}/sign-in?role=${roleToPass}`,
+    // ✅ SIMPLE FIX: Use the same domain for OAuth callbacks
+    // This avoids state parameter issues with cross-subdomain redirects
+    const callbackUrl = `${window.location.origin}/sign-in?role=${roleToPass}&oauth=1`;
+
+    await signIn(provider, { 
+      callbackUrl: callbackUrl,
       redirect: true 
     });
-    
-    // The OAuth flow will handle the redirect automatically
   } catch (error) {
-    console.error('[handleSocialSignUp] Error:', error);
-    toast.error('Failed to initiate social sign-up. Please try again.');
-    setSocialLoading(null);
+    console.error('[handleSocialSignUp] Error:', error)
+    toast.error('Login initiation failed. Please try again.')
+    setSocialLoading(null)
   }
-};
+}
+
 
 
 

@@ -99,6 +99,7 @@ cookies: {
     // In your auth.js callbacks.signIn function, add better error handling:
 // In your auth.js callbacks.signIn function:
 // In your auth.js callbacks:
+// In your auth.js callbacks.signIn function:
 async signIn({ user, account, profile, req }) {
   if (account?.provider === 'credentials') return true;
   
@@ -107,70 +108,50 @@ async signIn({ user, account, profile, req }) {
     let dbUser = await User.findOne({ email: user.email });
 
     if (!dbUser) {
-      console.log('[OAuth] Creating new user for:', user.email);
+      console.log('[OAuth] Processing new user:', user.email);
       
-      // Extract role with multiple fallback methods
+      // Extract role using multiple methods with proper fallbacks
       let finalRole = 'user';
       
-      // Method 1: Check URL parameters
-      if (req.url) {
-        try {
-          // Handle both regular URLs and Vercel function URLs
-          let urlToParse = req.url;
-          if (urlToParse.includes('__vercel_route_handler')) {
-            // Extract actual URL from Vercel wrapper
-            const urlParams = new URL(urlToParse, 'http://localhost');
-            const stateParam = urlParams.searchParams.get('state');
-            if (stateParam) {
-              try {
-                const decodedState = decodeURIComponent(stateParam);
-                if (decodedState.includes('role=')) {
-                  const roleMatch = decodedState.match(/role=([^&]*)/);
-                  if (roleMatch) finalRole = roleMatch[1];
-                }
-              } catch (e) {
-                console.log('[OAuth] State decoding failed:', e);
-              }
-            }
-          } else {
-            const urlObj = new URL(req.url, 'http://localhost');
-            finalRole = urlObj.searchParams.get('role') || finalRole;
-            
-            // Check for role in callback URL path
-            if (req.url.includes('/auth/complete')) {
-              const pathSegments = req.url.split('/');
-              const roleIndex = pathSegments.indexOf('auth') - 1;
-              if (roleIndex > 0 && pathSegments[roleIndex]) {
-                const pathRole = pathSegments[roleIndex].replace('?role=', '');
-                if (['user', 'doctor', 'hospital_admin', 'admin'].includes(pathRole)) {
-                  finalRole = pathRole;
-                }
-              }
-            }
+      // Method 1: Check URL parameters (most reliable for OAuth)
+      try {
+        if (req.url) {
+          const urlObj = new URL(req.url, 'http://localhost');
+          finalRole = urlObj.searchParams.get('role') || finalRole;
+          
+          // Special handling for OAuth callbacks
+          if (req.url.includes('oauth=1')) {
+            console.log('[OAuth] Detected OAuth callback flow');
           }
-        } catch (e) {
-          console.log('[OAuth] URL parsing failed:', e);
         }
+      } catch (urlError) {
+        console.log('[OAuth] URL parsing error:', urlError);
       }
       
-      // Method 2: Check cookies
+      // Method 2: Check cookies (set by frontend)
       if (finalRole === 'user') {
-        const cookieHeader = req.headers?.get('cookie') || '';
-        const cookieMatch = cookieHeader.match(/oauth_role=([^;]+)/);
-        if (cookieMatch) {
-          finalRole = cookieMatch[1];
+        try {
+          const cookieHeader = req.headers?.get('cookie') || '';
+          const cookieMatch = cookieHeader.match(/oauth_role=([^;]+)/);
+          if (cookieMatch) {
+            finalRole = cookieMatch[1];
+            console.log('[OAuth] Found role in cookie:', finalRole);
+          }
+        } catch (cookieError) {
+          console.log('[OAuth] Cookie parsing error:', cookieError);
         }
       }
       
-      // Method 3: Check server-side store
+      // Method 3: Check server-side store (fallback)
       if (finalRole === 'user') {
         const roleFromStore = getAndClearOAuthRole(user.email);
         if (roleFromStore) {
           finalRole = roleFromStore;
+          console.log('[OAuth] Found role in server store:', finalRole);
         }
       }
 
-      console.log(`[OAuth] Final determined role "${finalRole}" for ${user.email}`);
+      console.log(`[OAuth] Creating user ${user.email} with role: ${finalRole}`);
 
       dbUser = await User.create({
         email: user.email,
@@ -181,28 +162,21 @@ async signIn({ user, account, profile, req }) {
         oauthProviders: [{ provider: account.provider, providerId: account.providerAccountId }]
       });
       
-      user.isNewUser = true;
-      console.log(`[OAuth] Successfully created user ${user.email} with role ${finalRole}`);
+      user.isNewUser = true; 
     }
 
     user.role = dbUser.role;
     user.id = dbUser._id.toString();
+    console.log(`[OAuth] User processed successfully: ${user.email} (${user.role})`);
     return true;
   } catch (error) {
-    console.error('[SIGNIN] OAuth Error:', error);
-    return '/auth/error'; // Return error page path
+    console.error('[SIGNIN] OAuth Signup Error:', error);
+    return false;
   }
 },
 
-// Update redirect callback to handle OAuth completion
+// Simplified redirect callback:
 async redirect({ url, baseUrl }) {
-  console.log('[Auth Redirect] Processing:', url);
-  
-  // Handle OAuth completion redirects
-  if (url?.includes('/auth/complete')) {
-    return url;
-  }
-  
   // Handle OAuth errors
   if (url?.includes('/api/auth/error')) {
     return `${baseUrl}/sign-in?error=oauth-failed`;
@@ -213,7 +187,7 @@ async redirect({ url, baseUrl }) {
     return `${baseUrl}${url}`;
   }
   
-  // Allow subdomain redirects
+  // Allow our domain redirects
   try {
     const urlObj = new URL(url);
     const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || "qlinichealth.com";
@@ -231,6 +205,8 @@ async redirect({ url, baseUrl }) {
   
   return baseUrl;
 }
+
+
 ,
 
 // Update your redirect callback:

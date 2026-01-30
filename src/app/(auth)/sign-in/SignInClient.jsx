@@ -85,27 +85,20 @@ export default function SignInClient() {
 
   // ✅ CRITICAL FIX: ONLY redirect authenticated users who are NOT already on the sign-in page
   // This prevents infinite loops when users are intentionally on sign-in page
-  useEffect(() => {
-  if (status === 'authenticated' && session?.user) {
-    // Check if we're currently on a sign-in page
-    const isSignInPage = window.location.pathname === '/sign-in';
-    
-    // If we're already on sign-in page, DON'T auto-redirect (let user stay and switch roles)
-    if (isSignInPage) {
-      return;
-    }
-    
-    // Otherwise, redirect based on context role
-    const effectiveRole = roleFromUrl || session.user.role 
-    const destination = redirectTo || ROLE_ROUTES[effectiveRole] || '/user'
-    
-    // Use router.push for better SPA navigation instead of window.location.href
-    const timer = setTimeout(() => {
-      router.push(destination)
-    }, 100)
-    return () => clearTimeout(timer)
+// In your sign-in component:
+useEffect(() => {
+  const error = searchParams.get('error');
+  if (error === 'oauth-failed') {
+    toast.error('Social login failed. Please try email/password or another provider.');
   }
-}, [status, session, redirectTo, roleFromUrl, router]) // Add router to dependencies
+  
+  const oauth = searchParams.get('oauth');
+  if (oauth === '1') {
+    // Clear OAuth cookies after successful login
+    document.cookie = 'oauth_role=; path=/; max-age=0;';
+  }
+}, [searchParams]);
+// Add router to dependencies
 
 
   const onSubmit = async (data) => {
