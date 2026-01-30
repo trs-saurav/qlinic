@@ -82,7 +82,7 @@ export default async function middleware(req) {
   const isAuthPath = authPaths.some(path => nextUrl.pathname.startsWith(path))
   const isPublicPath = mainDomainPublicPaths.some(path => nextUrl.pathname === path)
 
- // =======================================================
+  // =======================================================
   // 6. MAIN DOMAIN LOGIC
   // =======================================================
   if (isMainDomain) {
@@ -103,9 +103,14 @@ export default async function middleware(req) {
       const port = isDevelopment ? ':3000' : ''
       const cleanPath = nextUrl.pathname.replace(`/${firstPath}`, '') || '/'
       
-      return NextResponse.redirect(
-        new URL(`${protocol}://${targetSub}.${mainDomain}${port}${cleanPath}${nextUrl.search}`)
-      )
+      // Create redirect response with proper headers
+      const redirectUrl = new URL(`${protocol}://${targetSub}.${mainDomain}${port}${cleanPath}${nextUrl.search}`)
+      const response = NextResponse.redirect(redirectUrl)
+      
+      // Add header to indicate this was a path-based redirect
+      response.headers.set('x-path-redirect', 'true')
+      
+      return response
     }
 
     // ✅ PRIORITY 2: Public & Auth Paths
@@ -119,9 +124,14 @@ export default async function middleware(req) {
       if (targetSubdomain) {
         const protocol = isDevelopment ? 'http' : 'https'
         const port = isDevelopment ? ':3000' : ''
-        return NextResponse.redirect(
-          new URL(`${protocol}://${targetSubdomain}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`)
-        )
+        
+        // Check if we're already on the correct subdomain via path redirect
+        const pathRedirectHeader = req.headers.get('x-path-redirect')
+        if (pathRedirectHeader !== 'true') {
+          return NextResponse.redirect(
+            new URL(`${protocol}://${targetSubdomain}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`)
+          )
+        }
       }
     }
 
@@ -158,20 +168,24 @@ export default async function middleware(req) {
       return NextResponse.redirect(signInUrl)
     }
 
-    // ✅ Strict Role Enforcement (Fixes the Production Defaulting to 'User')
-    if (userRole !== currentRoleContext) {
-      const correctSub = roleToSubdomain[userRole]
-      const protocol = isDevelopment ? 'http' : 'https'
-      const port = isDevelopment ? ':3000' : ''
-      
-      // If they are on the wrong subdomain, send them to the right one
-      if (correctSub) {
-        return NextResponse.redirect(
-          new URL(`${protocol}://${correctSub}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`)
-        )
+    // ✅ Skip Role Enforcement for Path-Based Redirects
+    const pathRedirectHeader = req.headers.get('x-path-redirect')
+    if (pathRedirectHeader !== 'true') {
+      // Strict Role Enforcement (Fixes the Production Defaulting to 'User')
+      if (userRole !== currentRoleContext) {
+        const correctSub = roleToSubdomain[userRole]
+        const protocol = isDevelopment ? 'http' : 'https'
+        const port = isDevelopment ? ':3000' : ''
+        
+        // If they are on the wrong subdomain, send them to the right one
+        if (correctSub) {
+          return NextResponse.redirect(
+            new URL(`${protocol}://${correctSub}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`)
+          )
+        }
+        // If role is unknown, send to main domain
+        return NextResponse.redirect(new URL(`${protocol}://${mainDomain}${port}`))
       }
-      // If role is unknown, send to main domain
-      return NextResponse.redirect(new URL(`${protocol}://${mainDomain}${port}`))
     }
 
     // Internal Rewrite
@@ -181,6 +195,7 @@ export default async function middleware(req) {
       return NextResponse.rewrite(url)
     }
   }
+  
   // =======================================================
   // 8. FALLBACK - Unknown subdomain
   // =======================================================
