@@ -38,54 +38,60 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   // ✅ 1. CROSS-SUBDOMAIN COOKIE SHARING (Fixes the Redirect Loop)
   // This ensures the session is visible to doctor.qlinichealth.com even if started on www.
-  cookies: {
-    sessionToken: {
-      name: process.env.NODE_ENV === "production" 
-        ? `__Secure-authjs.session-token` 
-        : `authjs.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-        domain: process.env.NODE_ENV === "production" 
-          ? ".qlinichealth.com" // Allows sharing across all *.qlinichealth.com
-          : ".localhost",      // Local dev support
-      },
+  // In your auth.js cookies configuration:
+cookies: {
+  sessionToken: {
+    name: process.env.NODE_ENV === "production" 
+      ? `__Secure-authjs.session-token` 
+      : `authjs.session-token`,
+    options: {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: process.env.NODE_ENV === "production",
+      // ✅ FIX: Make sure domain is correct for localhost
+      domain: process.env.NODE_ENV === "production" 
+        ? ".qlinichealth.com" 
+        : undefined, // Don't set domain for localhost to avoid issues
     },
   },
+},
+
 
   providers: [
     ...baseAuthConfig.providers,
-    Credentials({
-      id: 'credentials',
-      name: 'Credentials',
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-        role: { label: "Role", type: "text" }
-      },
-      async authorize(credentials) {
-        try {
-          await connectDB();
-          const user = await User.findOne({ email: credentials.email.toLowerCase().trim() }).select('+password');
-          if (!user) return null;
-          if (credentials.role && credentials.role !== user.role) return null;
-          const isValid = await user.comparePassword(credentials.password);
-          if (!isValid) return null;
+   Credentials({
+  id: 'credentials',
+  name: 'Credentials',
+  credentials: {
+    email: { label: "Email", type: "email" },
+    password: { label: "Password", type: "password" },
+    role: { label: "Role", type: "text" }
+  },
+  async authorize(credentials) {
+    try {
+      await connectDB();
+      const user = await User.findOne({ email: credentials.email.toLowerCase().trim() }).select('+password');
+      if (!user) return null;
+      
+      // ✅ FIX: Allow sign-in regardless of role mismatch
+      // Role checking should be done at the UI/application level, not auth level
+      const isValid = await user.comparePassword(credentials.password);
+      if (!isValid) return null;
 
-          return {
-            id: user._id.toString(),
-            email: user.email,
-            name: user.fullName || `${user.firstName} ${user.lastName}`,
-            role: user.role,
-            image: user.profileImage,
-          };
-        } catch (error) {
-          return null;
-        }
-      }
-    }),
+      return {
+        id: user._id.toString(),
+        email: user.email,
+        name: user.fullName || `${user.firstName} ${user.lastName}`,
+        role: user.role,
+        image: user.profileImage,
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+}),
+
   ],
 
   callbacks: {

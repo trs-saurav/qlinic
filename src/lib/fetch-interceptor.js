@@ -5,39 +5,75 @@ export function setupFetchInterceptor() {
 
   window.fetch = async function(input, init) {
     try {
-      // 1. Detect if the URL is external
-      // If input is a Request object, get .url, otherwise use input string
+      // Convert input to URL string for analysis
       let urlString = '';
+      let requestObject = null;
+      
       if (typeof input === 'string') {
         urlString = input;
       } else if (input instanceof Request) {
         urlString = input.url;
+        requestObject = input; // Keep reference to original Request object
       } else if (typeof input === 'object' && input !== null && input.url) {
         urlString = input.url.toString();
       } else {
         urlString = String(input);
       }
       
-      // It's external if it starts with http/https AND doesn't match our current domain
-      const origin = window.location.origin || '';
-      const isExternal = urlString.startsWith('http') && origin && !urlString.includes(origin);
-
-      // 2. Prepare the enhanced configuration
+      // ✅ EXCLUDE ALL NextAuth internal requests
+      const isNextAuthRequest = urlString.includes('/api/auth/') || 
+                               urlString.includes('_nextauth') ||
+                               urlString.includes('session') ||
+                               urlString.includes('csrf') ||
+                               urlString.includes('providers') ||
+                               urlString.includes('callback') ||
+                               urlString.includes('signin') ||
+                               urlString.includes('error');
+      
+      // If it's a NextAuth request, pass through unchanged to avoid interference
+      if (isNextAuthRequest) {
+        // Use original Request object if available to preserve all properties
+        if (requestObject) {
+          return originalFetch.call(this, requestObject, init);
+        }
+        return originalFetch.call(this, input, init);
+      }
+      
+      // ✅ EXCLUDE already relative API calls (they're already correct)
+      const isRelativeApiCall = urlString.startsWith('/api/') && !urlString.includes('://');
+      
+      // Only intercept absolute API calls that need conversion
+      const shouldIntercept = !isRelativeApiCall && 
+                             (urlString.includes('api.localhost:3000') || 
+                              urlString.includes('api.qlinichealth.com'));
+      
+      // If it shouldn't be intercepted, pass through unchanged
+      if (!shouldIntercept) {
+        return originalFetch.call(this, input, init);
+      }
+      
+      // Convert api.domain.com/api/... to /api/...
+      let modifiedUrl = urlString;
+      if (urlString.includes('api.localhost:3000/api/')) {
+        modifiedUrl = urlString.replace('http://api.localhost:3000/api/', '/api/');
+      } else if (urlString.includes('api.qlinichealth.com/api/')) {
+        modifiedUrl = urlString.replace('https://api.qlinichealth.com/api/', '/api/');
+      }
+      
+      // Prepare the enhanced configuration
       const enhancedInit = {
         ...init,
-        // CRITICAL FIX: Only send cookies/credentials to YOUR backend
-        credentials: isExternal ? 'omit' : 'include',
+        credentials: 'include', // Include credentials for internal requests
         headers: {
           ...init?.headers,
         },
       }
 
-      const response = await originalFetch(input, enhancedInit)
+      const response = await originalFetch.call(this, modifiedUrl, enhancedInit)
       
-      // 3. Handle 401s (Unauthorized) only for internal requests
-      if (!isExternal && response.status === 401) {
+      // Handle 401s (Unauthorized) only for non-auth requests
+      if (response.status === 401) {
         const currentPath = window.location.pathname
-        // Avoid redirect loop if already on sign-in
         if (!currentPath.includes('/sign-in')) {
           window.location.href = '/sign-in'
         }
@@ -45,13 +81,8 @@ export function setupFetchInterceptor() {
 
       return response
     } catch (error) {
-      // Log the error but still propagate it
-      if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        console.warn('⚠️ Network error in fetch:', error.message);
-      } else {
-        console.error('❌ Fetch error:', error);
-      }
-      throw error; // Re-throw to maintain normal error handling
+      console.error('❌ Fetch interceptor error:', error);
+      throw error;
     }
   }
 }

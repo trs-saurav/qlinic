@@ -107,37 +107,46 @@ export default function SignInClient() {
   }, [status, session, redirectTo, roleFromUrl])
 
   const onSubmit = async (data) => {
-    setLoading(true)
-    const loadingToast = toast.loading('Authenticating...')
-    
-    try {
-      const result = await signIn('credentials', {
-        email: data.email,
-        password: data.password,
-        role: roleFromUrl,
-        redirect: false 
-      })
+  setLoading(true)
+  const loadingToast = toast.loading('Authenticating...')
+  
+  try {
+    const result = await signIn('credentials', {
+      email: data.email,
+      password: data.password,
+      role: roleFromUrl,
+      redirect: false 
+    })
 
-      toast.dismiss(loadingToast)
-      
-      if (result?.error) {
-        toast.error('Invalid credentials or unauthorized role for this portal.')
-        setLoading(false)
-        return
-      }
-      
-      if (result?.ok) {
-        toast.success('Access Granted.')
-        // ✅ AFTER successful login, NOW redirect to appropriate destination
+    toast.dismiss(loadingToast)
+    
+    if (result?.error) {
+      console.error('Sign-in error details:', result.error);
+      toast.error(
+        result.error === 'CredentialsSignin' 
+          ? 'Invalid email or password' 
+          : 'Authentication failed. Please try again.'
+      )
+      setLoading(false)
+      return
+    }
+    
+    if (result?.ok) {
+      toast.success('Access Granted.')
+      // Give session time to establish properly
+      setTimeout(() => {
         const destination = redirectTo || ROLE_ROUTES[roleFromUrl] || '/user'
         window.location.href = destination
-      }
-    } catch (err) {
-      toast.dismiss(loadingToast)
-      toast.error('Connection error.')
-      setLoading(false)
+      }, 300) // Increased timeout to ensure session is ready
     }
+  } catch (err) {
+    toast.dismiss(loadingToast)
+    console.error('Connection error:', err)
+    toast.error('Connection error. Please try again.')
+    setLoading(false)
   }
+}
+
 
   const handleSocialLogin = async (provider) => {
     if (roleFromUrl === 'admin') {
