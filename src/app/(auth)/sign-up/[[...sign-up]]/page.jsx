@@ -130,7 +130,7 @@ const handleSocialSignUp = async (provider) => {
       throw new Error('Failed to store OAuth role');
     }
 
-    // 2. Set client-side cookie with proper attributes
+    // 2. Set client-side cookie
     const cookieAttributes = [
       `oauth_role=${roleToPass}`,
       'path=/',
@@ -145,26 +145,20 @@ const handleSocialSignUp = async (provider) => {
     
     document.cookie = cookieAttributes.join('; ');
 
-    // 3. Use main domain for OAuth callbacks to avoid subdomain issues
-    let callbackUrl;
-    if (process.env.NODE_ENV === "production") {
-      callbackUrl = `https://qlinichealth.com/auth/complete?role=${roleToPass}`;
-    } else {
-      callbackUrl = `${window.location.origin}/auth/complete?role=${roleToPass}`;
-    }
-
-    console.log('[OAuth] Initiating sign-in with callback:', callbackUrl);
-    
-    await signIn(provider, { 
-      callbackUrl: callbackUrl,
+    // 3. Use direct sign-in with role parameter (simpler approach)
+    const signInResult = await signIn(provider, { 
+      callbackUrl: `${window.location.origin}/sign-in?role=${roleToPass}`,
       redirect: true 
     });
+    
+    // The OAuth flow will handle the redirect automatically
   } catch (error) {
     console.error('[handleSocialSignUp] Error:', error);
     toast.error('Failed to initiate social sign-up. Please try again.');
     setSocialLoading(null);
   }
 };
+
 
 
 
