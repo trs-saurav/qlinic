@@ -167,8 +167,8 @@ export default async function middleware(req) {
       return NextResponse.redirect(signInUrl)
     }
 
-    // ✅ FIX: Only enforce role correction if NOT coming from path redirect
-    // Check if this is a fresh arrival from path redirect
+    // ✅ CRITICAL FIX: Smart role enforcement
+    // Check if this is a fresh arrival from a path-based redirect
     const referer = req.headers.get('referer') || ''
     const isFreshPathRedirect = referer.includes(mainDomain) && 
                                (referer.includes('/doctor') || 
@@ -176,6 +176,9 @@ export default async function middleware(req) {
                                 referer.includes('/admin') || 
                                 referer.includes('/user'))
 
+    // Only enforce role correction if:
+    // 1. User has a role AND it doesn't match current context
+    // 2. AND this is NOT a fresh arrival from path redirect
     if (userRole !== currentRoleContext && !isFreshPathRedirect) {
       const correctSubdomain = roleToSubdomain[userRole]
       if (correctSubdomain) {
