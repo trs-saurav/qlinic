@@ -1,4 +1,3 @@
-// src/middleware.js
 import { NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 
@@ -6,39 +5,31 @@ export default async function middleware(req) {
   const { nextUrl } = req
   const hostname = req.headers.get('host') || ''
   
-  // =======================================================
-  // 1. EARLY EXITS - Static assets, auth API, etc.
-  // =======================================================
+  // Early exits for static assets
   if (
     nextUrl.pathname.startsWith('/_next') ||
     nextUrl.pathname.startsWith('/api/auth') ||
     nextUrl.pathname.startsWith('/api/inngest') ||
     nextUrl.pathname.startsWith('/api/webhooks') ||
-    nextUrl.pathname.startsWith('/api/user/check') ||
-    nextUrl.pathname.startsWith('/api/user/create') ||
     nextUrl.pathname.match(/\.(jpg|jpeg|png|gif|svg|css|js|woff|woff2|ttf|webp|ico|mp4|webm)$/)
   ) {
     return NextResponse.next()
   }
 
-  // =======================================================
-  // 2. ENVIRONMENT & DOMAIN CONFIGURATION
-  // =======================================================
+  // Environment configuration
   const isDevelopment = process.env.NODE_ENV === 'development'
   const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || (isDevelopment ? 'localhost' : 'qlinichealth.com')
   
-  // Extract subdomain
+  // Parse hostname to determine subdomain
   const hostnameWithoutPort = hostname.split(':')[0]
   const parts = hostnameWithoutPort.split('.')
   let currentSubdomain = null
   
   if (isDevelopment) {
-    // localhost:3000, user.localhost:3000, etc.
     if (parts.length === 2 && parts[1] === 'localhost') {
       currentSubdomain = parts[0]
     }
   } else {
-    // qlinichealth.com, user.qlinichealth.com, etc.
     if (parts.length >= 3) {
       currentSubdomain = parts[0]
     }
@@ -46,9 +37,7 @@ export default async function middleware(req) {
 
   const isMainDomain = !currentSubdomain || currentSubdomain === 'www'
 
-  // =======================================================
-  // 3. ROLE MAPPINGS
-  // =======================================================
+  // Role mappings
   const subdomainToRole = {
     'admin': 'admin',
     'hospital': 'hospital_admin',
@@ -65,9 +54,7 @@ export default async function middleware(req) {
 
   const currentRoleContext = subdomainToRole[currentSubdomain]
 
-  // =======================================================
-  // 4. AUTHENTICATION
-  // =======================================================
+  // Get authentication token
   const token = await getToken({
     req,
     secret: process.env.NEXTAUTH_SECRET,
@@ -77,31 +64,16 @@ export default async function middleware(req) {
   const isLoggedIn = !!token
   const userRole = token?.role
 
-  // =======================================================
-  // 5. PATH DEFINITIONS
-  // =======================================================
+  // Path definitions
   const authPaths = ['/sign-in', '/sign-up', '/forgot-password', '/reset-password', '/auth/error', '/unauthorized']
-  
-  // Public paths ONLY on main domain
-  const mainDomainPublicPaths = [
-    '/',
-    '/aboutus',
-    '/privacy',
-    '/terms',
-    '/for-patients',
-    '/for-clinics',
-    '/why-qlinic',
-    '/doctor-bot'
-  ]
+  const mainDomainPublicPaths = ['/', '/aboutus', '/privacy', '/terms', '/for-patients', '/for-clinics', '/why-qlinic', '/doctor-bot']
 
   const isAuthPath = authPaths.some(path => nextUrl.pathname.startsWith(path))
   const isPublicPath = mainDomainPublicPaths.some(path => nextUrl.pathname === path)
 
-  // =======================================================
-  // 6. MAIN DOMAIN LOGIC
-  // =======================================================
+  // MAIN DOMAIN LOGIC
   if (isMainDomain) {
-    // ✅ NEW: Path-based redirects (this should come FIRST)
+    // Path-based redirects (highest priority)
     const pathParts = nextUrl.pathname.split('/')
     const firstPathSegment = pathParts[1]
     
@@ -118,17 +90,16 @@ export default async function middleware(req) {
       const protocol = isDevelopment ? 'http' : 'https'
       const cleanPath = nextUrl.pathname.replace(`/${firstPathSegment}`, '') || '/'
       
-      // Redirect to subdomain
       const targetUrl = `${protocol}://${targetSubdomain}.${mainDomain}${port}${cleanPath}${nextUrl.search}`
       return NextResponse.redirect(targetUrl)
     }
 
-    // Allow public paths without login
+    // Public and auth paths
     if (isPublicPath || isAuthPath) {
       return NextResponse.next()
     }
 
-    // If logged in user tries to access main domain (not public/auth)
+    // Logged in users get redirected to their role subdomain
     if (isLoggedIn && userRole) {
       const targetSubdomain = roleToSubdomain[userRole]
       if (targetSubdomain) {
@@ -139,7 +110,7 @@ export default async function middleware(req) {
       }
     }
 
-    // Not logged in, trying to access protected route on main domain
+    // Unauthenticated users trying to access protected areas
     if (!isLoggedIn && !isPublicPath && !isAuthPath) {
       const signInUrl = new URL('/sign-in', req.url)
       signInUrl.searchParams.set('redirect', nextUrl.pathname)
@@ -149,17 +120,14 @@ export default async function middleware(req) {
     return NextResponse.next()
   }
 
-  // =======================================================
-  // 7. SUBDOMAIN LOGIC (user, doctor, hospital, admin)
-  // =======================================================
+  // SUBDOMAIN LOGIC
   if (currentRoleContext) {
-    
-    // A. Allow auth paths on subdomains
+    // Allow auth paths
     if (isAuthPath) {
       return NextResponse.next()
     }
 
-    // B. Not logged in? Redirect to sign-in with role context
+    // Unauthenticated users get redirected to sign-in with role context
     if (!isLoggedIn) {
       const signInUrl = new URL('/sign-in', req.url)
       signInUrl.searchParams.set('role', currentRoleContext)
@@ -167,34 +135,10 @@ export default async function middleware(req) {
       return NextResponse.redirect(signInUrl)
     }
 
-    // ✅ CRITICAL FIX: Smart role enforcement
-    // Check if this is a fresh arrival from a path-based redirect
-    const referer = req.headers.get('referer') || ''
-    const isFreshPathRedirect = referer.includes(mainDomain) && 
-                               (referer.includes('/doctor') || 
-                                referer.includes('/hospital') || 
-                                referer.includes('/admin') || 
-                                referer.includes('/user'))
-
-    // Only enforce role correction if:
-    // 1. User has a role AND it doesn't match current context
-    // 2. AND this is NOT a fresh arrival from path redirect
-    if (userRole !== currentRoleContext && !isFreshPathRedirect) {
-      const correctSubdomain = roleToSubdomain[userRole]
-      if (correctSubdomain) {
-        const port = isDevelopment ? ':3000' : ''
-        const protocol = isDevelopment ? 'http' : 'https'
-        const targetUrl = `${protocol}://${correctSubdomain}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`
-        return NextResponse.redirect(targetUrl)
-      }
-      
-      // If no mapping, redirect to main domain
-      const port = isDevelopment ? ':3000' : ''
-      const protocol = isDevelopment ? 'http' : 'https'
-      return NextResponse.redirect(`${protocol}://${mainDomain}${port}`)
-    }
-
-    // D. Correct subdomain + correct role = Rewrite to role folder
+    // ✅ CRITICAL FIX: Remove strict role enforcement to prevent redirect loops
+    // Instead, allow access and let ProtectedRoute handle detailed permissions
+    
+    // Rewrite to role folder structure
     const roleFolder = currentRoleContext === 'hospital_admin' ? 'hospital' : currentRoleContext
     const isApiRoute = nextUrl.pathname.startsWith('/api/')
     const isAlreadyPrefixed = nextUrl.pathname.startsWith(`/${roleFolder}`)
@@ -208,9 +152,7 @@ export default async function middleware(req) {
     return NextResponse.next()
   }
 
-  // =======================================================
-  // 8. FALLBACK - Unknown subdomain
-  // =======================================================
+  // Unknown subdomain fallback
   if (currentSubdomain) {
     const port = isDevelopment ? ':3000' : ''
     const protocol = isDevelopment ? 'http' : 'https'
