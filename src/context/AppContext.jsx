@@ -13,15 +13,12 @@ export const useAppContext = () => {
 export const AppContextProvider = (props) => {
     const currency = process.env.NEXT_PUBLIC_CURRENCY
     const router = useRouter()
-
     const { data: session, status, update } = useSession()
 
-    // ✅ Use session data directly - no API calls needed
     const userData = session?.user || null
     const userRole = session?.user?.role || null
     const isLoading = status === 'loading'
 
-    // Role definitions
     const ROLES = {
         USER: 'user',
         PATIENT: 'patient',
@@ -30,7 +27,27 @@ export const AppContextProvider = (props) => {
         ADMIN: 'admin',
     }
 
-    // Update user role in database and session
+    // --- HELPER: Absolute URL Generation ---
+    const getAbsoluteDashboardURL = (role) => {
+        const isDevelopment = process.env.NODE_ENV === 'development';
+        const mainDomain = "qlinichealth.com";
+        const protocol = isDevelopment ? "http" : "https";
+        const port = isDevelopment ? ":3000" : "";
+
+        const roleToSubdomain = {
+            [ROLES.USER]: 'user',
+            [ROLES.PATIENT]: 'user',
+            [ROLES.DOCTOR]: 'doctor',
+            [ROLES.HOSPITAL_ADMIN]: 'hospital', // Maps hospital_admin to 'hospital' subdomain
+            [ROLES.ADMIN]: 'admin'
+        };
+
+        const sub = roleToSubdomain[role];
+        if (!sub) return `${protocol}://${mainDomain}${port}/`;
+        
+        return `${protocol}://${sub}.${mainDomain}${port}/`;
+    };
+
     const updateUserRole = async (role) => {
         try {
             const response = await fetch('/api/user/set-role', {
@@ -40,7 +57,6 @@ export const AppContextProvider = (props) => {
             })
 
             if (response.ok) {
-                // Update session with new role
                 await update({ role })
             }
         } catch (error) {
@@ -49,25 +65,21 @@ export const AppContextProvider = (props) => {
         }
     }
 
-    // Role-based navigation
+    // ✅ FIXED: Navigate using window.location for cross-subdomain support
     const navigateToDashboard = () => {
-        const roleMap = {
-            [ROLES.USER]: '/user',
-            [ROLES.PATIENT]: '/user',
-            [ROLES.DOCTOR]: '/doctor',
-            [ROLES.HOSPITAL_ADMIN]: '/hospital',
-            [ROLES.ADMIN]: '/admin',
+        if (!userRole) {
+            window.location.href = "/";
+            return;
         }
-        router.push(roleMap[userRole] || '/')
+        // Redirect to the absolute subdomain root
+        window.location.href = getAbsoluteDashboardURL(userRole);
     }
 
-    // Check if user has specific role
     const hasRole = (role) => userRole === role
     const hasAnyRole = (roles) => roles.includes(userRole)
     const isAdmin = () => userRole === ROLES.ADMIN
     const isAdminOrSubAdmin = () => userRole === ROLES.ADMIN
 
-    // Get role display name
     const getRoleDisplayName = () => {
         const names = {
             [ROLES.USER]: 'User',
@@ -80,34 +92,21 @@ export const AppContextProvider = (props) => {
     }
 
     const value = {
-        // Session data - directly from NextAuth
         user: session?.user,
         userData,
         session,
-        
-        // App config
         currency,
         router,
-        
-        // Role management
         userRole,
         updateUserRole,
-        
-        // Navigation helpers
         navigateToDashboard,
-        
-        // Permission checks
         hasRole,
         hasAnyRole,
         isAdmin,
         isAdminOrSubAdmin,
         getRoleDisplayName,
-        
-        // Loading states
         isLoading,
         isAuthenticated: status === 'authenticated',
-        
-        // Constants
         ROLES
     }
 
