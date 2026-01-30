@@ -125,9 +125,9 @@ const handleSocialSignUp = async (provider) => {
     // 2. Set client-side cookie
     document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
     
-    // ✅ FIX: Use absolute URL so the native URL constructor doesn't fail
-    // and include the role in the path so the backend can see it
-    const absoluteCallbackUrl = `${window.location.origin}/${roleToPass}`;
+    // ✅ FIX: Use the correct callback URL that points to your actual sign-in page
+    // Include role as a query parameter so the auth system knows the intended role
+    const absoluteCallbackUrl = `${window.location.origin}/sign-in?role=${roleToPass}`;
 
     await signIn(provider, { 
       callbackUrl: absoluteCallbackUrl,
@@ -139,6 +139,8 @@ const handleSocialSignUp = async (provider) => {
     setSocialLoading(null)
   }
 }
+
+
 
   const selectedRoleObj = roles.find((r) => r.value === selectedRole)
 

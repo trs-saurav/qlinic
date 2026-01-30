@@ -96,52 +96,62 @@ cookies: {
 
   callbacks: {
     // ✅ 2. OAUTH SIGNUP ROLE LOGIC
-    async signIn({ user, account, profile, req }) {
-      if (account?.provider === 'credentials') return true;
-      
-      try {
-        await connectDB();
-        let dbUser = await User.findOne({ email: user.email });
+    // In your auth.js callbacks.signIn function, add better error handling:
+async signIn({ user, account, profile, req }) {
+  if (account?.provider === 'credentials') return true;
+  
+  try {
+    await connectDB();
+    let dbUser = await User.findOne({ email: user.email });
 
-        if (!dbUser) {
-          // A. Extract role from standard role query param (passed via Navbar signIn)
-          const { searchParams } = new URL(req.url, "http://n");
-          const roleFromParams = searchParams.get('role');
+    if (!dbUser) {
+      // A. Extract role from standard role query param (passed via Navbar signIn)
+      const { searchParams } = new URL(req.url, "http://n");
+      const roleFromParams = searchParams.get('role');
 
-          // B. Extract role from URL path hint (if passed as redirect param)
-          const urlStr = req.url || '';
-          const roleFromPath = urlStr.includes('/doctor') ? 'doctor' : 
-                               urlStr.includes('/hospital') ? 'hospital_admin' : 
-                               urlStr.includes('/user') ? 'user' : null;
+      // B. Extract role from URL path hint (if passed as redirect param)
+      const urlStr = req.url || '';
+      const roleFromPath = urlStr.includes('/doctor') ? 'doctor' : 
+                           urlStr.includes('/hospital') ? 'hospital_admin' : 
+                           urlStr.includes('/user') ? 'user' : null;
 
-          // C. Extract from temporary Map store (OAuth fallback)
-          const roleFromStore = getAndClearOAuthRole(user.email);
+      // C. Extract from temporary Map store (OAuth fallback)
+      const roleFromStore = getAndClearOAuthRole(user.email);
 
-          // Priority: Direct Parameter > Path Hint > Store > Default
-          const finalRole = roleFromParams || roleFromPath || roleFromStore || 'user';
-
-          console.log(`[SIGNUP] Creating OAuth user: ${user.email} with role: ${finalRole}`);
-
-          dbUser = await User.create({
-            email: user.email,
-            firstName: user.name?.split(' ')[0] || 'User',
-            lastName: user.name?.split(' ')[1] || '',
-            role: finalRole,
-            profileImage: user.image,
-            oauthProviders: [{ provider: account.provider, providerId: account.providerAccountId }]
-          });
-          
-          user.isNewUser = true; 
-        }
-
-        user.role = dbUser.role;
-        user.id = dbUser._id.toString();
-        return true;
-      } catch (error) {
-        console.error('[SIGNIN] OAuth Signup Error:', error);
-        return false;
+      // D. Extract from cookie (set by frontend)
+      let roleFromCookie = null;
+      if (typeof window === 'undefined' && req.headers) {
+        const cookieHeader = req.headers.get('cookie') || '';
+        const cookieMatch = cookieHeader.match(/oauth_role=([^;]+)/);
+        roleFromCookie = cookieMatch ? cookieMatch[1] : null;
       }
-    },
+
+      // Priority: Query Param > Path Hint > Cookie > Store > Default
+      const finalRole = roleFromParams || roleFromPath || roleFromCookie || roleFromStore || 'user';
+
+      console.log(`[SIGNUP] Creating OAuth user: ${user.email} with role: ${finalRole}`);
+
+      dbUser = await User.create({
+        email: user.email,
+        firstName: user.name?.split(' ')[0] || 'User',
+        lastName: user.name?.split(' ')[1] || '',
+        role: finalRole,
+        profileImage: user.image,
+        oauthProviders: [{ provider: account.provider, providerId: account.providerAccountId }]
+      });
+      
+      user.isNewUser = true; 
+    }
+
+    user.role = dbUser.role;
+    user.id = dbUser._id.toString();
+    return true;
+  } catch (error) {
+    console.error('[SIGNIN] OAuth Signup Error:', error);
+    return false;
+  }
+},
+
 
     async jwt({ token, user }) {
       if (user) {
@@ -160,20 +170,48 @@ cookies: {
     },
 
     // ✅ 3. ALLOW CROSS-SUBDOMAIN REDIRECTS
-    async redirect({ url, baseUrl }) {
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      
-      const mainDomain = "qlinichealth.com";
-      try {
-        const urlObj = new URL(url);
-        // Allow if the destination is on the same main domain or its subdomains
-        if (urlObj.hostname === mainDomain || urlObj.hostname.endsWith(`.${mainDomain}`)) {
-          return url;
-        }
-      } catch (e) {
-        // Fallback for malformed URLs
-      }
-      return baseUrl;
+  // In your auth.js callbacks.redirect function:
+async redirect({ url, baseUrl }) {
+  // Handle error redirects
+  if (url.includes('/api/auth/error')) {
+    return `${baseUrl}/sign-in?error=oauth-failed`;
+  }
+  
+  // Handle relative URLs
+  if (url.startsWith("/")) {
+    return `${baseUrl}${url}`;
+  }
+  
+  // Handle subdomain redirects
+  const mainDomain = "qlinichealth.com";
+  try {
+    const urlObj = new URL(url);
+    
+    // If it's our domain, allow the redirect
+    if (urlObj.hostname === mainDomain || urlObj.hostname.endsWith(`.${mainDomain}`)) {
+      return url;
     }
+    
+    // If it's a localhost development URL, allow it
+    if (urlObj.hostname.includes('localhost')) {
+      return url;
+    }
+  } catch (e) {
+    // If URL parsing fails, fallback to baseUrl + path
+    if (url.startsWith('http')) {
+      try {
+        const path = new URL(url).pathname;
+        return `${baseUrl}${path}`;
+      } catch {
+        return baseUrl;
+      }
+    }
+    return baseUrl;
+  }
+  
+  // Default fallback
+  return baseUrl;
+}
+
   },
 });
