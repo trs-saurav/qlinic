@@ -82,12 +82,10 @@ export default async function middleware(req) {
   const isAuthPath = authPaths.some(path => nextUrl.pathname.startsWith(path))
   const isPublicPath = mainDomainPublicPaths.some(path => nextUrl.pathname === path)
 
-  // =======================================================
+ // =======================================================
   // 6. MAIN DOMAIN LOGIC
   // =======================================================
   if (isMainDomain) {
-    // ✅ FIX: Path-based Subdomain Redirection
-    // If on main domain and path is /doctor, /hospital, etc., redirect to subdomain
     const pathParts = nextUrl.pathname.split('/')
     const firstPath = pathParts[1]
     
@@ -98,34 +96,37 @@ export default async function middleware(req) {
       'admin': 'admin'
     }
 
+    // ✅ PRIORITY 1: Explicit Path Redirect (Overrides Login Logic)
     if (pathToSubdomain[firstPath]) {
-      const targetSubdomain = pathToSubdomain[firstPath]
-      const port = isDevelopment ? ':3000' : ''
+      const targetSub = pathToSubdomain[firstPath]
       const protocol = isDevelopment ? 'http' : 'https'
-      
-      // Strip the prefix from the path (e.g., /doctor/profile -> /profile)
+      const port = isDevelopment ? ':3000' : ''
       const cleanPath = nextUrl.pathname.replace(`/${firstPath}`, '') || '/'
-      const targetUrl = `${protocol}://${targetSubdomain}.${mainDomain}${port}${cleanPath}${nextUrl.search}`
       
-      return NextResponse.redirect(targetUrl)
+      return NextResponse.redirect(
+        new URL(`${protocol}://${targetSub}.${mainDomain}${port}${cleanPath}${nextUrl.search}`)
+      )
     }
 
+    // ✅ PRIORITY 2: Public & Auth Paths
     if (isPublicPath || isAuthPath) {
       return NextResponse.next()
     }
 
-    // Redirect logged in users to their dashboard if they hit qlinichealth.com/
+    // ✅ PRIORITY 3: Logged in user hitting the root qlinichealth.com/
     if (isLoggedIn && userRole) {
       const targetSubdomain = roleToSubdomain[userRole]
       if (targetSubdomain) {
-        const port = isDevelopment ? ':3000' : ''
         const protocol = isDevelopment ? 'http' : 'https'
-        return NextResponse.redirect(`${protocol}://${targetSubdomain}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`)
+        const port = isDevelopment ? ':3000' : ''
+        return NextResponse.redirect(
+          new URL(`${protocol}://${targetSubdomain}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`)
+        )
       }
     }
 
-    // Default protection for any other path on main domain
-    if (!isLoggedIn && !isPublicPath && !isAuthPath) {
+    // ✅ PRIORITY 4: Catch-all Protection
+    if (!isLoggedIn && !isPublicPath) {
       const signInUrl = new URL('/sign-in', req.url)
       signInUrl.searchParams.set('redirect', nextUrl.pathname)
       return NextResponse.redirect(signInUrl)
@@ -135,12 +136,12 @@ export default async function middleware(req) {
   }
 
   // =======================================================
-  // 7. SUBDOMAIN LOGIC (user, doctor, hospital, admin)
+  // 7. SUBDOMAIN LOGIC
   // =======================================================
   if (currentRoleContext) {
-    // ✅ FIX: Prevent Prefix Duplication
-    // If user is on doctor.site.com/doctor, redirect to doctor.site.com/
     const roleFolder = currentRoleContext === 'hospital_admin' ? 'hospital' : currentRoleContext
+    
+    // 🛑 Prevent Recursion: If on doctor.site.com/doctor, strip the path
     if (nextUrl.pathname.startsWith(`/${roleFolder}`)) {
       const cleanUrl = nextUrl.clone()
       cleanUrl.pathname = nextUrl.pathname.replace(`/${roleFolder}`, '') || '/'
@@ -149,6 +150,7 @@ export default async function middleware(req) {
 
     if (isAuthPath) return NextResponse.next()
 
+    // Authentication Guard
     if (!isLoggedIn) {
       const signInUrl = new URL('/sign-in', req.url)
       signInUrl.searchParams.set('role', currentRoleContext)
@@ -156,29 +158,29 @@ export default async function middleware(req) {
       return NextResponse.redirect(signInUrl)
     }
 
-    // Role Enforcement: Redirect to correct subdomain if role doesn't match current context
+    // ✅ Strict Role Enforcement (Fixes the Production Defaulting to 'User')
     if (userRole !== currentRoleContext) {
-      const correctSubdomain = roleToSubdomain[userRole]
-      const port = isDevelopment ? ':3000' : ''
+      const correctSub = roleToSubdomain[userRole]
       const protocol = isDevelopment ? 'http' : 'https'
+      const port = isDevelopment ? ':3000' : ''
       
-      if (correctSubdomain) {
-        return NextResponse.redirect(`${protocol}://${correctSubdomain}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`)
+      // If they are on the wrong subdomain, send them to the right one
+      if (correctSub) {
+        return NextResponse.redirect(
+          new URL(`${protocol}://${correctSub}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`)
+        )
       }
-      return NextResponse.redirect(`${protocol}://${mainDomain}${port}`)
+      // If role is unknown, send to main domain
+      return NextResponse.redirect(new URL(`${protocol}://${mainDomain}${port}`))
     }
 
-    // Final Rewrite to internal role folder
-    const isApiRoute = nextUrl.pathname.startsWith('/api/')
-    if (!isApiRoute && !nextUrl.pathname.startsWith(`/${roleFolder}`)) {
+    // Internal Rewrite
+    if (!nextUrl.pathname.startsWith('/api/') && !nextUrl.pathname.startsWith(`/${roleFolder}`)) {
       const url = nextUrl.clone()
       url.pathname = `/${roleFolder}${nextUrl.pathname}`
       return NextResponse.rewrite(url)
     }
-
-    return NextResponse.next()
   }
-
   // =======================================================
   // 8. FALLBACK - Unknown subdomain
   // =======================================================
