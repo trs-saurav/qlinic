@@ -54,6 +54,39 @@ cookies: {
       domain: process.env.NODE_ENV === "production" 
         ? ".qlinichealth.com" 
         : undefined, // Don't set domain for localhost to avoid issues
+  cookies: {
+    sessionToken: {
+      name: process.env.NODE_ENV === "production" 
+        ? `__Secure-authjs.session-token` 
+        : `authjs.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        domain: process.env.NODE_ENV === "production" ? ".qlinichealth.com" : undefined,
+      },
+    },
+    // ✅ FIX: Add state and pkce cookies to shared domain configuration to prevent InvalidCheck
+    state: {
+      name: process.env.NODE_ENV === "production" ? `__Secure-authjs.state` : `authjs.state`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        domain: process.env.NODE_ENV === "production" ? ".qlinichealth.com" : undefined,
+      },
+    },
+    pkceCodeVerifier: {
+      name: process.env.NODE_ENV === "production" ? `__Secure-authjs.pkce.code_verifier` : `authjs.pkce.code_verifier`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        domain: process.env.NODE_ENV === "production" ? ".qlinichealth.com" : undefined,
+      },
     },
   },
 },
@@ -146,11 +179,14 @@ async signIn({ user, account, profile, req }) {
         try {
           const headersList = await headers();
           const host = headersList.get('host') || '';
+          const forwardedHost = headersList.get('x-forwarded-host') || '';
           
           if (host.includes('doctor.')) {
+          if (host.includes('doctor.') || forwardedHost.includes('doctor.')) {
             finalRole = 'doctor';
             console.log('[OAuth] Role inferred from subdomain: doctor');
           } else if (host.includes('hospital.')) {
+          } else if (host.includes('hospital.') || forwardedHost.includes('hospital.')) {
             finalRole = 'hospital_admin';
             console.log('[OAuth] Role inferred from subdomain: hospital_admin');
           }
