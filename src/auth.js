@@ -40,20 +40,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // ✅ 1. CROSS-SUBDOMAIN COOKIE SHARING (Fixes the Redirect Loop)
   // This ensures the session is visible to doctor.qlinichealth.com even if started on www.
   // In your auth.js cookies configuration:
-cookies: {
-  sessionToken: {
-    name: process.env.NODE_ENV === "production" 
-      ? `__Secure-authjs.session-token` 
-      : `authjs.session-token`,
-    options: {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      secure: process.env.NODE_ENV === "production",
-      // ✅ FIX: Make sure domain is correct for localhost
-      domain: process.env.NODE_ENV === "production" 
-        ? ".qlinichealth.com" 
-        : undefined, // Don't set domain for localhost to avoid issues
   cookies: {
     sessionToken: {
       name: process.env.NODE_ENV === "production" 
@@ -89,7 +75,6 @@ cookies: {
       },
     },
   },
-},
 
 
   providers: [
@@ -181,11 +166,9 @@ async signIn({ user, account, profile, req }) {
           const host = headersList.get('host') || '';
           const forwardedHost = headersList.get('x-forwarded-host') || '';
           
-          if (host.includes('doctor.')) {
           if (host.includes('doctor.') || forwardedHost.includes('doctor.')) {
             finalRole = 'doctor';
             console.log('[OAuth] Role inferred from subdomain: doctor');
-          } else if (host.includes('hospital.')) {
           } else if (host.includes('hospital.') || forwardedHost.includes('hospital.')) {
             finalRole = 'hospital_admin';
             console.log('[OAuth] Role inferred from subdomain: hospital_admin');
