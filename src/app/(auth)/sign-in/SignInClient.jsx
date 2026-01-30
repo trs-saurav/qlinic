@@ -83,11 +83,19 @@ export default function SignInClient() {
   const currentRole = roles[roleFromUrl] || roles.user
   const IconComponent = currentRole.icon
 
-  // ✅ FIXED REDIRECT LOGIC: Respect context over role for subdomain isolation
+  // ✅ CRITICAL FIX: ONLY redirect authenticated users who are NOT already on the sign-in page
+  // This prevents infinite loops when users are intentionally on sign-in page
   useEffect(() => {
     if (status === 'authenticated' && session?.user) {
-      // Use the role from URL context first, then fall back to user's actual role
-      // This allows users to sign in to a different portal than their default role
+      // Check if we're currently on a sign-in page
+      const isSignInPage = window.location.pathname === '/sign-in';
+      
+      // If we're already on sign-in page, DON'T auto-redirect (let user stay and switch roles)
+      if (isSignInPage) {
+        return;
+      }
+      
+      // Otherwise, redirect based on context role
       const effectiveRole = roleFromUrl || session.user.role 
       const destination = redirectTo || ROLE_ROUTES[effectiveRole] || '/user'
       
@@ -120,6 +128,9 @@ export default function SignInClient() {
       
       if (result?.ok) {
         toast.success('Access Granted.')
+        // ✅ AFTER successful login, NOW redirect to appropriate destination
+        const destination = redirectTo || ROLE_ROUTES[roleFromUrl] || '/user'
+        window.location.href = destination
       }
     } catch (err) {
       toast.dismiss(loadingToast)
@@ -152,13 +163,17 @@ export default function SignInClient() {
     }
   }
 
-  if (status === 'loading' || status === 'authenticated') {
+  // ✅ Show loading screen for authenticated users NOT on sign-in page
+  if (status === 'loading') {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#020617]">
         <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
       </div>
     )
   }
+
+  // ✅ Don't auto-redirect authenticated users who are intentionally on sign-in page
+  // Let them see the sign-in form so they can switch contexts if needed
 
   return (
     <div className="h-screen w-screen overflow-hidden relative bg-[#F8FAFC] dark:bg-[#020617] flex items-center justify-center">
