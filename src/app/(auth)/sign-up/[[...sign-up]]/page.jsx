@@ -109,27 +109,29 @@ export default function SignUpPage() {
     }
   }
 
-  const handleSocialSignUp = async (provider) => {
-    setSocialLoading(provider)
-    const roleToPass = selectedRole || 'user';
+const handleSocialSignUp = async (provider) => {
+  setSocialLoading(provider)
+  const roleToPass = selectedRole || 'user';
+  
+  try {
+    // 1. Set the cookie as a backup
+    document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
     
-    try {
-      // Set backup cookie for role
-      document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
-      
-      // ✅ FIX: Use absolute URL for callbackUrl to avoid the 'Invalid URL' error
-      const callbackUrl = `${window.location.origin}/${roleToPass === 'user' ? 'user' : roleToPass}`;
+    // 2. IMPORTANT: Pass the role directly to NextAuth as a parameter
+    // and use an absolute URL for the callback
+    const absoluteCallbackUrl = `${window.location.origin}/${roleToPass}`;
 
-      await signIn(provider, { 
-        redirect: true,
-        callbackUrl: callbackUrl
-      });
-    } catch (error) {
-      console.error('[handleSocialSignUp] Error:', error)
-      toast.error('Failed to initiate social sign-up')
-      setSocialLoading(null)
-    }
+    await signIn(provider, { 
+      callbackUrl: absoluteCallbackUrl,
+      // This sends ?role=doctor to your auth handlers
+      role: roleToPass 
+    });
+  } catch (error) {
+    console.error('[handleSocialSignUp] Error:', error)
+    toast.error('Failed to initiate social sign-up')
+    setSocialLoading(null)
   }
+}
 
   const selectedRoleObj = roles.find((r) => r.value === selectedRole)
 
