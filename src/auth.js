@@ -4,6 +4,7 @@ import Credentials from 'next-auth/providers/credentials'
 import { baseAuthConfig } from './auth.config'
 import connectDB from '@/config/db'
 import User from '@/models/user'
+import { cookies, headers } from 'next/headers'
 
 // ✅ TEMPORARY OAUTH ROLE STORE
 const oauthRoleStore = new Map();
@@ -96,13 +97,6 @@ cookies: {
 
   callbacks: {
     // ✅ 2. OAUTH SIGNUP ROLE LOGIC
-    // In your auth.js callbacks.signIn function, add better error handling:
-// In your auth.js callbacks.signIn function:
-// In your auth.js callbacks:
-// In your auth.js callbacks.signIn function:
-// In your auth.js callbacks.signIn function:
-// In your auth.js callbacks.signIn function:
-// In your auth.js callbacks.signIn function:
 async signIn({ user, account, profile, req }) {
   if (account?.provider === 'credentials') return true;
   
@@ -122,34 +116,47 @@ async signIn({ user, account, profile, req }) {
           const oauthCompleted = urlObj.searchParams.get('oauth_completed');
           if (oauthCompleted) {
             console.log('[OAuth] This is OAuth completion flow');
-            // The role should have been preserved through the completion page
-            // Check cookies as fallback
-            if (req?.headers) {
-              const cookieHeader = req.headers.get('cookie') || '';
-              const cookieMatch = cookieHeader.match(/oauth_role=([^;]+)/);
-              if (cookieMatch) {
-                finalRole = cookieMatch[1];
-                console.log('[OAuth] Role from cookie in completion:', finalRole);
-              }
-            }
           }
         }
       } catch (urlError) {
         console.log('[OAuth] URL parsing error:', urlError);
       }
       
-      // ✅ METHOD 2: Check cookies (primary method)
+      // ✅ METHOD 2: Check cookies using next/headers (Reliable in App Router)
+      console.log('[OAuth Debug] Attempting to read role from cookies...');
       try {
-        if (finalRole === 'user' && req?.headers) {
-          const cookieHeader = req.headers.get('cookie') || '';
-          const cookieMatch = cookieHeader.match(/oauth_role=([^;]+)/);
-          if (cookieMatch) {
-            finalRole = cookieMatch[1];
-            console.log('[OAuth] Role from cookie:', finalRole);
-          }
+        const cookieStore = await cookies();
+        const roleCookie = cookieStore.get('oauth_role') || cookieStore.get('oauth_role_token');
+        
+        console.log('[OAuth Debug] Cookie Store "oauth_role":', cookieStore.get('oauth_role'));
+        console.log('[OAuth Debug] Cookie Store "oauth_role_token":', cookieStore.get('oauth_role_token'));
+
+        if (roleCookie?.value) {
+          finalRole = roleCookie.value;
+          console.log('[OAuth Debug] SUCCESS: Found role in cookies:', finalRole);
+        } else {
+          console.log('[OAuth Debug] WARNING: No role cookie found, defaulting to "user"');
         }
       } catch (cookieError) {
-        console.log('[OAuth] Cookie parsing error:', cookieError);
+        console.log('[OAuth Debug] Cookie parsing error:', cookieError);
+      }
+
+      // ✅ METHOD 3: Check subdomain using headers() (Fallback if cookie missing)
+      if (finalRole === 'user') {
+        try {
+          const headersList = await headers();
+          const host = headersList.get('host') || '';
+          
+          if (host.includes('doctor.')) {
+            finalRole = 'doctor';
+            console.log('[OAuth] Role inferred from subdomain: doctor');
+          } else if (host.includes('hospital.')) {
+            finalRole = 'hospital_admin';
+            console.log('[OAuth] Role inferred from subdomain: hospital_admin');
+          }
+        } catch (headerError) {
+          console.log('[OAuth] Header parsing error:', headerError);
+        }
       }
 
       console.log(`[OAuth] Creating user ${user.email} with role: ${finalRole}`);

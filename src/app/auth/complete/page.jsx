@@ -13,6 +13,16 @@ function OAuthCompleteContent() {
     if (typeof window !== 'undefined') {
       intendedRole = localStorage.getItem('oauth_intended_role');
       localStorage.removeItem('oauth_intended_role'); // Clean up
+      
+      // Fallback: Check cookies if localStorage failed (e.g. initiated from Sign In page)
+      if (!intendedRole) {
+        const getCookie = (name) => {
+          const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+          return match ? match[2] : null;
+        }
+        intendedRole = getCookie('oauth_role') || getCookie('oauth_role_token');
+      }
+      
       console.log('[OAuth Complete] Retrieved role:', intendedRole);
     }
     

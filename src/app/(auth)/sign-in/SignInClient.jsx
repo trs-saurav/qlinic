@@ -85,21 +85,24 @@ export default function SignInClient() {
 
   // ✅ CRITICAL FIX: ONLY redirect authenticated users who are NOT already on the sign-in page
   // This prevents infinite loops when users are intentionally on sign-in page
-// In your sign-in component:
-// In your sign-in component useEffect:
-useEffect(() => {
-  // Clean up OAuth cookie after successful sign-in
-  const oauthCompleted = searchParams.get('oauth_completed');
-  if (oauthCompleted && typeof window !== 'undefined') {
-    document.cookie = 'oauth_role=; path=/; max-age=0;';
-    // Remove from URL
-    const newUrl = new URL(window.location);
-    newUrl.searchParams.delete('oauth_completed');
-    window.history.replaceState({}, '', newUrl);
-  }
-}, [searchParams]);
+  useEffect(() => {
+    const oauthCompleted = searchParams.get('oauth_completed')
 
-// Add router to dependencies
+    if (oauthCompleted) {
+      if (status === 'authenticated') {
+        const destination = ROLE_ROUTES[roleFromUrl] || '/user'
+        window.location.href = destination
+      } else if (status === 'unauthenticated') {
+        if (typeof window !== 'undefined') {
+          document.cookie = 'oauth_role=; path=/; max-age=0;'
+          document.cookie = 'oauth_role_token=; path=/; max-age=0;'
+          const newUrl = new URL(window.location)
+          newUrl.searchParams.delete('oauth_completed')
+          window.history.replaceState({}, '', newUrl)
+        }
+      }
+    }
+  }, [searchParams, status, roleFromUrl])
 
 
   const onSubmit = async (data) => {

@@ -122,8 +122,11 @@ const handleSocialSignUp = async (provider) => {
       console.log('[OAuth] Stored role in localStorage:', roleToPass);
     }
 
+    console.log('[OAuth] Setting cookies for role:', roleToPass);
     // Also set cookie as backup
     document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
+    document.cookie = `oauth_role_token=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
+    console.log('[OAuth] Current document.cookie:', document.cookie);
 
     // Use a callback URL that we can intercept
     const callbackUrl = `${window.location.origin}/auth/complete`;
