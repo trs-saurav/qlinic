@@ -86,25 +86,27 @@ export default function SignInClient() {
   // ✅ CRITICAL FIX: ONLY redirect authenticated users who are NOT already on the sign-in page
   // This prevents infinite loops when users are intentionally on sign-in page
   useEffect(() => {
-    if (status === 'authenticated' && session?.user) {
-      // Check if we're currently on a sign-in page
-      const isSignInPage = window.location.pathname === '/sign-in';
-      
-      // If we're already on sign-in page, DON'T auto-redirect (let user stay and switch roles)
-      if (isSignInPage) {
-        return;
-      }
-      
-      // Otherwise, redirect based on context role
-      const effectiveRole = roleFromUrl || session.user.role 
-      const destination = redirectTo || ROLE_ROUTES[effectiveRole] || '/user'
-      
-      const timer = setTimeout(() => {
-        window.location.href = destination
-      }, 100)
-      return () => clearTimeout(timer)
+  if (status === 'authenticated' && session?.user) {
+    // Check if we're currently on a sign-in page
+    const isSignInPage = window.location.pathname === '/sign-in';
+    
+    // If we're already on sign-in page, DON'T auto-redirect (let user stay and switch roles)
+    if (isSignInPage) {
+      return;
     }
-  }, [status, session, redirectTo, roleFromUrl])
+    
+    // Otherwise, redirect based on context role
+    const effectiveRole = roleFromUrl || session.user.role 
+    const destination = redirectTo || ROLE_ROUTES[effectiveRole] || '/user'
+    
+    // Use router.push for better SPA navigation instead of window.location.href
+    const timer = setTimeout(() => {
+      router.push(destination)
+    }, 100)
+    return () => clearTimeout(timer)
+  }
+}, [status, session, redirectTo, roleFromUrl, router]) // Add router to dependencies
+
 
   const onSubmit = async (data) => {
   setLoading(true)

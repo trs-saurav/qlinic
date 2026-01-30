@@ -114,31 +114,40 @@ const handleSocialSignUp = async (provider) => {
   const roleToPass = selectedRole || 'user';
   
   try {
-    // 1. Store role on server-side
+    // 1. Store role on server-side with longer expiration
     const tempEmail = `temp-${roleToPass}-${Date.now()}`;
     await fetch('/api/auth/set-oauth-role', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: tempEmail, role: roleToPass })
+      body: JSON.stringify({ 
+        email: tempEmail, 
+        role: roleToPass,
+        // ✅ Add expiration timestamp
+        expires: Date.now() + 300000 // 5 minutes
+      })
     }).catch(e => console.error('[OAuth Role Store] Error:', e));
 
-    // 2. Set client-side cookie
-    document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
-    
-    // ✅ FIX: Use the correct callback URL that points to your actual sign-in page
-    // Include role as a query parameter so the auth system knows the intended role
-    const absoluteCallbackUrl = `${window.location.origin}/sign-in?role=${roleToPass}`;
+    // 2. Set client-side cookie with proper domain settings
+    document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax; ${
+      process.env.NODE_ENV === "production" ? "Domain=.qlinichealth.com;" : ""
+    }`;
+
+    // ✅ FIX: Use main domain callback URL to avoid subdomain issues
+    const callbackUrl = process.env.NODE_ENV === "production" 
+      ? `https://qlinichealth.com/sign-in?role=${roleToPass}&oauth=true`
+      : `http://localhost:3000/sign-in?role=${roleToPass}&oauth=true`;
 
     await signIn(provider, { 
-      callbackUrl: absoluteCallbackUrl,
-      redirect: true,
+      callbackUrl: callbackUrl,
+      redirect: true 
     });
   } catch (error) {
     console.error('[handleSocialSignUp] Error:', error)
-    toast.error('Failed to initiate social sign-up')
+    toast.error('Failed to initiate social sign-up. Please try again.')
     setSocialLoading(null)
   }
 }
+
 
 
 

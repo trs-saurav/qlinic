@@ -8,19 +8,23 @@ export const baseAuthConfig = {
   debug: isDevelopment, 
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      authorization: {
-        params: {
-          prompt: "consent",
-          access_type: "offline",
-          response_type: "code"
-        }
-      },
-      // ✅ FIXED: Use 'state' check in development instead of 'pkce'
-      // PKCE has cookie persistence issues in dev environments
-      checks: isDevelopment ? ['state'] : ['pkce', 'state']
-    }),
+  clientId: process.env.GOOGLE_CLIENT_ID,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  authorization: {
+    params: {
+      prompt: "consent",
+      access_type: "offline",
+      response_type: "code",
+      // ✅ Add proper redirect URI for OAuth callbacks
+      redirect_uri: process.env.NODE_ENV === "production" 
+        ? "https://qlinichealth.com/api/auth/callback/google"
+        : "http://localhost:3000/api/auth/callback/google"
+    }
+  },
+  // ✅ Use state check only (PKCE can cause issues with subdomains)
+  checks: ['state']
+}),
+
     FacebookProvider({
       clientId: process.env.FACEBOOK_CLIENT_ID,
       clientSecret: process.env.FACEBOOK_CLIENT_SECRET,

@@ -97,6 +97,7 @@ cookies: {
   callbacks: {
     // ✅ 2. OAUTH SIGNUP ROLE LOGIC
     // In your auth.js callbacks.signIn function, add better error handling:
+// In your auth.js callbacks.signIn function:
 async signIn({ user, account, profile, req }) {
   if (account?.provider === 'credentials') return true;
   
@@ -105,31 +106,39 @@ async signIn({ user, account, profile, req }) {
     let dbUser = await User.findOne({ email: user.email });
 
     if (!dbUser) {
-      // A. Extract role from standard role query param (passed via Navbar signIn)
-      const { searchParams } = new URL(req.url, "http://n");
-      const roleFromParams = searchParams.get('role');
-
-      // B. Extract role from URL path hint (if passed as redirect param)
-      const urlStr = req.url || '';
-      const roleFromPath = urlStr.includes('/doctor') ? 'doctor' : 
-                           urlStr.includes('/hospital') ? 'hospital_admin' : 
-                           urlStr.includes('/user') ? 'user' : null;
-
-      // C. Extract from temporary Map store (OAuth fallback)
-      const roleFromStore = getAndClearOAuthRole(user.email);
-
-      // D. Extract from cookie (set by frontend)
-      let roleFromCookie = null;
-      if (typeof window === 'undefined' && req.headers) {
-        const cookieHeader = req.headers.get('cookie') || '';
+      console.log('[OAuth] Creating new user for:', user.email);
+      
+      // Extract role from multiple sources with better priority
+      let finalRole = 'user'; // Default role
+      
+      // 1. Check URL parameters first
+      if (req.url) {
+        try {
+          const urlObj = new URL(req.url, 'http://localhost');
+          finalRole = urlObj.searchParams.get('role') || finalRole;
+        } catch (e) {
+          console.log('[OAuth] URL parsing failed:', e);
+        }
+      }
+      
+      // 2. Check cookie (set by frontend)
+      if (!finalRole || finalRole === 'user') {
+        const cookieHeader = req.headers?.get('cookie') || '';
         const cookieMatch = cookieHeader.match(/oauth_role=([^;]+)/);
-        roleFromCookie = cookieMatch ? cookieMatch[1] : null;
+        if (cookieMatch) {
+          finalRole = cookieMatch[1];
+        }
+      }
+      
+      // 3. Check server-side store
+      if (!finalRole || finalRole === 'user') {
+        const roleFromStore = getAndClearOAuthRole(user.email);
+        if (roleFromStore) {
+          finalRole = roleFromStore;
+        }
       }
 
-      // Priority: Query Param > Path Hint > Cookie > Store > Default
-      const finalRole = roleFromParams || roleFromPath || roleFromCookie || roleFromStore || 'user';
-
-      console.log(`[SIGNUP] Creating OAuth user: ${user.email} with role: ${finalRole}`);
+      console.log(`[OAuth] Determined role "${finalRole}" for ${user.email}`);
 
       dbUser = await User.create({
         email: user.email,
@@ -140,17 +149,59 @@ async signIn({ user, account, profile, req }) {
         oauthProviders: [{ provider: account.provider, providerId: account.providerAccountId }]
       });
       
-      user.isNewUser = true; 
+      user.isNewUser = true;
+      console.log(`[OAuth] Created user ${user.email} with role ${finalRole}`);
     }
 
     user.role = dbUser.role;
     user.id = dbUser._id.toString();
     return true;
   } catch (error) {
-    console.error('[SIGNIN] OAuth Signup Error:', error);
+    console.error('[SIGNIN] OAuth Error:', error);
     return false;
   }
 },
+
+// Update your redirect callback:
+async redirect({ url, baseUrl }) {
+  console.log('[Auth Redirect] URL:', url, 'BaseUrl:', baseUrl);
+  
+  // Handle OAuth callback errors
+  if (url?.includes('/api/auth/error')) {
+    return `${baseUrl}/sign-in?error=oauth-failed`;
+  }
+  
+  // Handle relative URLs
+  if (url?.startsWith("/")) {
+    return `${baseUrl}${url}`;
+  }
+  
+  // Handle OAuth success redirects
+  if (url?.includes('sign-in') && url?.includes('oauth=true')) {
+    return url; // Allow OAuth callback URLs
+  }
+  
+  // Handle subdomain redirects
+  const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || "qlinichealth.com";
+  try {
+    const urlObj = new URL(url);
+    
+    // Allow our domain redirects
+    if (urlObj.hostname === mainDomain || urlObj.hostname.endsWith(`.${mainDomain}`)) {
+      return url;
+    }
+    
+    // Allow localhost for development
+    if (urlObj.hostname.includes('localhost')) {
+      return url;
+    }
+  } catch (e) {
+    console.log('[Auth Redirect] URL parsing error:', e);
+  }
+  
+  return baseUrl;
+}
+,
 
 
     async jwt({ token, user }) {
