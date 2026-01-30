@@ -315,97 +315,73 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }
   },
   events: {
-    async signIn({ user, account, profile, isNewUser }) {
-      // [NextAuth.js Events - signIn]
-      // Docs: https://authjs.dev/reference/nextjs#events
-      // Called when user signs in. isNewUser is true for new OAuth/credentials users
-      
-      const provider = account?.provider || 'credentials'
-      console.log(`[SIGNIN_EVENT] User signed in - Email: ${user?.email}, IsNew: ${isNewUser}, Provider: ${provider}`);
-      
-      // ✅ FIXED: Only create profiles for OAuth users
-      // Credentials users have profiles created by /api/user/create endpoint
-      // OAuth users need profiles created here because they bypass that endpoint
-      if (provider === 'credentials') {
-        console.log(`[SIGNIN_EVENT] Credentials user - profile already created by signup API`);
-        return;
-      }
-      
-      // Use either the isNewUser parameter or the flag we set in signIn callback
-      const isActuallyNewUser = isNewUser || user?.isNewUser;
-      
-      // Only run for new OAuth users
-      if (!isActuallyNewUser) {
-        console.log(`[SIGNIN_EVENT] Existing OAuth user, skipping profile creation`);
-        return;
-      }
-      
-      try {
-        await connectDB();
-        
-        console.log(`[SIGNIN_EVENT] Creating profile for new OAuth user - ID: ${user.id}, Role: ${user.role}`);
-        
-        // Verify user exists in database with correct role before creating profile
-        const dbUser = await User.findById(user.id);
-        if (!dbUser) {
-          console.error(`[SIGNIN_EVENT] ❌ User not found in DB with ID: ${user.id}`);
-          return; // Exit early if user doesn't exist
-        }
-        
-        console.log(`[SIGNIN_EVENT] ✅ Found user in DB - Role: ${dbUser.role}`);
-        
-        // Create role-specific profile based on user.role
-        if (dbUser.role === 'doctor') {
-          try {
-            const doctorProfile = await DoctorProfile.create({
-              userId: user.id,
-              specialization: 'General Medicine',
-              qualifications: [],
-              experience: 0,
-              consultationFee: 0,
-            });
-            console.log(`[SIGNIN_EVENT] ✅ Doctor profile created`);
-          } catch (doctorError) {
-            console.error(`[SIGNIN_EVENT] ❌ Doctor profile creation failed:`, doctorError.message);
-            throw doctorError;
-          }
-        } else if (dbUser.role === 'hospital_admin') {
-          try {
-            const adminProfile = await HospitalAdminProfile.create({
-              userId: user.id,
-              hospitalId: null,
-              designation: '',
-              department: '',
-            });
-            console.log(`[SIGNIN_EVENT] ✅ Hospital admin profile created`);
-          } catch (adminError) {
-            console.error(`[SIGNIN_EVENT] ❌ Hospital admin profile creation failed:`, adminError.message);
-            throw adminError;
-          }
-        } else {
-          try {
-            const year = new Date().getFullYear();
-            const randomPart = (Date.now().toString(36) + Math.random().toString(36).substr(2, 5)).toUpperCase();
-            const newQlinicId = `QL${year}-${randomPart}`;
+// Inside callbacks: { ... } in auth.js
 
-            const patientProfile = await PatientProfile.create({
-              userId: user.id,
-              qclinicId: newQlinicId,
-              dateOfBirth: null,
-              gender: null,
-              bloodGroup: null,
-              address: {},
-            });
-            console.log(`[SIGNIN_EVENT] ✅ Patient profile created - ID: ${newQlinicId}`);
-          } catch (patientError) {
-            console.error(`[SIGNIN_EVENT] ❌ Patient profile creation failed:`, patientError.message);
-            throw patientError;
-          }
+async signIn({ user, account, profile, req }) {
+  if (account?.provider === 'credentials') {
+    console.log(`[SIGNIN] ✅ Credentials provider sign-in for: ${user.email}`);
+    return true;
+  }
+  
+  // For OAuth providers
+  try {
+    console.log(`[SIGNIN] Starting OAuth sign-in - Provider: ${account?.provider}, Email: ${user.email}`);
+    
+    await connectDB();
+    let dbUser = await User.findOne({ email: user.email });
+
+    if (!dbUser) {
+      // 1. Check the URL hint first (this comes from your frontend callbackUrl)
+      // Auth.js provides the original request info in 'req'
+      const url = req?.url || '';
+      const roleFromUrl = url.includes('/doctor') ? 'doctor' : 
+                          url.includes('/hospital_admin') ? 'hospital_admin' : 
+                          url.includes('/hospital') ? 'hospital_admin' :
+                          url.includes('/user') ? 'user' : null;
+
+      // 2. Try the exact email match from temporary store
+      let roleFromStore = getAndClearOAuthRole(user.email);
+      
+      // 3. Fallback: If still not found, use the most recent "temp-" entry
+      if (roleFromStore === 'user' && !roleFromUrl) {
+        const recentEntries = Array.from(oauthRoleStore.entries())
+          .filter(([key]) => key.startsWith('temp-'))
+          .sort((a, b) => b[1].timestamp - a[1].timestamp);
+        
+        if (recentEntries.length > 0) {
+          roleFromStore = recentEntries[0][1].role;
+          oauthRoleStore.delete(recentEntries[0][0]);
         }
-      } catch (error) {
-        console.error(`[SIGNIN_EVENT] ❌ Profile creation error:`, error);
-        // Don't fail the signin, profile can be created later via manual endpoint
       }
+
+      // Priority: URL Path > Exact Store Match > Recent Store Entry > Default
+      const assignedRole = roleFromUrl || roleFromStore || 'user';
+      console.log(`[SIGNIN] Creating OAuth user with role: ${assignedRole} (URL hint: ${roleFromUrl})`);
+
+      dbUser = await User.create({
+        email: user.email,
+        firstName: user.name?.split(' ')[0] || 'User',
+        lastName: user.name?.split(' ')[1] || '',
+        role: assignedRole, // ✅ Assigned correctly
+        profileImage: user.image,
+        oauthProviders: [{ provider: account.provider, providerId: account.providerAccountId }]
+      });
+      
+      // Set flag so 'events' callback creates the profile
+      user.isNewUser = true; 
+      console.log(`[SIGNIN] ✅ New OAuth user created - Email: ${user.email}, Role: ${assignedRole}`);
+    } else {
+      console.log(`[SIGNIN] ✅ Existing OAuth user - Email: ${user.email}, Role: ${dbUser.role}`);
     }
+
+    user.role = dbUser.role;
+    user.id = dbUser._id.toString();
+    
+    return true;
+  } catch (error) {
+    console.error('[SIGNIN] ❌ Error in signIn callback for OAuth:', error);
+    return false;
+  }
+}
   },
 })

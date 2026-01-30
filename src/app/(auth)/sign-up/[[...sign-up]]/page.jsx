@@ -114,17 +114,24 @@ const handleSocialSignUp = async (provider) => {
   const roleToPass = selectedRole || 'user';
   
   try {
-    // 1. Set the cookie as a backup
+    // 1. Store role on server-side
+    const tempEmail = `temp-${roleToPass}-${Date.now()}`;
+    await fetch('/api/auth/set-oauth-role', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: tempEmail, role: roleToPass })
+    }).catch(e => console.error('[OAuth Role Store] Error:', e));
+
+    // 2. Set client-side cookie
     document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
     
-    // 2. IMPORTANT: Pass the role directly to NextAuth as a parameter
-    // and use an absolute URL for the callback
+    // ✅ FIX: Use absolute URL so the native URL constructor doesn't fail
+    // and include the role in the path so the backend can see it
     const absoluteCallbackUrl = `${window.location.origin}/${roleToPass}`;
 
     await signIn(provider, { 
       callbackUrl: absoluteCallbackUrl,
-      // This sends ?role=doctor to your auth handlers
-      role: roleToPass 
+      redirect: true,
     });
   } catch (error) {
     console.error('[handleSocialSignUp] Error:', error)
