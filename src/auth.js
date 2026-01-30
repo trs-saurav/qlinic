@@ -204,81 +204,42 @@ async signIn({ user, account, profile, req }) {
 }
 ,
 
-// Simplified redirect callback:
-async redirect({ url, baseUrl }) {
-  // Handle OAuth errors
-  if (url?.includes('/api/auth/error')) {
-    return `${baseUrl}/sign-in?error=oauth-failed`;
-  }
-  
-  // Handle relative URLs
-  if (url?.startsWith("/")) {
-    return `${baseUrl}${url}`;
-  }
-  
-  // Allow our domain redirects
-  try {
-    const urlObj = new URL(url);
-    const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || "qlinichealth.com";
-    
-    if (urlObj.hostname === mainDomain || urlObj.hostname.endsWith(`.${mainDomain}`)) {
-      return url;
-    }
-    
-    if (urlObj.hostname.includes('localhost')) {
-      return url;
-    }
-  } catch (e) {
-    console.log('[Auth Redirect] URL parsing error:', e);
-  }
-  
-  return baseUrl;
-}
+    async redirect({ url, baseUrl }) {
+      // 1. Handle error redirects
+      if (url.includes('/api/auth/error')) {
+        return `${baseUrl}/sign-in?error=oauth-failed`;
+      }
 
+      // 2. Handle "auth/complete" or intermediate states -> Send to root/dashboard
+      if (url.includes('/auth/complete')) {
+        return baseUrl;
+      }
 
-,
+      // 3. Handle relative URLs
+      if (url.startsWith("/")) {
+        return `${baseUrl}${url}`;
+      }
 
-// Update your redirect callback:
-async redirect({ url, baseUrl }) {
-  console.log('[Auth Redirect] URL:', url, 'BaseUrl:', baseUrl);
-  
-  // Handle OAuth callback errors
-  if (url?.includes('/api/auth/error')) {
-    return `${baseUrl}/sign-in?error=oauth-failed`;
-  }
-  
-  // Handle relative URLs
-  if (url?.startsWith("/")) {
-    return `${baseUrl}${url}`;
-  }
-  
-  // Handle OAuth success redirects
-  if (url?.includes('sign-in') && url?.includes('oauth=true')) {
-    return url; // Allow OAuth callback URLs
-  }
-  
-  // Handle subdomain redirects
-  const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || "qlinichealth.com";
-  try {
-    const urlObj = new URL(url);
-    
-    // Allow our domain redirects
-    if (urlObj.hostname === mainDomain || urlObj.hostname.endsWith(`.${mainDomain}`)) {
-      return url;
-    }
-    
-    // Allow localhost for development
-    if (urlObj.hostname.includes('localhost')) {
-      return url;
-    }
-  } catch (e) {
-    console.log('[Auth Redirect] URL parsing error:', e);
-  }
-  
-  return baseUrl;
-}
-,
-
+      // 4. Handle subdomain redirects
+      const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || "qlinichealth.com";
+      try {
+        const urlObj = new URL(url);
+        
+        // Allow our domain
+        if (urlObj.hostname === mainDomain || urlObj.hostname.endsWith(`.${mainDomain}`)) {
+          return url;
+        }
+        
+        // Allow localhost
+        if (urlObj.hostname.includes('localhost')) {
+          return url;
+        }
+      } catch (e) {
+        // Fallback
+      }
+      
+      return baseUrl;
+    },
 
     async jwt({ token, user }) {
       if (user) {
@@ -295,50 +256,5 @@ async redirect({ url, baseUrl }) {
       }
       return session;
     },
-
-    // ✅ 3. ALLOW CROSS-SUBDOMAIN REDIRECTS
-  // In your auth.js callbacks.redirect function:
-async redirect({ url, baseUrl }) {
-  // Handle error redirects
-  if (url.includes('/api/auth/error')) {
-    return `${baseUrl}/sign-in?error=oauth-failed`;
-  }
-  
-  // Handle relative URLs
-  if (url.startsWith("/")) {
-    return `${baseUrl}${url}`;
-  }
-  
-  // Handle subdomain redirects
-  const mainDomain = "qlinichealth.com";
-  try {
-    const urlObj = new URL(url);
-    
-    // If it's our domain, allow the redirect
-    if (urlObj.hostname === mainDomain || urlObj.hostname.endsWith(`.${mainDomain}`)) {
-      return url;
-    }
-    
-    // If it's a localhost development URL, allow it
-    if (urlObj.hostname.includes('localhost')) {
-      return url;
-    }
-  } catch (e) {
-    // If URL parsing fails, fallback to baseUrl + path
-    if (url.startsWith('http')) {
-      try {
-        const path = new URL(url).pathname;
-        return `${baseUrl}${path}`;
-      } catch {
-        return baseUrl;
-      }
-    }
-    return baseUrl;
-  }
-  
-  // Default fallback
-  return baseUrl;
-}
-
   },
 });
