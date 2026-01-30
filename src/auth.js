@@ -4,56 +4,57 @@ import Credentials from 'next-auth/providers/credentials'
 import { baseAuthConfig } from './auth.config'
 import connectDB from '@/config/db'
 import User from '@/models/user'
-import PatientProfile from '@/models/PatientProfile'
-import DoctorProfile from '@/models/DoctorProfile'
-import HospitalAdminProfile from '@/models/HospitalAdminProfile'
-import {MongooseError} from "mongoose";
-
-// Regex to check if a string is a valid MongoDB ObjectId
-const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 
 // ✅ TEMPORARY OAUTH ROLE STORE
-// Stores role by email for OAuth users during signup flow
-// Format: { "email@example.com": { role: "doctor", timestamp: 1234567890 } }
 const oauthRoleStore = new Map();
 
-// Cleanup expired entries every 5 minutes (300 seconds TTL)
-setInterval(() => {
-  const now = Date.now();
-  for (const [email, data] of oauthRoleStore.entries()) {
-    if (now - data.timestamp > 300000) { // 5 minutes
-      oauthRoleStore.delete(email);
-    }
-  }
-}, 60000); // Check every minute
-
-// Function to store role temporarily during OAuth signup
 export function setOAuthRole(email, role) {
   oauthRoleStore.set(email, { role, timestamp: Date.now() });
 }
 
-// Function to retrieve and clear role after OAuth user creation
 function getAndClearOAuthRole(email) {
   const data = oauthRoleStore.get(email);
   if (data) {
     oauthRoleStore.delete(email);
     return data.role;
   }
-  return 'user'; // Default fallback
+  return null;
 }
 
-// [Fix for Isolated Sessions]
-// If AUTH_URL is set to the main domain in environment variables, it forces all OAuth callbacks
-// to redirect to the main domain (e.g. www.qlinichealth.com).
-// This breaks authentication for subdomains (user., doctor.) because cookies are host-only.
-// We delete these variables to force Auth.js to use the request's host header (trustHost: true).
-if (process.env.AUTH_URL?.includes('qlinichealth.com')) delete process.env.AUTH_URL
-if (process.env.NEXTAUTH_URL?.includes('qlinichealth.com')) delete process.env.NEXTAUTH_URL
+// Clean up store every minute
+if (typeof window === 'undefined') {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [email, data] of oauthRoleStore.entries()) {
+      if (now - data.timestamp > 300000) oauthRoleStore.delete(email);
+    }
+  }, 60000);
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...baseAuthConfig,
   trustHost: true,
   useSecureCookies: process.env.NODE_ENV === "production",
+
+  // ✅ 1. CROSS-SUBDOMAIN COOKIE SHARING (Fixes the Redirect Loop)
+  // This ensures the session is visible to doctor.qlinichealth.com even if started on www.
+  cookies: {
+    sessionToken: {
+      name: process.env.NODE_ENV === "production" 
+        ? `__Secure-authjs.session-token` 
+        : `authjs.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        domain: process.env.NODE_ENV === "production" 
+          ? ".qlinichealth.com" // Allows sharing across all *.qlinichealth.com
+          : ".localhost",      // Local dev support
+      },
+    },
+  },
+
   providers: [
     ...baseAuthConfig.providers,
     Credentials({
@@ -65,323 +66,108 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         role: { label: "Role", type: "text" }
       },
       async authorize(credentials) {
-        // [NextAuth.js Credentials Provider]
-        // Docs: https://authjs.dev/getting-started/authentication/credentials
-        // This function validates user credentials and returns user object if valid
-        
         try {
-          if (!credentials?.email || !credentials?.password) {
-            console.error('[CREDENTIALS] Missing email or password');
-            return null;
-          }
+          await connectDB();
+          const user = await User.findOne({ email: credentials.email.toLowerCase().trim() }).select('+password');
+          if (!user) return null;
+          if (credentials.role && credentials.role !== user.role) return null;
+          const isValid = await user.comparePassword(credentials.password);
+          if (!isValid) return null;
 
-          await connectDB()
-
-          const user = await User.findOne({ email: credentials.email.toLowerCase().trim() }).select('+password')
-
-          if (!user) {
-            console.error('[CREDENTIALS] User not found:', credentials.email);
-            return null;
-          }
-
-          // ✅ FIXED: Only validate role if provided in credentials
-          // If role is provided and doesn't match, reject
-          if (credentials.role && credentials.role !== user.role) {
-            console.error('[CREDENTIALS] Role mismatch - Expected:', credentials.role, 'Got:', user.role);
-            return null;
-          }
-
-          const isValid = await user.comparePassword(credentials.password)
-          if (!isValid) {
-            console.error('[CREDENTIALS] Password invalid for user:', credentials.email);
-            return null;
-          }
-
-          const authorizedUser = {
+          return {
             id: user._id.toString(),
             email: user.email,
             name: user.fullName || `${user.firstName} ${user.lastName}`,
             role: user.role,
             image: user.profileImage,
           };
-
-          console.log('[CREDENTIALS] ✅ Authorization successful for:', credentials.email, 'with role:', user.role);
-          return authorizedUser;
         } catch (error) {
-          console.error('[CREDENTIALS] Authorization error:', error.message);
-          console.error('[CREDENTIALS] Stack:', error.stack);
-          return null
+          return null;
         }
       }
     }),
   ],
+
   callbacks: {
+    // ✅ 2. OAUTH SIGNUP ROLE LOGIC
     async signIn({ user, account, profile, req }) {
-      if (account?.provider === 'credentials') {
-        console.log(`[SIGNIN] ✅ Credentials provider sign-in for: ${user.email}`);
-        return true;
-      }
+      if (account?.provider === 'credentials') return true;
       
-      // For OAuth providers
       try {
-        console.log(`[SIGNIN] Starting OAuth sign-in - Provider: ${account?.provider}, Email: ${user.email}`);
-        
         await connectDB();
         let dbUser = await User.findOne({ email: user.email });
 
         if (!dbUser) {
-          // ✅ FIXED: Get role from temporary store (set by frontend before OAuth redirect)
-          // Try by exact email first, then by temporary keys
-          let roleFromStore = getAndClearOAuthRole(user.email);
-          
-          console.log(`[SIGNIN] Store lookup by email "${user.email}": ${roleFromStore === 'user' ? 'not found, checking temp keys...' : roleFromStore}`);
-          
-          // If not found by email, try to find by temporary role keys from recent signups
-          if (roleFromStore === 'user') {
-            // Look through recent entries (created in last 30 seconds)
-            const now = Date.now();
-            console.log(`[SIGNIN] Current store keys: [${Array.from(oauthRoleStore.keys()).join(', ')}]`);
-            
-            for (const [key, data] of oauthRoleStore.entries()) {
-              if (key.startsWith('temp-') && now - data.timestamp < 30000) {
-                // Found a recent temp key, use it and clear it
-                const tempRole = data.role;
-                console.log(`[SIGNIN] Found matching temp key: ${key} with role: ${tempRole}`);
-                oauthRoleStore.delete(key);
-                roleFromStore = tempRole;
-                break;
-              }
-            }
-          }
-          
-          console.log(`[SIGNIN] Creating new OAuth user with role: ${roleFromStore}`);
-          
+          // A. Extract role from standard role query param (passed via Navbar signIn)
+          const { searchParams } = new URL(req.url, "http://n");
+          const roleFromParams = searchParams.get('role');
+
+          // B. Extract role from URL path hint (if passed as redirect param)
+          const urlStr = req.url || '';
+          const roleFromPath = urlStr.includes('/doctor') ? 'doctor' : 
+                               urlStr.includes('/hospital') ? 'hospital_admin' : 
+                               urlStr.includes('/user') ? 'user' : null;
+
+          // C. Extract from temporary Map store (OAuth fallback)
+          const roleFromStore = getAndClearOAuthRole(user.email);
+
+          // Priority: Direct Parameter > Path Hint > Store > Default
+          const finalRole = roleFromParams || roleFromPath || roleFromStore || 'user';
+
+          console.log(`[SIGNUP] Creating OAuth user: ${user.email} with role: ${finalRole}`);
+
           dbUser = await User.create({
             email: user.email,
             firstName: user.name?.split(' ')[0] || 'User',
             lastName: user.name?.split(' ')[1] || '',
-            role: roleFromStore, // ✅ Use role from store
+            role: finalRole,
             profileImage: user.image,
             oauthProviders: [{ provider: account.provider, providerId: account.providerAccountId }]
           });
           
-          console.log(`[SIGNIN] ✅ New OAuth user created - Email: ${user.email}, ID: ${dbUser._id}, Role: ${roleFromStore}`);
-        } else {
-          console.log(`[SIGNIN] ✅ Existing OAuth user - Email: ${user.email}, Role: ${dbUser.role}`);
+          user.isNewUser = true; 
         }
 
-        // Set user properties that will be passed to JWT callback
         user.role = dbUser.role;
         user.id = dbUser._id.toString();
-        
-        console.log(`[SIGNIN] ✅ OAuth sign-in successful - Setting user role: ${user.role}`);
         return true;
       } catch (error) {
-        console.error('[SIGNIN] ❌ Error in signIn callback for OAuth:', error);
-        console.error('[SIGNIN] Error stack:', error.stack);
-        // Return false to prevent sign-in on critical errors
+        console.error('[SIGNIN] OAuth Signup Error:', error);
         return false;
       }
     },
-    async jwt({ token, user, trigger, session }) {
-      // [NextAuth.js JWT Callback]
-      // Docs: https://authjs.dev/reference/nextjs#jwt
-      // This callback is called whenever JWT is created or updated
-      // Store user data in the token that will be persisted on the client
-      
+
+    async jwt({ token, user }) {
       if (user) {
-        console.log(`[JWT] Initial sign-in - Setting token with user:`, { id: user.id, email: user.email, role: user.role });
         token.db_id = user.id;
         token.role = user.role;
-        token.isNewUser = user.isNewUser;
-        token.roleLastChecked = Date.now();
-      } else if (token.db_id) {
-        // Existing token update - refresh role from DB
-        try {
-          await connectDB();
-          const dbUser = await User.findById(token.db_id);
-          if (dbUser && dbUser.role !== token.role) {
-            console.log(`[JWT] Role changed in DB - updating token from ${token.role} to ${dbUser.role}`);
-            token.role = dbUser.role;
-          }
-        } catch (error) {
-          console.error(`[JWT] Error refreshing role from DB:`, error.message);
-        }
       }
-
-      // ✅ Only check DB every 5 minutes
-      const fiveMinutes = 5 * 60 * 1000;
-      const now = Date.now();
-      const timeSinceLastCheck = now - (token.roleLastChecked || 0);
-      const shouldRefresh = !token.roleLastChecked || (timeSinceLastCheck > fiveMinutes);
-
-      if (shouldRefresh && token.db_id) {
-        try {
-          await connectDB();
-          const dbUser = await User.findById(token.db_id);
-          if (dbUser) {
-            token.role = dbUser.role;
-            token.roleLastChecked = Date.now();
-          }
-        } catch (e) {
-          console.error(`[JWT] Error during periodic role refresh:`, e.message);
-        }
-      }
-      
-      console.log(`[JWT] Token updated - Role: ${token.role}, ID: ${token.db_id}`);
       return token;
     },
+
     async session({ session, token }) {
-      // [NextAuth.js Session Callback]
-      // Docs: https://authjs.dev/reference/nextjs#session
-      // This callback is called whenever session is checked on client
-      // Expose token data to session object for client-side access
-      
       if (session.user && token) {
         session.user.id = token.db_id;
         session.user.role = token.role;
-        console.log(`[SESSION] Session created - Email: ${session.user.email}, Role: ${session.user.role}`);
-      } else {
-        console.log(`[SESSION] ⚠️ Session missing user or token`);
       }
-      
       return session;
     },
+
+    // ✅ 3. ALLOW CROSS-SUBDOMAIN REDIRECTS
     async redirect({ url, baseUrl }) {
-      // [NextAuth.js Redirect Callback]
-      // Docs: https://authjs.dev/reference/nextjs#redirect
-      // Controls where users are redirected after sign-in
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
       
-      console.log(`[REDIRECT] Called - URL: ${url}, BaseURL: ${baseUrl}`);
-      
+      const mainDomain = "qlinichealth.com";
       try {
-        // Handle relative URLs (most common case for OAuth redirects)
-        if (url.startsWith('/')) {
-          console.log(`[REDIRECT] ✅ Relative URL, returning as-is: ${url}`);
+        const urlObj = new URL(url);
+        // Allow if the destination is on the same main domain or its subdomains
+        if (urlObj.hostname === mainDomain || urlObj.hostname.endsWith(`.${mainDomain}`)) {
           return url;
         }
-
-        // If URL is from same origin, allow it
-        if (url.startsWith(baseUrl)) {
-          const relativeUrl = url.slice(baseUrl.length);
-          console.log(`[REDIRECT] ✅ Same origin URL, returning relative: ${relativeUrl}`);
-          return relativeUrl;
-        }
-
-        // Check if it's a valid localhost/development URL
-        const isDevelopment = process.env.NODE_ENV === 'development';
-        if (isDevelopment) {
-          try {
-            const urlObj = new URL(url);
-            const baseUrlObj = new URL(baseUrl);
-            
-            // Allow redirects between localhost and localhost subdomains
-            if ((urlObj.hostname === 'localhost' || urlObj.hostname.endsWith('.localhost')) &&
-                (baseUrlObj.hostname === 'localhost' || baseUrlObj.hostname.endsWith('.localhost'))) {
-              console.log(`[REDIRECT] ✅ Development localhost redirect allowed: ${url}`);
-              return url;
-            }
-          } catch (e) {
-            console.error(`[REDIRECT] Parse error during localhost check:`, e.message);
-          }
-        }
-
-        // Check for same domain redirects in production
-        const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || 'qlinichealth.com';
-        const cleanMainDomain = mainDomain.replace(/^https?:\/\//, '').replace(/^www\./, '');
-        
-        try {
-          const urlObj = new URL(url);
-          const baseUrlObj = new URL(baseUrl);
-          
-          // Allow redirects within same domain or subdomains
-          if (urlObj.hostname === cleanMainDomain || 
-              baseUrlObj.hostname === urlObj.hostname ||
-              urlObj.hostname.endsWith('.' + cleanMainDomain)) {
-            console.log(`[REDIRECT] ✅ Same domain redirect allowed: ${url}`);
-            return url;
-          }
-        } catch (e) {
-          console.error(`[REDIRECT] Parse error during domain check:`, e.message);
-        }
-
-        console.log(`[REDIRECT] ⚠️ URL not allowed, falling back to baseUrl: ${baseUrl}`);
       } catch (e) {
-        console.error(`[REDIRECT] Unexpected error:`, e.message);
+        // Fallback for malformed URLs
       }
-
-      // Default fallback - return baseUrl or root
       return baseUrl;
     }
   },
-  events: {
-// Inside callbacks: { ... } in auth.js
-
-async signIn({ user, account, profile, req }) {
-  if (account?.provider === 'credentials') {
-    console.log(`[SIGNIN] ✅ Credentials provider sign-in for: ${user.email}`);
-    return true;
-  }
-  
-  // For OAuth providers
-  try {
-    console.log(`[SIGNIN] Starting OAuth sign-in - Provider: ${account?.provider}, Email: ${user.email}`);
-    
-    await connectDB();
-    let dbUser = await User.findOne({ email: user.email });
-//revert
-    if (!dbUser) {
-      // 1. Check the URL hint first (this comes from your frontend callbackUrl)
-      // Auth.js provides the original request info in 'req'
-      const url = req?.url || '';
-      const roleFromUrl = url.includes('/doctor') ? 'doctor' : 
-                          url.includes('/hospital_admin') ? 'hospital_admin' : 
-                          url.includes('/hospital') ? 'hospital_admin' :
-                          url.includes('/user') ? 'user' : null;
-
-      // 2. Try the exact email match from temporary store
-      let roleFromStore = getAndClearOAuthRole(user.email);
-      
-      // 3. Fallback: If still not found, use the most recent "temp-" entry
-      if (roleFromStore === 'user' && !roleFromUrl) {
-        const recentEntries = Array.from(oauthRoleStore.entries())
-          .filter(([key]) => key.startsWith('temp-'))
-          .sort((a, b) => b[1].timestamp - a[1].timestamp);
-        
-        if (recentEntries.length > 0) {
-          roleFromStore = recentEntries[0][1].role;
-          oauthRoleStore.delete(recentEntries[0][0]);
-        }
-      }
-
-      // Priority: URL Path > Exact Store Match > Recent Store Entry > Default
-      const assignedRole = roleFromUrl || roleFromStore || 'user';
-      console.log(`[SIGNIN] Creating OAuth user with role: ${assignedRole} (URL hint: ${roleFromUrl})`);
-
-      dbUser = await User.create({
-        email: user.email,
-        firstName: user.name?.split(' ')[0] || 'User',
-        lastName: user.name?.split(' ')[1] || '',
-        role: assignedRole, // ✅ Assigned correctly
-        profileImage: user.image,
-        oauthProviders: [{ provider: account.provider, providerId: account.providerAccountId }]
-      });
-      
-      // Set flag so 'events' callback creates the profile
-      user.isNewUser = true; 
-      console.log(`[SIGNIN] ✅ New OAuth user created - Email: ${user.email}, Role: ${assignedRole}`);
-    } else {
-      console.log(`[SIGNIN] ✅ Existing OAuth user - Email: ${user.email}, Role: ${dbUser.role}`);
-    }
-
-    user.role = dbUser.role;
-    user.id = dbUser._id.toString();
-    
-    return true;
-  } catch (error) {
-    console.error('[SIGNIN] ❌ Error in signIn callback for OAuth:', error);
-    return false;
-  }
-}
-  },
-})
+});
