@@ -73,9 +73,8 @@ export default function SignUpPage() {
   const onSubmit = async (data) => {
     setLoading(true)
     const loadingToast = toast.loading('Creating your account...')
+    
     try {
-      console.log('[SIGNUP] Creating account for:', data.email, 'with role:', selectedRole)
-      
       const createRes = await fetch('/api/user/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -89,46 +88,18 @@ export default function SignUpPage() {
         }),
       })
 
+      const responseData = await createRes.json().catch(() => ({}));
+
       if (!createRes.ok) {
-        const errorData = await createRes.json().catch(() => ({ error: 'Creation failed' }))
-        console.error('[SIGNUP] Account creation failed:', errorData)
-        throw new Error(errorData.error || `Account creation failed`)
+        throw new Error(responseData.error || 'Account creation failed')
       }
-      
-      const createData = await createRes.json()
-      console.log('[SIGNUP] Account created successfully:', { id: createData.user?.id, email: createData.user?.email })
       
       toast.dismiss(loadingToast)
-      toast.success('Account created! Signing you in...')
+      toast.success('Account created! Please sign in to continue.')
       
-      console.log('[SIGNUP] Attempting sign-in with credentials:', { email: data.email, role: selectedRole })
-      
-      const signInResult = await signIn('credentials', {
-        email: data.email,
-        password: data.password,
-        role: selectedRole,
-        redirect: false,
-      })
-
-      console.log('[SIGNUP] Sign-in result:', signInResult)
-
-      if (signInResult?.error) {
-        console.error('[SIGNUP] Sign-in error:', signInResult.error)
-        throw new Error(signInResult.error || 'Sign-in failed after account creation')
-      }
-
-      if (!signInResult?.ok) {
-        console.error('[SIGNUP] Sign-in not ok:', signInResult)
-        throw new Error('Sign-in failed. Please try signing in manually.')
-      }
-
-      console.log('[SIGNUP] Sign-in successful, redirecting...')
-      const roleRoutes = {
-        user: '/user',
-        doctor: '/doctor',
-        hospital_admin: '/hospital',
-      };
-      router.push(roleRoutes[selectedRole] || '/user');
+      // ✅ FIX: Redirect to sign-in with the email as a query param for better UX
+      // This avoids the 'Invalid URL' crash during automatic session creation
+      router.push(`/sign-in?email=${encodeURIComponent(data.email)}`)
 
     } catch (err) {
       console.error('[SIGNUP] Error:', err)
@@ -143,23 +114,15 @@ export default function SignUpPage() {
     const roleToPass = selectedRole || 'user';
     
     try {
-      // ✅ FIXED: Store role on server-side before OAuth redirect
-      // This ensures new OAuth users get the correct role assigned
-      const tempEmail = `temp-${roleToPass}-${Date.now()}`;
-      await fetch('/api/auth/set-oauth-role', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          email: tempEmail,
-          role: roleToPass 
-        })
-      }).catch(e => console.error('[OAuth Role Store] Error:', e));
-
-      // Also set client-side cookie as backup
+      // Set backup cookie for role
       document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
       
+      // ✅ FIX: Use absolute URL for callbackUrl to avoid the 'Invalid URL' error
+      const callbackUrl = `${window.location.origin}/${roleToPass === 'user' ? 'user' : roleToPass}`;
+
       await signIn(provider, { 
-        redirect: true
+        redirect: true,
+        callbackUrl: callbackUrl
       });
     } catch (error) {
       console.error('[handleSocialSignUp] Error:', error)
@@ -172,6 +135,7 @@ export default function SignUpPage() {
 
   return (
     <div className="h-screen w-screen overflow-hidden relative bg-[#F8FAFC] dark:bg-[#020617] flex items-center justify-center">
+      {/* Background Decorations */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <motion.div animate={{ scale: [1, 1.1, 1], x: [0, 50, 0], y: [0, -50, 0] }} transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }} className="absolute top-[-20%] right-[-10%] w-[80vw] h-[80vw] bg-blue-400/10 dark:bg-blue-600/10 rounded-full blur-[100px]" />
         <motion.div animate={{ scale: [1, 1.2, 1], x: [0, -50, 0], y: [0, 50, 0] }} transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }} className="absolute bottom-[-20%] left-[-10%] w-[70vw] h-[70vw] bg-indigo-400/10 dark:bg-indigo-600/10 rounded-full blur-[100px]" />
@@ -224,6 +188,8 @@ export default function SignUpPage() {
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/20 mb-2"><selectedRoleObj.icon className="w-3 h-3 md:w-4 md:h-4 text-blue-600" /><span className="text-xs font-bold text-blue-700 dark:text-blue-300">{selectedRoleObj.label}</span></div>
                     <h2 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100">Create Account</h2>
                   </div>
+                  
+                  {/* Social Buttons */}
                   <div className="grid grid-cols-3 gap-2 mb-5 md:mb-6">
                     {['google', 'facebook', 'apple'].map((provider) => (
                       <button key={provider} type="button" onClick={() => handleSocialSignUp(provider)} className="flex items-center justify-center h-9 md:h-10 rounded-xl bg-white/60 dark:bg-slate-800/60 ring-1 ring-slate-200 dark:ring-slate-700 hover:bg-white/80 transition-all">
@@ -234,7 +200,12 @@ export default function SignUpPage() {
                       </button>
                     ))}
                   </div>
-                  <div className="relative mb-5 md:mb-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200/50"></div></div><div className="relative flex justify-center text-[10px] uppercase tracking-wider"><span className="bg-transparent px-2 text-slate-400">Or email</span></div></div>
+
+                  <div className="relative mb-5 md:mb-6">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200/50"></div></div>
+                    <div className="relative flex justify-center text-[10px] uppercase tracking-wider"><span className="bg-transparent px-2 text-slate-400">Or email</span></div>
+                  </div>
+
                   <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
                       <div className="grid grid-cols-2 gap-3">
@@ -244,7 +215,10 @@ export default function SignUpPage() {
                       <FormField control={form.control} name="email" render={({ field }) => (<FormItem><FormControl><Input type="email" placeholder="Email Address" className="h-10 md:h-11 rounded-xl bg-white/50 border-0 ring-1 ring-slate-200 px-3 text-sm" {...field} /></FormControl><FormMessage className="text-[10px]" /></FormItem>)} />
                       <FormField control={form.control} name="password" render={({ field }) => (<FormItem><FormControl><div className="relative"><Input type={showPassword ? 'text' : 'password'} placeholder="Password" className="h-10 md:h-11 rounded-xl bg-white/50 border-0 ring-1 ring-slate-200 px-3 pr-9 text-sm" {...field} /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-slate-400">{showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button></div></FormControl><FormMessage className="text-[10px]" /></FormItem>)} />
                       <FormField control={form.control} name="confirmPassword" render={({ field }) => (<FormItem><FormControl><div className="relative"><Input type={showConfirmPassword ? 'text' : 'password'} placeholder="Confirm Password" className="h-10 md:h-11 rounded-xl bg-white/50 border-0 ring-1 ring-slate-200 px-3 pr-9 text-sm" {...field} /><button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-3 text-slate-400">{showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button></div></FormControl><FormMessage className="text-[10px]" /></FormItem>)} />
-                      <Button type="submit" disabled={loading} className="w-full h-10 md:h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold mt-2 shadow-lg shadow-blue-500/20">{loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create Account'}</Button>
+                      
+                      <Button type="submit" disabled={loading} className="w-full h-10 md:h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold mt-2 shadow-lg shadow-blue-500/20">
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create Account'}
+                      </Button>
                     </form>
                   </Form>
                 </CardContent>
