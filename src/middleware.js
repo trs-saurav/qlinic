@@ -6,15 +6,11 @@ export default async function middleware(req) {
   const hostname = req.headers.get('host') || ''
   
   // =======================================================
-  // 1. EARLY EXITS - Static assets, auth API, etc.
+  // 1. EARLY EXITS - Assets and API routes
   // =======================================================
   if (
     nextUrl.pathname.startsWith('/_next') ||
     nextUrl.pathname.startsWith('/api/auth') ||
-    nextUrl.pathname.startsWith('/api/inngest') ||
-    nextUrl.pathname.startsWith('/api/webhooks') ||
-    nextUrl.pathname.startsWith('/api/user/check') ||
-    nextUrl.pathname.startsWith('/api/user/create') ||
     nextUrl.pathname.match(/\.(jpg|jpeg|png|gif|svg|css|js|woff|woff2|ttf|webp|ico|mp4|webm)$/)
   ) {
     return NextResponse.next()
@@ -26,17 +22,20 @@ export default async function middleware(req) {
   const isDevelopment = process.env.NODE_ENV === 'development'
   const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || (isDevelopment ? 'localhost' : 'qlinichealth.com')
   
-  const hostnameWithoutPort = hostname.split(':')[0]
-  const parts = hostnameWithoutPort.split('.')
+  // Robust Subdomain Extraction for Production
   let currentSubdomain = null
+  const hostParts = hostname.split('.')
   
   if (isDevelopment) {
-    if (parts.length === 2 && parts[1] === 'localhost') {
-      currentSubdomain = parts[0]
+    // Local: user.localhost:3000 -> parts are ["user", "localhost:3000"]
+    if (hostParts.length === 2 && hostParts[1].startsWith('localhost')) {
+      currentSubdomain = hostParts[0]
     }
   } else {
-    if (parts.length >= 3) {
-      currentSubdomain = parts[0]
+    // Production: user.qlinichealth.com -> parts are ["user", "qlinichealth", "com"]
+    // We check if we have more parts than the main domain (which has 2: qlinichealth.com)
+    if (hostParts.length >= 3) {
+      currentSubdomain = hostParts[0]
     }
   }
 
@@ -67,6 +66,7 @@ export default async function middleware(req) {
   const token = await getToken({
     req,
     secret: process.env.NEXTAUTH_SECRET,
+    // Production uses secure cookies with __Secure- prefix
     cookieName: isDevelopment ? 'authjs.session-token' : '__Secure-authjs.session-token',
   })
 
@@ -76,19 +76,17 @@ export default async function middleware(req) {
   // =======================================================
   // 5. PATH DEFINITIONS
   // =======================================================
-  const authPaths = ['/sign-in', '/sign-up', '/forgot-password', '/reset-password', '/auth/error', '/unauthorized']
+  const authPaths = ['/sign-in', '/sign-up', '/forgot-password', '/reset-password']
   const mainDomainPublicPaths = ['/', '/aboutus', '/privacy', '/terms', '/for-patients', '/for-clinics', '/why-qlinic', '/doctor-bot']
 
   const isAuthPath = authPaths.some(path => nextUrl.pathname.startsWith(path))
   const isPublicPath = mainDomainPublicPaths.some(path => nextUrl.pathname === path)
 
- // =======================================================
+  // =======================================================
   // 6. MAIN DOMAIN LOGIC
   // =======================================================
   if (isMainDomain) {
-    const pathParts = nextUrl.pathname.split('/')
-    const firstPath = pathParts[1]
-    
+    const firstPath = nextUrl.pathname.split('/')[1]
     const pathToSubdomain = {
       'doctor': 'doctor',
       'hospital': 'hospital',
@@ -97,6 +95,7 @@ export default async function middleware(req) {
     }
 
     // ✅ PRIORITY 1: Explicit Path Redirect (Overrides Login Logic)
+    // Intercept qlinichealth.com/doctor and move to doctor.qlinichealth.com
     if (pathToSubdomain[firstPath]) {
       const targetSub = pathToSubdomain[firstPath]
       const protocol = isDevelopment ? 'http' : 'https'
@@ -108,24 +107,21 @@ export default async function middleware(req) {
       )
     }
 
-    // ✅ PRIORITY 2: Public & Auth Paths
-    if (isPublicPath || isAuthPath) {
-      return NextResponse.next()
-    }
+    if (isPublicPath || isAuthPath) return NextResponse.next()
 
-    // ✅ PRIORITY 3: Logged in user hitting the root qlinichealth.com/
+    // ✅ PRIORITY 2: Logged in user hitting root qlinichealth.com/
     if (isLoggedIn && userRole) {
-      const targetSubdomain = roleToSubdomain[userRole]
-      if (targetSubdomain) {
+      const targetSub = roleToSubdomain[userRole]
+      if (targetSub) {
         const protocol = isDevelopment ? 'http' : 'https'
         const port = isDevelopment ? ':3000' : ''
         return NextResponse.redirect(
-          new URL(`${protocol}://${targetSubdomain}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`)
+          new URL(`${protocol}://${targetSub}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`)
         )
       }
     }
 
-    // ✅ PRIORITY 4: Catch-all Protection
+    // Auth Protection
     if (!isLoggedIn && !isPublicPath) {
       const signInUrl = new URL('/sign-in', req.url)
       signInUrl.searchParams.set('redirect', nextUrl.pathname)
@@ -141,16 +137,13 @@ export default async function middleware(req) {
   if (currentRoleContext) {
     const roleFolder = currentRoleContext === 'hospital_admin' ? 'hospital' : currentRoleContext
     
-    // 🛑 Prevent Recursion: If on doctor.site.com/doctor, strip the path
+    // Prevent URL path duplication (e.g., doctor.site.com/doctor)
     if (nextUrl.pathname.startsWith(`/${roleFolder}`)) {
-      const cleanUrl = nextUrl.clone()
-      cleanUrl.pathname = nextUrl.pathname.replace(`/${roleFolder}`, '') || '/'
-      return NextResponse.redirect(cleanUrl)
+      return NextResponse.redirect(new URL('/', req.url))
     }
 
     if (isAuthPath) return NextResponse.next()
 
-    // Authentication Guard
     if (!isLoggedIn) {
       const signInUrl = new URL('/sign-in', req.url)
       signInUrl.searchParams.set('role', currentRoleContext)
@@ -158,43 +151,40 @@ export default async function middleware(req) {
       return NextResponse.redirect(signInUrl)
     }
 
-    // ✅ Strict Role Enforcement (Fixes the Production Defaulting to 'User')
+    // ✅ PRIORITY 3: Cross-Role Protection (Fixed for Production)
     if (userRole !== currentRoleContext) {
       const correctSub = roleToSubdomain[userRole]
       const protocol = isDevelopment ? 'http' : 'https'
       const port = isDevelopment ? ':3000' : ''
       
-      // If they are on the wrong subdomain, send them to the right one
       if (correctSub) {
         return NextResponse.redirect(
           new URL(`${protocol}://${correctSub}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`)
         )
       }
-      // If role is unknown, send to main domain
       return NextResponse.redirect(new URL(`${protocol}://${mainDomain}${port}`))
     }
 
-    // Internal Rewrite
-    if (!nextUrl.pathname.startsWith('/api/') && !nextUrl.pathname.startsWith(`/${roleFolder}`)) {
+    // Internal Rewrite to Role Folder
+    if (!nextUrl.pathname.startsWith('/api/')) {
       const url = nextUrl.clone()
       url.pathname = `/${roleFolder}${nextUrl.pathname}`
       return NextResponse.rewrite(url)
     }
   }
+
   // =======================================================
-  // 8. FALLBACK - Unknown subdomain
+  // 8. FALLBACK
   // =======================================================
   if (currentSubdomain) {
-    const port = isDevelopment ? ':3000' : ''
     const protocol = isDevelopment ? 'http' : 'https'
-    return NextResponse.redirect(`${protocol}://${mainDomain}${port}`)
+    const port = isDevelopment ? ':3000' : ''
+    return NextResponse.redirect(new URL(`${protocol}://${mainDomain}${port}`))
   }
 
   return NextResponse.next()
 }
 
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf|mp4|webm)).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf|mp4|webm)).*)'],
 }
