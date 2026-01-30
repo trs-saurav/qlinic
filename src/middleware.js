@@ -208,89 +208,54 @@ export default async function middleware(req) {
     return NextResponse.next()
   }
 
-  // =======================================================
-  // 7. SUBDOMAIN LOGIC
-  // =======================================================
- // =======================================================
-// 7. SUBDOMAIN LOGIC (FIXED VERSION)
 // =======================================================
-console.log('🏢 Processing Subdomain Logic - FIXED VERSION')
+// 7. SUBDOMAIN LOGIC - FIXED VERSION
+// =======================================================
 if (currentRoleContext) {
-  console.log('🎭 Current role context:', currentRoleContext)
   const roleFolder = currentRoleContext === 'hospital_admin' ? 'hospital' : currentRoleContext
   
   // 🛑 Prevent Recursion: If on doctor.site.com/doctor, strip the path
   if (nextUrl.pathname.startsWith(`/${roleFolder}`)) {
-    console.log('🌀 Preventing recursion - stripping role folder from path')
     const cleanUrl = nextUrl.clone()
     cleanUrl.pathname = nextUrl.pathname.replace(`/${roleFolder}`, '') || '/'
-    console.log('🧹 Cleaned path:', cleanUrl.pathname)
     return NextResponse.redirect(cleanUrl)
   }
 
-  if (isAuthPath) {
-    console.log('🔑 Auth path on subdomain - allowing through')
-    return NextResponse.next()
-  }
+  if (isAuthPath) return NextResponse.next()
 
   // Authentication Guard
   if (!isLoggedIn) {
-    console.log('🔒 Unauthenticated on subdomain - redirecting to sign-in')
     const signInUrl = new URL('/sign-in', req.url)
     signInUrl.searchParams.set('role', currentRoleContext)
     signInUrl.searchParams.set('redirect', nextUrl.pathname)
-    console.log('📍 Sign-in params:', {
-      role: currentRoleContext,
-      redirect: nextUrl.pathname
-    })
     return NextResponse.redirect(signInUrl)
   }
 
-  // ✅ CRITICAL FIX: Check if this is a fresh arrival from path redirect
-  console.log('👮‍♂️ ROLE ENFORCEMENT CHECK')
-  const referer = req.headers.get('referer') || ''
-  console.log('📨 Referer:', referer)
+  // ✅ THE FIX: Check if this request has the x-path-redirect header
+  const isPathRedirect = req.headers.get('x-path-redirect') === 'true'
   
-  const isFreshArrivalFromMainDomain = referer.includes(mainDomain) && 
-                                     (referer.includes('/doctor') || 
-                                      referer.includes('/hospital') || 
-                                      referer.includes('/admin') || 
-                                      referer.includes('/user'))
-  
-  console.log('🎯 Is fresh arrival:', isFreshArrivalFromMainDomain)
-  console.log('👥 User role vs context:', { userRole, currentRoleContext, rolesMatch: userRole === currentRoleContext })
-
-  // Only enforce role correction if NOT a fresh arrival
-  if (userRole !== currentRoleContext && !isFreshArrivalFromMainDomain) {
-    console.log('❌ ENFORCING ROLE CORRECTION')
+  // Only enforce role correction if this is NOT a fresh path redirect
+  if (userRole !== currentRoleContext && !isPathRedirect) {
     const correctSub = roleToSubdomain[userRole]
     const protocol = isDevelopment ? 'http' : 'https'
     const port = isDevelopment ? ':3000' : ''
     
     if (correctSub) {
-      const redirectUrl = `${protocol}://${correctSub}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`
-      console.log('🔁 Redirecting to correct role subdomain:', redirectUrl)
-      return NextResponse.redirect(new URL(redirectUrl))
+      return NextResponse.redirect(
+        new URL(`${protocol}://${correctSub}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`)
+      )
     }
-    console.log('🏠 Redirecting to main domain due to unknown role')
     return NextResponse.redirect(new URL(`${protocol}://${mainDomain}${port}`))
-  } else if (userRole !== currentRoleContext && isFreshArrivalFromMainDomain) {
-    console.log('✅ ALLOWING USER TO STAY (fresh arrival from main domain)')
-  } else {
-    console.log('✅ Roles match or fresh arrival - proceeding normally')
   }
 
   // Internal Rewrite
   if (!nextUrl.pathname.startsWith('/api/') && !nextUrl.pathname.startsWith(`/${roleFolder}`)) {
-    console.log('📝 Rewriting path to include role folder')
     const url = nextUrl.clone()
     url.pathname = `/${roleFolder}${nextUrl.pathname}`
-    console.log('✏️  New pathname:', url.pathname)
     return NextResponse.rewrite(url)
   }
-  
-  console.log('➡️  Subdomain logic completed - allowing through')
 }
+
 
     // ✅ SMART ROLE ENFORCEMENT WITH DEBUGGING
    
