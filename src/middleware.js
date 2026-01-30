@@ -6,7 +6,7 @@ export default async function middleware(req) {
   const hostname = req.headers.get('host') || ''
   
   // =======================================================
-  // 1. EARLY EXITS - Assets and API routes
+  // 1. EARLY EXITS
   // =======================================================
   if (
     nextUrl.pathname.startsWith('/_next') ||
@@ -17,25 +17,24 @@ export default async function middleware(req) {
   }
 
   // =======================================================
-  // 2. ENVIRONMENT & DOMAIN CONFIGURATION
+  // 2. DOMAIN CONFIGURATION (Vercel-Safe Extraction)
   // =======================================================
   const isDevelopment = process.env.NODE_ENV === 'development'
-  const mainDomain = process.env.NEXT_PUBLIC_MAIN_DOMAIN || (isDevelopment ? 'localhost' : 'qlinichealth.com')
+  const mainDomain = "qlinichealth.com"
   
-  // Robust Subdomain Extraction for Production
   let currentSubdomain = null
-  const hostParts = hostname.split('.')
-  
+  const host = hostname.replace(':3000', '') // Remove port for local matching
+
   if (isDevelopment) {
-    // Local: user.localhost:3000 -> parts are ["user", "localhost:3000"]
-    if (hostParts.length === 2 && hostParts[1].startsWith('localhost')) {
-      currentSubdomain = hostParts[0]
+    const parts = host.split('.')
+    if (parts.length === 2 && parts[1] === 'localhost') {
+      currentSubdomain = parts[0]
     }
   } else {
-    // Production: user.qlinichealth.com -> parts are ["user", "qlinichealth", "com"]
-    // We check if we have more parts than the main domain (which has 2: qlinichealth.com)
-    if (hostParts.length >= 3) {
-      currentSubdomain = hostParts[0]
+    // ✅ PRODUCTION FIX: Only extract subdomain if it's on your actual domain
+    // Prevents loops on vercel.app preview URLs
+    if (host.endsWith(mainDomain) && host !== mainDomain && host !== `www.${mainDomain}`) {
+      currentSubdomain = host.replace(`.${mainDomain}`, '').replace('www.', '')
     }
   }
 
@@ -66,7 +65,6 @@ export default async function middleware(req) {
   const token = await getToken({
     req,
     secret: process.env.NEXTAUTH_SECRET,
-    // Production uses secure cookies with __Secure- prefix
     cookieName: isDevelopment ? 'authjs.session-token' : '__Secure-authjs.session-token',
   })
 
@@ -86,7 +84,9 @@ export default async function middleware(req) {
   // 6. MAIN DOMAIN LOGIC
   // =======================================================
   if (isMainDomain) {
-    const firstPath = nextUrl.pathname.split('/')[1]
+    const pathParts = nextUrl.pathname.split('/')
+    const firstPath = pathParts[1]
+    
     const pathToSubdomain = {
       'doctor': 'doctor',
       'hospital': 'hospital',
@@ -94,8 +94,7 @@ export default async function middleware(req) {
       'admin': 'admin'
     }
 
-    // ✅ PRIORITY 1: Explicit Path Redirect (Overrides Login Logic)
-    // Intercept qlinichealth.com/doctor and move to doctor.qlinichealth.com
+    // Intercept path hits (e.g. qlinichealth.com/doctor)
     if (pathToSubdomain[firstPath]) {
       const targetSub = pathToSubdomain[firstPath]
       const protocol = isDevelopment ? 'http' : 'https'
@@ -109,7 +108,7 @@ export default async function middleware(req) {
 
     if (isPublicPath || isAuthPath) return NextResponse.next()
 
-    // ✅ PRIORITY 2: Logged in user hitting root qlinichealth.com/
+    // Redirect logged in users to their subdomain
     if (isLoggedIn && userRole) {
       const targetSub = roleToSubdomain[userRole]
       if (targetSub) {
@@ -121,7 +120,6 @@ export default async function middleware(req) {
       }
     }
 
-    // Auth Protection
     if (!isLoggedIn && !isPublicPath) {
       const signInUrl = new URL('/sign-in', req.url)
       signInUrl.searchParams.set('redirect', nextUrl.pathname)
@@ -137,7 +135,7 @@ export default async function middleware(req) {
   if (currentRoleContext) {
     const roleFolder = currentRoleContext === 'hospital_admin' ? 'hospital' : currentRoleContext
     
-    // Prevent URL path duplication (e.g., doctor.site.com/doctor)
+    // Prevent doctor.qlinichealth.com/doctor
     if (nextUrl.pathname.startsWith(`/${roleFolder}`)) {
       return NextResponse.redirect(new URL('/', req.url))
     }
@@ -151,7 +149,7 @@ export default async function middleware(req) {
       return NextResponse.redirect(signInUrl)
     }
 
-    // ✅ PRIORITY 3: Cross-Role Protection (Fixed for Production)
+    // Cross-Role Enforcement
     if (userRole !== currentRoleContext) {
       const correctSub = roleToSubdomain[userRole]
       const protocol = isDevelopment ? 'http' : 'https'
@@ -165,21 +163,12 @@ export default async function middleware(req) {
       return NextResponse.redirect(new URL(`${protocol}://${mainDomain}${port}`))
     }
 
-    // Internal Rewrite to Role Folder
+    // Rewrite to the folder
     if (!nextUrl.pathname.startsWith('/api/')) {
       const url = nextUrl.clone()
       url.pathname = `/${roleFolder}${nextUrl.pathname}`
       return NextResponse.rewrite(url)
     }
-  }
-
-  // =======================================================
-  // 8. FALLBACK
-  // =======================================================
-  if (currentSubdomain) {
-    const protocol = isDevelopment ? 'http' : 'https'
-    const port = isDevelopment ? ':3000' : ''
-    return NextResponse.redirect(new URL(`${protocol}://${mainDomain}${port}`))
   }
 
   return NextResponse.next()
