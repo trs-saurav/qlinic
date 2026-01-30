@@ -113,31 +113,21 @@ const handleSocialSignUp = async (provider) => {
   setSocialLoading(provider)
   const roleToPass = selectedRole || 'user';
   
+  console.log('[OAuth] Starting OAuth flow for role:', roleToPass);
+  
   try {
-    // 1. Store role on server-side 
-    const tempEmail = `temp-${roleToPass}-${Date.now()}`;
-    await fetch('/api/auth/set-oauth-role', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        email: tempEmail, 
-        role: roleToPass,
-        expires: Date.now() + 300000 // 5 minutes
-      })
-    }).catch(e => console.error('[OAuth Role Store] Error:', e));
+    // Store role in localStorage so it survives the OAuth redirect
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('oauth_intended_role', roleToPass);
+      console.log('[OAuth] Stored role in localStorage:', roleToPass);
+    }
 
-    // 2. Set client-side cookie with domain-specific settings
-    const cookieDomain = process.env.NODE_ENV === "production" 
-      ? "Domain=.qlinichealth.com;" 
-      : "";
-      
-    document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax; ${cookieDomain}${
-      process.env.NODE_ENV === "production" ? " Secure;" : ""
-    }`;
+    // Also set cookie as backup
+    document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
 
-    // ✅ SIMPLE FIX: Use the same domain for OAuth callbacks
-    // This avoids state parameter issues with cross-subdomain redirects
-    const callbackUrl = `${window.location.origin}/sign-in?role=${roleToPass}&oauth=1`;
+    // Use a callback URL that we can intercept
+    const callbackUrl = `${window.location.origin}/auth/complete`;
+    console.log('[OAuth] Using callback URL:', callbackUrl);
 
     await signIn(provider, { 
       callbackUrl: callbackUrl,
@@ -149,6 +139,9 @@ const handleSocialSignUp = async (provider) => {
     setSocialLoading(null)
   }
 }
+
+
+
 
 
 

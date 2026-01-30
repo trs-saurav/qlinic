@@ -100,6 +100,9 @@ cookies: {
 // In your auth.js callbacks.signIn function:
 // In your auth.js callbacks:
 // In your auth.js callbacks.signIn function:
+// In your auth.js callbacks.signIn function:
+// In your auth.js callbacks.signIn function:
+// In your auth.js callbacks.signIn function:
 async signIn({ user, account, profile, req }) {
   if (account?.provider === 'credentials') return true;
   
@@ -110,45 +113,43 @@ async signIn({ user, account, profile, req }) {
     if (!dbUser) {
       console.log('[OAuth] Processing new user:', user.email);
       
-      // Extract role using multiple methods with proper fallbacks
       let finalRole = 'user';
       
-      // Method 1: Check URL parameters (most reliable for OAuth)
+      // ✅ METHOD 1: Check if this is OAuth completion (look for special parameter)
       try {
-        if (req.url) {
+        if (req?.url) {
           const urlObj = new URL(req.url, 'http://localhost');
-          finalRole = urlObj.searchParams.get('role') || finalRole;
-          
-          // Special handling for OAuth callbacks
-          if (req.url.includes('oauth=1')) {
-            console.log('[OAuth] Detected OAuth callback flow');
+          const oauthCompleted = urlObj.searchParams.get('oauth_completed');
+          if (oauthCompleted) {
+            console.log('[OAuth] This is OAuth completion flow');
+            // The role should have been preserved through the completion page
+            // Check cookies as fallback
+            if (req?.headers) {
+              const cookieHeader = req.headers.get('cookie') || '';
+              const cookieMatch = cookieHeader.match(/oauth_role=([^;]+)/);
+              if (cookieMatch) {
+                finalRole = cookieMatch[1];
+                console.log('[OAuth] Role from cookie in completion:', finalRole);
+              }
+            }
           }
         }
       } catch (urlError) {
         console.log('[OAuth] URL parsing error:', urlError);
       }
       
-      // Method 2: Check cookies (set by frontend)
-      if (finalRole === 'user') {
-        try {
-          const cookieHeader = req.headers?.get('cookie') || '';
+      // ✅ METHOD 2: Check cookies (primary method)
+      try {
+        if (finalRole === 'user' && req?.headers) {
+          const cookieHeader = req.headers.get('cookie') || '';
           const cookieMatch = cookieHeader.match(/oauth_role=([^;]+)/);
           if (cookieMatch) {
             finalRole = cookieMatch[1];
-            console.log('[OAuth] Found role in cookie:', finalRole);
+            console.log('[OAuth] Role from cookie:', finalRole);
           }
-        } catch (cookieError) {
-          console.log('[OAuth] Cookie parsing error:', cookieError);
         }
-      }
-      
-      // Method 3: Check server-side store (fallback)
-      if (finalRole === 'user') {
-        const roleFromStore = getAndClearOAuthRole(user.email);
-        if (roleFromStore) {
-          finalRole = roleFromStore;
-          console.log('[OAuth] Found role in server store:', finalRole);
-        }
+      } catch (cookieError) {
+        console.log('[OAuth] Cookie parsing error:', cookieError);
       }
 
       console.log(`[OAuth] Creating user ${user.email} with role: ${finalRole}`);
@@ -168,12 +169,14 @@ async signIn({ user, account, profile, req }) {
     user.role = dbUser.role;
     user.id = dbUser._id.toString();
     console.log(`[OAuth] User processed successfully: ${user.email} (${user.role})`);
+    
     return true;
   } catch (error) {
     console.error('[SIGNIN] OAuth Signup Error:', error);
     return false;
   }
-},
+}
+,
 
 // Simplified redirect callback:
 async redirect({ url, baseUrl }) {

@@ -86,18 +86,19 @@ export default function SignInClient() {
   // ✅ CRITICAL FIX: ONLY redirect authenticated users who are NOT already on the sign-in page
   // This prevents infinite loops when users are intentionally on sign-in page
 // In your sign-in component:
+// In your sign-in component useEffect:
 useEffect(() => {
-  const error = searchParams.get('error');
-  if (error === 'oauth-failed') {
-    toast.error('Social login failed. Please try email/password or another provider.');
-  }
-  
-  const oauth = searchParams.get('oauth');
-  if (oauth === '1') {
-    // Clear OAuth cookies after successful login
+  // Clean up OAuth cookie after successful sign-in
+  const oauthCompleted = searchParams.get('oauth_completed');
+  if (oauthCompleted && typeof window !== 'undefined') {
     document.cookie = 'oauth_role=; path=/; max-age=0;';
+    // Remove from URL
+    const newUrl = new URL(window.location);
+    newUrl.searchParams.delete('oauth_completed');
+    window.history.replaceState({}, '', newUrl);
   }
 }, [searchParams]);
+
 // Add router to dependencies
 
 
