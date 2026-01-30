@@ -1,68 +1,34 @@
 'use client'
 
-import { useSession } from 'next-auth/react'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { updateUserRole } from '@/app/actions' // We will create this server action
+import { useSearchParams, useRouter } from 'next/navigation'
+import { useEffect } from 'react'
+import { Loader2 } from 'lucide-react'
 
-export default function CompleteAuthPage() {
-  const { data: session, status, update } = useSession()
+export default function OAuthComplete() {
+  const searchParams = useSearchParams()
   const router = useRouter()
-  const [message, setMessage] = useState('Completing your profile...')
-
+  
+  const role = searchParams.get('role') || 'user'
+  
   useEffect(() => {
-    if (status === 'loading') {
-      return
+    // Redirect to appropriate subdomain
+    const roleRoutes = {
+      user: '/user',
+      doctor: '/doctor',
+      hospital_admin: '/hospital',
+      admin: '/admin'
     }
-
-    if (status === 'unauthenticated') {
-      router.push('/sign-in')
-      return
-    }
-
-    if (session) {
-      const pendingRole = localStorage.getItem('oauth_pending_role')
-      localStorage.removeItem('oauth_pending_role') // Clean up
-
-      if (pendingRole && session.user.role !== pendingRole) {
-        setMessage(`Assigning role: ${pendingRole}...`)
-        
-        updateUserRole({ role: pendingRole })
-          .then(() => {
-            setMessage('Role assigned. Redirecting...')
-            // Update the session on the client
-            return update({ role: pendingRole })
-          })
-          .then(() => {
-            // Redirect to the correct dashboard
-            const roleRoutes = {
-              user: '/user',
-              doctor: '/doctor',
-              hospital_admin: '/hospital',
-            }
-            router.push(roleRoutes[pendingRole] || '/user')
-          })
-          .catch(err => {
-            console.error('Failed to update role:', err)
-            setMessage('Error assigning role. Redirecting to default dashboard.')
-            router.push('/user')
-          })
-      } else {
-        // No pending role, or role is already correct, redirect
-        const role = session.user.role
-        const roleRoutes = {
-          user: '/user',
-          doctor: '/doctor',
-          hospital_admin: '/hospital',
-        }
-        router.push(roleRoutes[role] || '/user')
-      }
-    }
-  }, [session, status, router, update])
+    
+    const destination = roleRoutes[role] || '/user'
+    router.push(destination)
+  }, [role, router])
 
   return (
-    <div>
-      <h1>{message}</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600 mb-4" />
+        <p className="text-gray-600">Setting up your account...</p>
+      </div>
     </div>
   )
 }

@@ -114,39 +114,58 @@ const handleSocialSignUp = async (provider) => {
   const roleToPass = selectedRole || 'user';
   
   try {
-    // 1. Store role on server-side with longer expiration
+    // 1. Store role on server-side 
     const tempEmail = `temp-${roleToPass}-${Date.now()}`;
-    await fetch('/api/auth/set-oauth-role', {
+    const storeResponse = await fetch('/api/auth/set-oauth-role', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         email: tempEmail, 
         role: roleToPass,
-        // ✅ Add expiration timestamp
         expires: Date.now() + 300000 // 5 minutes
       })
-    }).catch(e => console.error('[OAuth Role Store] Error:', e));
+    });
+    
+    if (!storeResponse.ok) {
+      throw new Error('Failed to store OAuth role');
+    }
 
-    // 2. Set client-side cookie with proper domain settings
-    document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax; ${
-      process.env.NODE_ENV === "production" ? "Domain=.qlinichealth.com;" : ""
-    }`;
+    // 2. Set client-side cookie with proper attributes
+    const cookieAttributes = [
+      `oauth_role=${roleToPass}`,
+      'path=/',
+      'max-age=300',
+      'SameSite=Lax'
+    ];
+    
+    if (process.env.NODE_ENV === "production") {
+      cookieAttributes.push('Domain=.qlinichealth.com');
+      cookieAttributes.push('Secure');
+    }
+    
+    document.cookie = cookieAttributes.join('; ');
 
-    // ✅ FIX: Use main domain callback URL to avoid subdomain issues
-    const callbackUrl = process.env.NODE_ENV === "production" 
-      ? `https://qlinichealth.com/sign-in?role=${roleToPass}&oauth=true`
-      : `http://localhost:3000/sign-in?role=${roleToPass}&oauth=true`;
+    // 3. Use main domain for OAuth callbacks to avoid subdomain issues
+    let callbackUrl;
+    if (process.env.NODE_ENV === "production") {
+      callbackUrl = `https://qlinichealth.com/auth/complete?role=${roleToPass}`;
+    } else {
+      callbackUrl = `${window.location.origin}/auth/complete?role=${roleToPass}`;
+    }
 
+    console.log('[OAuth] Initiating sign-in with callback:', callbackUrl);
+    
     await signIn(provider, { 
       callbackUrl: callbackUrl,
       redirect: true 
     });
   } catch (error) {
-    console.error('[handleSocialSignUp] Error:', error)
-    toast.error('Failed to initiate social sign-up. Please try again.')
-    setSocialLoading(null)
+    console.error('[handleSocialSignUp] Error:', error);
+    toast.error('Failed to initiate social sign-up. Please try again.');
+    setSocialLoading(null);
   }
-}
+};
+
 
 
 

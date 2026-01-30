@@ -7,7 +7,7 @@ const isDevelopment = process.env.NODE_ENV === 'development'
 export const baseAuthConfig = {
   debug: isDevelopment, 
   providers: [
-    GoogleProvider({
+   GoogleProvider({
   clientId: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
   authorization: {
@@ -15,15 +15,13 @@ export const baseAuthConfig = {
       prompt: "consent",
       access_type: "offline",
       response_type: "code",
-      // ✅ Add proper redirect URI for OAuth callbacks
-      redirect_uri: process.env.NODE_ENV === "production" 
-        ? "https://qlinichealth.com/api/auth/callback/google"
-        : "http://localhost:3000/api/auth/callback/google"
+      // Remove redirect_uri - let NextAuth handle it automatically
     }
   },
-  // ✅ Use state check only (PKCE can cause issues with subdomains)
-  checks: ['state']
+  // Use only state check for development, pkce + state for production
+  checks: process.env.NODE_ENV === "development" ? ['state'] : ['pkce', 'state']
 }),
+
 
     FacebookProvider({
       clientId: process.env.FACEBOOK_CLIENT_ID,
