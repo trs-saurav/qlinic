@@ -248,20 +248,39 @@ export default async function middleware(req) {
       return NextResponse.redirect(signInUrl)
     }
 
-    // ✅ Skip Role Enforcement for Path-Based Redirects
-    const pathRedirectHeader = req.headers.get('x-path-redirect')
-    console.log('🚦 Path redirect header check:', pathRedirectHeader)
+    // ✅ SMART ROLE ENFORCEMENT WITH DEBUGGING
+    console.log('👮‍♂️ SMART ROLE ENFORCEMENT CHECK')
     
-    if (pathRedirectHeader !== 'true') {
-      console.log('👮‍♂️ Checking role enforcement...')
-      // Strict Role Enforcement (Fixes the Production Defaulting to 'User')
-      if (userRole !== currentRoleContext) {
-        console.log('⚠️  Role mismatch detected:', {
-          userRole,
-          currentRoleContext,
-          expectedRole: currentRoleContext
-        })
-        
+    const pathRedirectHeader = req.headers.get('x-path-redirect')
+    const referer = req.headers.get('referer') || ''
+    const isFreshPathRedirect = referer.includes(mainDomain) && 
+                               (referer.includes('/doctor') || 
+                                referer.includes('/hospital') || 
+                                referer.includes('/admin') || 
+                                referer.includes('/user'))
+    
+    const isSignInWithRoleParam = nextUrl.pathname === '/sign-in' && nextUrl.searchParams.has('role')
+    
+    console.log('🕵️  Role Enforcement Analysis:', {
+      userRole,
+      currentRoleContext,
+      rolesMatch: userRole === currentRoleContext,
+      pathRedirectHeader,
+      referer,
+      isFreshPathRedirect,
+      isSignInWithRoleParam
+    })
+    
+    if (userRole !== currentRoleContext) {
+      console.log('⚠️  Role mismatch detected')
+      
+      // Allow users to stay on the subdomain they just arrived at via path redirect
+      if (isFreshPathRedirect || isSignInWithRoleParam) {
+        console.log('✅ ALLOWING USER TO STAY ON CURRENT SUBDOMAIN (fresh arrival)')
+        console.log('   Reason:', isFreshPathRedirect ? 'Fresh path redirect' : 'Sign-in with role param')
+      } else {
+        console.log('❌ ENFORCING ROLE CORRECTION (established session)')
+        // Only redirect if this is NOT a fresh arrival
         const correctSub = roleToSubdomain[userRole]
         const protocol = isDevelopment ? 'http' : 'https'
         const port = isDevelopment ? ':3000' : ''
@@ -272,7 +291,6 @@ export default async function middleware(req) {
           userRole
         })
         
-        // If they are on the wrong subdomain, send them to the right one
         if (correctSub) {
           const redirectUrl = `${protocol}://${correctSub}.${mainDomain}${port}${nextUrl.pathname}${nextUrl.search}`
           console.log('🔁 Redirecting to correct role subdomain:', redirectUrl)
@@ -280,14 +298,11 @@ export default async function middleware(req) {
             new URL(redirectUrl)
           )
         }
-        // If role is unknown, send to main domain
         console.log('🏠 Redirecting to main domain due to unknown role')
         return NextResponse.redirect(new URL(`${protocol}://${mainDomain}${port}`))
-      } else {
-        console.log('✅ Role matches context - proceeding')
       }
     } else {
-      console.log('⏭️  Skipping role enforcement due to path redirect')
+      console.log('✅ Role matches context - no enforcement needed')
     }
 
     // Internal Rewrite
