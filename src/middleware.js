@@ -3,9 +3,9 @@ import { getToken } from 'next-auth/jwt'
 
 export default async function middleware(req) {
   const { nextUrl } = req
-  const hostname = req.headers.get('host') || ''
+  const hostHeader = req.headers.get('host') || ''
   
-  // 1. EARLY EXITS (Assets/Auth API)
+  // 1. EARLY EXITS
   if (
     nextUrl.pathname.startsWith('/_next') ||
     nextUrl.pathname.startsWith('/api/auth') ||
@@ -14,50 +14,38 @@ export default async function middleware(req) {
     return NextResponse.next()
   }
 
-  // 2. DOMAIN CONFIGURATION (Vercel Branch URL safe)
+  // 2. DOMAIN CONFIGURATION
   const isDevelopment = process.env.NODE_ENV === 'development'
   const mainDomain = "qlinichealth.com"
   
   let currentSubdomain = null
-  const host = hostname.replace(':3000', '') // Clean local port
+  const hostname = hostHeader.split(':')[0] 
 
   if (isDevelopment) {
-    const parts = host.split('.')
+    const parts = hostname.split('.')
     if (parts.length === 2 && parts[1] === 'localhost') {
       currentSubdomain = parts[0]
     }
   } else {
-    // ✅ PRODUCTION FIX: Only extract subdomain if the host is your actual custom domain.
-    // This ignores internal Vercel URLs like qlinic-6oo8wkjls...vercel.app
-    if (host.endsWith(mainDomain) && host !== mainDomain && host !== `www.${mainDomain}`) {
-      currentSubdomain = host.replace(`.${mainDomain}`, '').replace('www.', '')
+    // ✅ PRODUCTION FIX: Only treat as subdomain if it's your custom domain.
+    // Ignores internal Vercel URLs to stop loop chains.
+    if (hostname.endsWith(mainDomain) && hostname !== mainDomain && hostname !== `www.${mainDomain}`) {
+      currentSubdomain = hostname.replace(`.${mainDomain}`, '').replace('www.', '')
     }
   }
 
   const isMainDomain = !currentSubdomain || currentSubdomain === 'www'
 
   // 3. ROLE MAPPINGS
-  const subdomainToRole = {
-    'admin': 'admin',
-    'hospital': 'hospital_admin',
-    'doctor': 'doctor',
-    'user': 'user'
-  }
-
-  const roleToSubdomain = {
-    'admin': 'admin',
-    'hospital_admin': 'hospital',
-    'doctor': 'doctor',
-    'user': 'user'
-  }
-
+  const subdomainToRole = { admin: 'admin', hospital: 'hospital_admin', doctor: 'doctor', user: 'user' }
+  const roleToSubdomain = { admin: 'admin', hospital_admin: 'hospital', doctor: 'doctor', user: 'user' }
   const currentRoleContext = subdomainToRole[currentSubdomain]
 
-  // 4. AUTHENTICATION (Hardened for HTTPS/Production)
+  // 4. AUTHENTICATION
   const token = await getToken({
     req,
     secret: process.env.NEXTAUTH_SECRET,
-    // Production Secure Cookie Check
+    // Checks for secure production cookie first
     cookieName: isDevelopment ? 'authjs.session-token' : '__Secure-authjs.session-token',
   })
 
@@ -66,16 +54,14 @@ export default async function middleware(req) {
 
   // 5. PATH DEFINITIONS
   const authPaths = ['/sign-in', '/sign-up', '/forgot-password', '/reset-password']
-  const mainDomainPublicPaths = ['/', '/aboutus', '/privacy', '/terms', '/for-patients', '/for-clinics', '/why-qlinic', '/doctor-bot']
   const isAuthPath = authPaths.some(path => nextUrl.pathname.startsWith(path))
-  const isPublicPath = mainDomainPublicPaths.some(path => nextUrl.pathname === path)
 
   // 6. MAIN DOMAIN LOGIC
   if (isMainDomain) {
     const firstPath = nextUrl.pathname.split('/')[1]
     const pathToSub = { 'doctor': 'doctor', 'hospital': 'hospital', 'user': 'user', 'admin': 'admin' }
 
-    // Intercept paths (e.g. qlinichealth.com/doctor -> doctor.qlinichealth.com)
+    // Intercept paths (qlinichealth.com/doctor -> doctor.qlinichealth.com)
     if (pathToSub[firstPath]) {
       const targetSub = pathToSub[firstPath]
       const protocol = isDevelopment ? 'http' : 'https'
@@ -84,10 +70,8 @@ export default async function middleware(req) {
       return NextResponse.redirect(new URL(`${protocol}://${targetSub}.${mainDomain}${port}${cleanPath}${nextUrl.search}`))
     }
 
-    if (isPublicPath || isAuthPath) return NextResponse.next()
-
-    // Redirect logged in user to their dashboard
-    if (isLoggedIn && userRole) {
+    // Only redirect logged in users to dashboard if they hit the root "/"
+    if (isLoggedIn && userRole && nextUrl.pathname === '/') {
       const target = roleToSubdomain[userRole]
       if (target) {
         const protocol = isDevelopment ? 'http' : 'https'
@@ -102,33 +86,30 @@ export default async function middleware(req) {
   if (currentRoleContext) {
     const roleFolder = currentRoleContext === 'hospital_admin' ? 'hospital' : currentRoleContext
     
-    // Prevent URL path duplication
-    if (nextUrl.pathname.startsWith(`/${roleFolder}`)) {
-      return NextResponse.redirect(new URL('/', req.url))
-    }
-
-    if (isAuthPath) return NextResponse.next()
-
-    // Auth Guard
-    if (!isLoggedIn) {
+    // Redirect to login if accessing subdomain without session
+    if (!isLoggedIn && !isAuthPath) {
       const loginUrl = new URL('/sign-in', req.url)
       loginUrl.searchParams.set('role', currentRoleContext)
       return NextResponse.redirect(loginUrl)
     }
 
-    // Role Enforcement (If on wrong subdomain, move to correct one)
-    if (userRole !== currentRoleContext) {
-      const correct = roleToSubdomain[userRole]
-      const protocol = isDevelopment ? 'http' : 'https'
-      const port = isDevelopment ? ':3000' : ''
-      if (correct) {
-        return NextResponse.redirect(new URL(`${protocol}://${correct}.${mainDomain}${port}/`))
+    // ✅ ANTI-LOOP ROLE ENFORCEMENT
+    if (isLoggedIn && userRole !== currentRoleContext) {
+      const correctSub = roleToSubdomain[userRole]
+      if (correctSub) {
+        const protocol = isDevelopment ? 'http' : 'https'
+        const port = isDevelopment ? ':3000' : ''
+        const targetHost = `${correctSub}.${mainDomain}`
+        
+        // ONLY redirect if the current hostname is NOT already the target
+        if (hostname !== targetHost) {
+          return NextResponse.redirect(new URL(`${protocol}://${targetHost}${port}${nextUrl.pathname}${nextUrl.search}`))
+        }
       }
-      return NextResponse.redirect(new URL(`${protocol}://${mainDomain}${port}`))
     }
 
-    // Internal Rewrite
-    if (!nextUrl.pathname.startsWith('/api/')) {
+    // Internal Rewrite (Ensure no double mapping)
+    if (!nextUrl.pathname.startsWith('/api/') && !nextUrl.pathname.startsWith(`/${roleFolder}`)) {
       const url = nextUrl.clone()
       url.pathname = `/${roleFolder}${nextUrl.pathname}`
       return NextResponse.rewrite(url)
