@@ -83,20 +83,20 @@ export default function SignInClient() {
   const currentRole = roles[roleFromUrl] || roles.user
   const IconComponent = currentRole.icon
 
-  // ✅ REDIRECT LOGIC: Uses the centralized ROLE_ROUTES map
+  // ✅ FIXED REDIRECT LOGIC: Respect context over role for subdomain isolation
   useEffect(() => {
     if (status === 'authenticated' && session?.user) {
-      const userRole = session.user.role 
-      
-      // Prioritize explicit redirect param, then use the role map
-      const destination = redirectTo || ROLE_ROUTES[userRole] || '/user'
+      // Use the role from URL context first, then fall back to user's actual role
+      // This allows users to sign in to a different portal than their default role
+      const effectiveRole = roleFromUrl || session.user.role 
+      const destination = redirectTo || ROLE_ROUTES[effectiveRole] || '/user'
       
       const timer = setTimeout(() => {
         window.location.href = destination
       }, 100)
       return () => clearTimeout(timer)
     }
-  }, [status, session, redirectTo])
+  }, [status, session, redirectTo, roleFromUrl])
 
   const onSubmit = async (data) => {
     setLoading(true)
