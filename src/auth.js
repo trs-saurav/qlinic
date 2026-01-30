@@ -329,7 +329,7 @@ async signIn({ user, account, profile, req }) {
     
     await connectDB();
     let dbUser = await User.findOne({ email: user.email });
-
+//revert
     if (!dbUser) {
       // 1. Check the URL hint first (this comes from your frontend callbackUrl)
       // Auth.js provides the original request info in 'req'
