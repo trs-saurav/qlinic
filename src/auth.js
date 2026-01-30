@@ -47,13 +47,34 @@ function getAndClearOAuthRole(email) {
 // to redirect to the main domain (e.g. www.qlinichealth.com).
 // This breaks authentication for subdomains (user., doctor.) because cookies are host-only.
 // We delete these variables to force Auth.js to use the request's host header (trustHost: true).
-if (process.env.AUTH_URL?.includes('qlinichealth.com')) delete process.env.AUTH_URL
-if (process.env.NEXTAUTH_URL?.includes('qlinichealth.com')) delete process.env.NEXTAUTH_URL
+// ✅ FIX: Only delete in production, keep localhost URLs in development
+const isDevelopment = process.env.NODE_ENV === 'development'
+if (!isDevelopment) {
+  if (process.env.AUTH_URL?.includes('qlinichealth.com')) delete process.env.AUTH_URL
+  if (process.env.NEXTAUTH_URL?.includes('qlinichealth.com')) delete process.env.NEXTAUTH_URL
+}
+
+// ✅ FIX: Ensure NEXTAUTH_URL is set in development for client-side URL construction
+// The client-side signIn function needs a valid base URL to construct the request URL
+if (isDevelopment) {
+  // Always ensure NEXTAUTH_URL is set in development
+  if (!process.env.NEXTAUTH_URL && !process.env.AUTH_URL) {
+    process.env.NEXTAUTH_URL = 'http://localhost:3000'
+  }
+  // Validate that NEXTAUTH_URL is a valid URL format
+  if (process.env.NEXTAUTH_URL && !process.env.NEXTAUTH_URL.startsWith('http')) {
+    console.warn('[AUTH] Invalid NEXTAUTH_URL format, defaulting to http://localhost:3000')
+    process.env.NEXTAUTH_URL = 'http://localhost:3000'
+  }
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...baseAuthConfig,
   trustHost: true,
   useSecureCookies: process.env.NODE_ENV === "production",
+  // ✅ FIX: Set baseUrl for client-side URL construction in development
+  // This ensures the client-side signIn function can construct valid URLs
+  baseUrl: isDevelopment ? (process.env.NEXTAUTH_URL || process.env.AUTH_URL || 'http://localhost:3000') : undefined,
   providers: [
     ...baseAuthConfig.providers,
     Credentials({

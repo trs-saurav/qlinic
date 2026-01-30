@@ -47,8 +47,26 @@ export default function SignInClient() {
   
   let roleFromUrl, redirectTo
   try {
-    roleFromUrl = searchParams.get('role') || 'user'
     redirectTo = searchParams.get('redirect')
+    roleFromUrl = searchParams.get('role')
+    
+    // ✅ FIX: If role is not in URL, infer it from the redirect path
+    if (!roleFromUrl && redirectTo) {
+      const redirectPath = redirectTo.toLowerCase()
+      if (redirectPath.startsWith('/doctor')) {
+        roleFromUrl = 'doctor'
+      } else if (redirectPath.startsWith('/hospital')) {
+        roleFromUrl = 'hospital_admin'
+      } else if (redirectPath.startsWith('/admin')) {
+        roleFromUrl = 'admin'
+      } else if (redirectPath.startsWith('/user')) {
+        roleFromUrl = 'user'
+      } else {
+        roleFromUrl = 'user' // Default fallback
+      }
+    } else if (!roleFromUrl) {
+      roleFromUrl = 'user' // Default if no role and no redirect
+    }
   } catch (error) {
     roleFromUrl = 'user'
     redirectTo = null
@@ -58,10 +76,24 @@ export default function SignInClient() {
   const [socialLoading, setSocialLoading] = useState(null)
   const [showPassword, setShowPassword] = useState(false)
 
+  // Get email from URL params (for redirect from sign-up)
+  const emailFromUrl = searchParams.get('email')
+  const fromSignup = searchParams.get('fromSignup') === 'true'
+
   const form = useForm({
     resolver: zodResolver(signInSchema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: { 
+      email: emailFromUrl || '', 
+      password: '' 
+    },
   })
+  
+  // Show success message if coming from sign-up
+  useEffect(() => {
+    if (fromSignup && emailFromUrl) {
+      toast.success('Account created! Please sign in to continue.')
+    }
+  }, [fromSignup, emailFromUrl])
 
   const roles = {
     user: {

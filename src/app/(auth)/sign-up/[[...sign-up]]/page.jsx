@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { signIn } from 'next-auth/react'
+import { signIn, getCsrfToken } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -103,12 +103,85 @@ export default function SignUpPage() {
       
       console.log('[SIGNUP] Attempting sign-in with credentials:', { email: data.email, role: selectedRole })
       
-      const signInResult = await signIn('credentials', {
-        email: data.email,
-        password: data.password,
-        role: selectedRole,
-        redirect: false,
-      })
+      // ✅ FIX: Wrap signIn call to handle URL construction errors with fallback
+      let signInResult
+      let usedFallback = false
+      try {
+        signInResult = await signIn('credentials', {
+          email: data.email,
+          password: data.password,
+          role: selectedRole,
+          redirect: false,
+        })
+      } catch (urlError) {
+        // If URL construction fails, use direct API call as fallback
+        if (urlError.message?.includes('Invalid URL') || urlError.message?.includes('Failed to construct')) {
+          console.warn('[SIGNUP] URL construction error, using fallback API method:', urlError.message)
+          
+          try {
+            // Get CSRF token
+            const csrfToken = await getCsrfToken()
+            if (!csrfToken) {
+              throw new Error('Could not get CSRF token')
+            }
+
+            // Use window.location.origin as base URL
+            const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+            
+            // Make direct fetch to credentials callback
+            const response = await fetch(`${baseUrl}/api/auth/callback/credentials`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: new URLSearchParams({
+                email: data.email,
+                password: data.password,
+                role: selectedRole || '',
+                csrfToken: csrfToken,
+                redirect: 'false',
+                json: 'true'
+              })
+            })
+
+            let responseData
+            try {
+              responseData = await response.json()
+            } catch (e) {
+              // If response is not JSON, check status
+              if (response.ok) {
+                // Success - redirect will be handled by NextAuth
+                signInResult = { ok: true }
+              } else {
+                responseData = { error: 'Sign-in failed' }
+              }
+            }
+            
+            if (responseData?.error) {
+              signInResult = { error: responseData.error, ok: false }
+            } else if (response.ok) {
+              // Success - session should be set via cookies
+              signInResult = { ok: true }
+              usedFallback = true
+              // Mark that we used fallback so we can redirect immediately
+            } else {
+              signInResult = { error: 'Sign-in failed', ok: false }
+            }
+          } catch (fallbackError) {
+            console.error('[SIGNUP] Fallback sign-in also failed:', fallbackError)
+            toast.dismiss(loadingToast)
+            toast.success('Account created successfully! Redirecting to sign in...')
+            setLoading(false)
+            // Redirect to sign-in page with success message
+            setTimeout(() => {
+              router.push('/sign-in?message=account-created')
+            }, 1500)
+            return
+          }
+        } else {
+          throw urlError
+        }
+      }
 
       console.log('[SIGNUP] Sign-in result:', signInResult)
 
@@ -122,13 +195,34 @@ export default function SignUpPage() {
         throw new Error('Sign-in failed. Please try signing in manually.')
       }
 
-      console.log('[SIGNUP] Sign-in successful, redirecting...')
-      const roleRoutes = {
-        user: '/user',
-        doctor: '/doctor',
-        hospital_admin: '/hospital',
-      };
-      router.push(roleRoutes[selectedRole] || '/user');
+      console.log('[SIGNUP] Sign-in successful, redirecting to subdomain...')
+      toast.dismiss(loadingToast)
+      toast.success('Account created! Redirecting to sign in...')
+      setLoading(false)
+      
+      // ✅ FIX: Redirect to subdomain sign-in page so session cookie is set for the correct domain
+      // The session cookie from main domain won't work on subdomain, so we need to sign in on subdomain
+      const roleToSubdomain = {
+        user: 'user',
+        doctor: 'doctor',
+        hospital_admin: 'hospital',
+        admin: 'admin'
+      }
+      
+      const subdomain = roleToSubdomain[selectedRole] || 'user'
+      const isDevelopment = typeof window !== 'undefined' && window.location.hostname.includes('localhost')
+      const mainDomain = isDevelopment ? 'localhost' : (process.env.NEXT_PUBLIC_MAIN_DOMAIN || 'qlinichealth.com')
+      const port = isDevelopment ? ':3000' : ''
+      const protocol = isDevelopment ? 'http' : 'https'
+      
+      // Redirect to subdomain sign-in page with email pre-filled for better UX
+      // User will need to sign in on the subdomain to get the session cookie for that domain
+      const subdomainSignInUrl = `${protocol}://${subdomain}.${mainDomain}${port}/sign-in?email=${encodeURIComponent(data.email)}&role=${selectedRole}&fromSignup=true`
+      
+      setTimeout(() => {
+        window.location.href = subdomainSignInUrl
+      }, 500)
+      return
 
     } catch (err) {
       console.error('[SIGNUP] Error:', err)
