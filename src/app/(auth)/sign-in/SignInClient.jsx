@@ -1,6 +1,6 @@
 'use client'
 
-import { signIn, useSession, getCsrfToken, signOut } from 'next-auth/react' // Added signOut
+import { signIn, useSession, getCsrfToken } from 'next-auth/react' // Removed signOut
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -8,32 +8,14 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { motion } from 'framer-motion'
 import { 
-  Users, 
-  Stethoscope, 
-  Building2,
-  Shield,
-  Loader2,
-  Eye,
-  EyeOff,
-  Mail,
-  Lock,
-  Chrome,
-  Check
+  Users, Stethoscope, Building2, Shield, Loader2, Eye, EyeOff, Mail, Lock, Chrome, Check
 } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import toast from 'react-hot-toast'
-
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form'
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Separator } from '@/components/ui/separator'
 
 const signInSchema = z.object({
@@ -109,31 +91,28 @@ export default function SignInClient() {
     fetchCsrfToken()
   }, [])
 
-  // ✅ FIX: Auto-SignOut on Role Mismatch
+  // ✅ FIX: Only redirect if ALREADY logged in as the CORRECT role
+  // This allows multiple logins: If I am 'user', but on 'doctor' login page, stay here.
   useEffect(() => {
     if (status === 'authenticated' && session?.user) {
       const userRole = session.user.role
       
-      // If the user is logged in but tries to access a different role portal,
-      // sign them out to prevent session collision.
-      if (roleFromUrl && userRole !== roleFromUrl) {
-         signOut({ redirect: false })
-         return;
+      // Only redirect to dashboard if the session role matches the requested role
+      if (userRole === roleFromUrl) {
+          const roleRoutes = {
+            user: '/user',
+            doctor: '/doctor',
+            hospital_admin: '/hospital',
+            admin: '/admin',
+            sub_admin: '/sub-admin'
+          }
+          
+          const destination = redirectTo || roleRoutes[userRole] || '/user'
+          const timer = setTimeout(() => {
+            window.location.href = destination
+          }, 100)
+          return () => clearTimeout(timer)
       }
-
-      const roleRoutes = {
-        user: '/user',
-        doctor: '/doctor',
-        hospital_admin: '/hospital',
-        admin: '/admin',
-        sub_admin: '/sub-admin'
-      }
-      
-      const destination = redirectTo || roleRoutes[userRole] || '/user'
-      const timer = setTimeout(() => {
-        window.location.href = destination
-      }, 100)
-      return () => clearTimeout(timer)
     }
   }, [status, session, redirectTo, roleFromUrl])
 
@@ -229,19 +208,14 @@ export default function SignInClient() {
     document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
 
     // Determine environment to build absolute URL
-    // This logic ensures that if we are logging in as a Doctor, we land on doctor.domain
     const isDev = process.env.NODE_ENV === 'development';
     const protocol = isDev ? 'http' : 'https';
-    
-    // NOTE: This must match your auth.js/middleware.js setup
-    // If you are using hosts file: 'qlinic.local:3000'
-    // If you are using standard localhost: 'localhost:3000'
     const rootDomain = isDev ? 'localhost:3000' : 'qlinichealth.com'; 
 
     let callbackUrl = redirectTo;
 
     if (!callbackUrl) {
-       // If intended role is doctor or hospital, force the subdomain URL
+       // Force subdomain redirects for isolated sessions
        if (roleToPass === 'doctor' || roleToPass === 'hospital_admin') {
           const sub = roleToPass === 'hospital_admin' ? 'hospital' : roleToPass;
           // Result ex: http://doctor.localhost:3000
@@ -269,7 +243,8 @@ export default function SignInClient() {
     )
   }
 
-  if (status === 'authenticated') {
+  // Only show "Redirecting..." if we are actually redirecting (roles match)
+  if (status === 'authenticated' && session?.user?.role === roleFromUrl) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#020617]">
         <div className="text-center">
@@ -281,7 +256,7 @@ export default function SignInClient() {
   }
 
   return (
-    <div className="h-screen w-screen    overflow-hidden relative bg-[#F8FAFC] dark:bg-[#020617] flex self-center items-center  justify-center lg:pt-20">
+    <div className="h-screen w-screen overflow-hidden relative bg-[#F8FAFC] dark:bg-[#020617] flex self-center items-center justify-center lg:pt-20">
       {/* Animated background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <motion.div

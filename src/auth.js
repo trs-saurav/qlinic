@@ -11,11 +11,11 @@ import { cookies } from 'next/headers'
 const isDevelopment = process.env.NODE_ENV === 'development'
 const useSecureCookies = process.env.NODE_ENV === 'production'
 
-// Use undefined in Dev to prevent browser blocking (HostOnly cookies)
-const cookieDomain = isDevelopment ? undefined : '.qlinichealth.com'
+// ✅ FIX: REMOVED shared domain logic. 
+// Cookies will now be specific to the subdomain (e.g., doctor.qlinichealth.com).
+// This allows a Doctor session and a User session to exist side-by-side.
 
-// ✅ FIX: Forcefully remove NEXTAUTH_URL. 
-// This ensures that if you login on 'doctor.localhost', the callback stays on 'doctor.localhost'.
+// Clean up env vars that might force redirects
 delete process.env.NEXTAUTH_URL
 delete process.env.AUTH_URL
 
@@ -31,7 +31,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         sameSite: 'lax',
         path: '/',
         secure: useSecureCookies,
-        domain: cookieDomain,
+        // domain: ...  <-- REMOVED to enable isolated sessions
       },
     },
   },
@@ -76,11 +76,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         let dbUser = await User.findOne({ email: user.email });
         let roleToAssign = 'user'; 
         
-        // ---------------------------------------------------------
-        // ✅ FIX: Await cookies() (Crucial for Next.js 15+)
-        // ---------------------------------------------------------
         try {
-          const cookieStore = await cookies() // <--- MUST AWAIT THIS
+          const cookieStore = await cookies()
           const roleCookie = cookieStore.get('oauth_role')
           
           if (roleCookie?.value) {
@@ -99,7 +96,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (dbUser) return true; 
 
-        // Create New User
         dbUser = await User.create({
           email: user.email,
           firstName: user.name?.split(' ')[0] || 'User',
@@ -139,6 +135,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async redirect({ url, baseUrl }) {
        if (url.startsWith("/")) return `${baseUrl}${url}`;
        if (new URL(url).origin === baseUrl) return url;
+       
+       // Allow redirects on same root, but now they are treated as distinct sites
        const isSameRoot = url.includes('qlinichealth.com') || (isDevelopment && url.includes('localhost'));
        if (isSameRoot) return url;
        return baseUrl;
@@ -152,8 +150,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       
       try {
         await connectDB();
-        
-        // Check if user exists to avoid race conditions
         const dbUser = await User.findById(user.id);
         if (!dbUser) return;
         

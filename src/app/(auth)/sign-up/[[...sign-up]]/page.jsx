@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
+import { Separator } from '@/components/ui/separator'
 
 const signUpSchema = z.object({
   firstName: z.string().min(2, 'Min 2 chars'),
@@ -102,21 +103,21 @@ export default function SignUpPage() {
         redirect: false,
       })
 
-      if (signInResult.error) {
+      if (signInResult?.error) {
         throw new Error(signInResult.error)
       }
 
-      // ✅ FIX: Consistent Redirect Logic
+      // ✅ FIX: Force redirect to the correct subdomain for isolated sessions
       const isDev = process.env.NODE_ENV === 'development';
       const protocol = isDev ? 'http' : 'https';
       const rootDomain = isDev ? 'localhost:3000' : 'qlinichealth.com';
       
       if (selectedRole === 'doctor' || selectedRole === 'hospital_admin') {
          const sub = selectedRole === 'hospital_admin' ? 'hospital' : selectedRole;
-         // Full redirect to correct subdomain
+         // Use window.location to force a hard navigation to the subdomain
          window.location.href = `${protocol}://${sub}.${rootDomain.replace(':3000','')}${isDev ? ':3000' : ''}`;
       } else {
-         // Standard user redirect
+         // Users/Patients usually stay on the main domain or user subdomain
          router.push('/user');
       }
 
@@ -127,7 +128,7 @@ export default function SignUpPage() {
     }
   }
 
-  // ✅ FIX: Robust Social Sign Up Logic
+  // ✅ FIX: Robust Social Sign Up Logic with Subdomain Support
   const handleSocialSignUp = async (provider) => {
     setSocialLoading(provider)
     const roleToPass = selectedRole || 'user';
@@ -142,11 +143,12 @@ export default function SignUpPage() {
     
     let callbackUrl;
     
+    // Force subdomain callback so the cookie is set on the correct host
     if (roleToPass === 'doctor' || roleToPass === 'hospital_admin') {
          const sub = roleToPass === 'hospital_admin' ? 'hospital' : roleToPass;
          callbackUrl = `${protocol}://${sub}.${rootDomain.replace(':3000','')}${isDev ? ':3000' : ''}`;
     } else {
-         callbackUrl = '/user';
+         callbackUrl = '/user'; // Or use currentRole.redirectUrl logic
     }
     
     await signIn(provider, { 
@@ -221,7 +223,18 @@ export default function SignUpPage() {
                       </button>
                     ))}
                   </div>
-                  <div className="relative mb-5 md:mb-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200/50"></div></div><div className="relative flex justify-center text-[10px] uppercase tracking-wider"><span className="bg-transparent px-2 text-slate-400">Or email</span></div></div>
+                  
+                  <div className="relative mb-5 md:mb-6">
+                    <div className="absolute inset-0 flex items-center">
+                      <Separator className="bg-slate-300 dark:bg-slate-600" />
+                    </div>
+                    <div className="relative flex justify-center text-[10px] md:text-xs font-medium">
+                      <span className="bg-white/40 dark:bg-slate-900/40 px-3 text-slate-500 dark:text-slate-400 backdrop-blur-xl">
+                        Or email
+                      </span>
+                    </div>
+                  </div>
+
                   <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
                       <div className="grid grid-cols-2 gap-3">
