@@ -96,6 +96,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (dbUser) return true; 
 
+        if (roleToAssign === 'admin' || roleToAssign === 'sub_admin') {
+            console.error("Security: Attempted to auto-create Admin account via OAuth. Blocked.");
+            // Returning false redirects them to the error page (AccessDenied)
+            return false; 
+        }
+
         dbUser = await User.create({
           email: user.email,
           firstName: user.name?.split(' ')[0] || 'User',
