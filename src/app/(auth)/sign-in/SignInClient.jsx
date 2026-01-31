@@ -1,6 +1,6 @@
 'use client'
 
-import { signIn, useSession, getCsrfToken } from 'next-auth/react'
+import { signIn, useSession, getCsrfToken, signOut } from 'next-auth/react' // Added signOut
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -109,9 +109,18 @@ export default function SignInClient() {
     fetchCsrfToken()
   }, [])
 
+  // ✅ FIX: Auto-SignOut on Role Mismatch
   useEffect(() => {
     if (status === 'authenticated' && session?.user) {
       const userRole = session.user.role
+      
+      // If the user is logged in but tries to access a different role portal,
+      // sign them out to prevent session collision.
+      if (roleFromUrl && userRole !== roleFromUrl) {
+         signOut({ redirect: false })
+         return;
+      }
+
       const roleRoutes = {
         user: '/user',
         doctor: '/doctor',
@@ -126,12 +135,13 @@ export default function SignInClient() {
       }, 100)
       return () => clearTimeout(timer)
     }
-  }, [status, session, redirectTo])
+  }, [status, session, redirectTo, roleFromUrl])
 
   const onSubmit = async (data) => {
     setLoading(true)
     const loadingToast = toast.loading('Signing in...')
     
+    // ✅ FIX: Ensure targetUrl respects subdomains if needed
     const currentOrigin = window.location.origin
     let targetUrl
     if (redirectTo) {
@@ -180,6 +190,7 @@ export default function SignInClient() {
             
             if (retryResult?.ok) {
               toast.success('Signed in successfully!')
+              window.location.href = targetUrl // Force redirect
               return
             }
           } else {
@@ -196,6 +207,7 @@ export default function SignInClient() {
       
       if (result?.ok) {
         toast.success('Signed in successfully!')
+        window.location.href = targetUrl // Force redirect
       } else {
         toast.error('Sign in failed. Please try again.')
         setLoading(false)
@@ -208,14 +220,40 @@ export default function SignInClient() {
     }
   }
 
+  // ✅ FIX: Robust Social Login for Subdomains
   const handleSocialLogin = async (provider) => {
     setSocialLoading(provider);
     
     const roleToPass = roleFromUrl || 'user';
+    // Set cookie for server-side role detection
     document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
 
+    // Determine environment to build absolute URL
+    // This logic ensures that if we are logging in as a Doctor, we land on doctor.domain
+    const isDev = process.env.NODE_ENV === 'development';
+    const protocol = isDev ? 'http' : 'https';
+    
+    // NOTE: This must match your auth.js/middleware.js setup
+    // If you are using hosts file: 'qlinic.local:3000'
+    // If you are using standard localhost: 'localhost:3000'
+    const rootDomain = isDev ? 'localhost:3000' : 'qlinichealth.com'; 
+
+    let callbackUrl = redirectTo;
+
+    if (!callbackUrl) {
+       // If intended role is doctor or hospital, force the subdomain URL
+       if (roleToPass === 'doctor' || roleToPass === 'hospital_admin') {
+          const sub = roleToPass === 'hospital_admin' ? 'hospital' : roleToPass;
+          // Result ex: http://doctor.localhost:3000
+          callbackUrl = `${protocol}://${sub}.${rootDomain.replace(':3000','')}${isDev ? ':3000' : ''}`;
+       } else {
+          // Result ex: /user
+          callbackUrl = currentRole.redirectUrl;
+       }
+    }
+
     await signIn(provider, { 
-      callbackUrl: redirectTo || '/', 
+      callbackUrl: callbackUrl, 
       redirect: true 
     });
   }
