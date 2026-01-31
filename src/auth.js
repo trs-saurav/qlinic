@@ -11,11 +11,13 @@ import { cookies } from 'next/headers'
 const isDevelopment = process.env.NODE_ENV === 'development'
 const useSecureCookies = process.env.NODE_ENV === 'production'
 
-// ✅ FIX: Use undefined in Dev to prevent browser blocking
+// Use undefined in Dev to prevent browser blocking (HostOnly cookies)
 const cookieDomain = isDevelopment ? undefined : '.qlinichealth.com'
 
-if (process.env.AUTH_URL?.includes('qlinichealth.com')) delete process.env.AUTH_URL
-if (process.env.NEXTAUTH_URL?.includes('qlinichealth.com')) delete process.env.NEXTAUTH_URL
+// ✅ FIX: Forcefully remove NEXTAUTH_URL. 
+// This ensures that if you login on 'doctor.localhost', the callback stays on 'doctor.localhost'.
+delete process.env.NEXTAUTH_URL
+delete process.env.AUTH_URL
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...baseAuthConfig,
@@ -29,7 +31,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         sameSite: 'lax',
         path: '/',
         secure: useSecureCookies,
-        domain: cookieDomain, // undefined in dev allows separate login on doctor.localhost
+        domain: cookieDomain,
       },
     },
   },
@@ -68,16 +70,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async signIn({ user, account, profile, req }) {
       if (account?.provider === 'credentials') return true;
+      
       try {
         await connectDB();
         let dbUser = await User.findOne({ email: user.email });
         let roleToAssign = 'user'; 
         
+        // ---------------------------------------------------------
+        // ✅ FIX: Await cookies() (Crucial for Next.js 15+)
+        // ---------------------------------------------------------
         try {
-          const cookieStore = cookies()
+          const cookieStore = await cookies() // <--- MUST AWAIT THIS
           const roleCookie = cookieStore.get('oauth_role')
-          if (roleCookie?.value) roleToAssign = roleCookie.value
-          else if (req?.headers) {
+          
+          if (roleCookie?.value) {
+            roleToAssign = roleCookie.value
+          } else if (req?.headers) {
             const cookieHeader = req.headers.get('cookie') || ''
             const match = cookieHeader.match(/oauth_role=([^;]+)/);
             if (match) roleToAssign = match[1];
@@ -91,6 +99,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (dbUser) return true; 
 
+        // Create New User
         dbUser = await User.create({
           email: user.email,
           firstName: user.name?.split(' ')[0] || 'User',
@@ -104,8 +113,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         user.role = dbUser.role;
         user.id = dbUser._id.toString();
         user.isNewUser = true;
+        
         return true;
       } catch (error) {
+        console.error("SignIn Error:", error);
         return false;
       }
     },
@@ -116,20 +127,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.isNewUser = user.isNewUser;
         token.roleLastChecked = Date.now();
       } 
-      const fiveMinutes = 5 * 60 * 1000;
-      const now = Date.now();
-      const shouldRefresh = !token.roleLastChecked || (now - (token.roleLastChecked || 0) > fiveMinutes);
-
-      if (shouldRefresh && token.db_id) {
-        try {
-          await connectDB();
-          const dbUser = await User.findById(token.db_id);
-          if (dbUser) {
-            token.role = dbUser.role;
-            token.roleLastChecked = Date.now();
-          }
-        } catch (e) {}
-      }
       return token;
     },
     async session({ session, token }) {
@@ -150,39 +147,53 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   events: {
     async signIn({ user, account, isNewUser }) {
       const isActuallyNewUser = isNewUser || user?.isNewUser;
+      
       if (!isActuallyNewUser || !account?.provider) return;
+      
       try {
         await connectDB();
+        
+        // Check if user exists to avoid race conditions
         const dbUser = await User.findById(user.id);
         if (!dbUser) return;
         
         if (dbUser.role === 'doctor') {
-          await DoctorProfile.create({
-            userId: user.id,
-            specialization: 'General Medicine',
-            qualifications: [],
-            experience: 0,
-            consultationFee: 0,
-          });
+          const existingDoc = await DoctorProfile.findOne({ userId: user.id });
+          if (!existingDoc) {
+            await DoctorProfile.create({
+              userId: user.id,
+              specialization: 'General Medicine',
+              qualifications: [],
+              experience: 0,
+              consultationFee: 0,
+            });
+          }
         } else if (dbUser.role === 'hospital_admin') {
-          await HospitalAdminProfile.create({
-            userId: user.id,
-            hospitalId: null,
-            designation: '',
-            department: '',
-          });
+          const existingAdmin = await HospitalAdminProfile.findOne({ userId: user.id });
+          if (!existingAdmin) {
+            await HospitalAdminProfile.create({
+              userId: user.id,
+              hospitalId: null,
+              designation: '',
+              department: '',
+            });
+          }
         } else {
-          const year = new Date().getFullYear();
-          const randomPart = (Date.now().toString(36) + Math.random().toString(36).substr(2, 5)).toUpperCase();
-          const newQlinicId = `QL${year}-${randomPart}`;
-          await PatientProfile.create({
-            userId: user.id,
-            qclinicId: newQlinicId,
-            dateOfBirth: null,
-            gender: null,
-            bloodGroup: null,
-            address: {},
-          });
+          const existingPatient = await PatientProfile.findOne({ userId: user.id });
+          if (!existingPatient) {
+            const year = new Date().getFullYear();
+            const randomPart = (Date.now().toString(36) + Math.random().toString(36).substr(2, 5)).toUpperCase();
+            const newQlinicId = `QL${year}-${randomPart}`;
+
+            await PatientProfile.create({
+              userId: user.id,
+              qclinicId: newQlinicId,
+              dateOfBirth: null,
+              gender: null,
+              bloodGroup: null,
+              address: {},
+            });
+          }
         }
       } catch (error) {
         console.error("Profile Creation Error:", error);

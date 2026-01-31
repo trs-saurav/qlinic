@@ -106,12 +106,19 @@ export default function SignUpPage() {
         throw new Error(signInResult.error)
       }
 
-      const roleRoutes = {
-        user: '/user',
-        doctor: '/doctor',
-        hospital_admin: '/hospital',
-      };
-      router.push(roleRoutes[selectedRole] || '/user');
+      // ✅ FIX: Consistent Redirect Logic
+      const isDev = process.env.NODE_ENV === 'development';
+      const protocol = isDev ? 'http' : 'https';
+      const rootDomain = isDev ? 'localhost:3000' : 'qlinichealth.com';
+      
+      if (selectedRole === 'doctor' || selectedRole === 'hospital_admin') {
+         const sub = selectedRole === 'hospital_admin' ? 'hospital' : selectedRole;
+         // Full redirect to correct subdomain
+         window.location.href = `${protocol}://${sub}.${rootDomain.replace(':3000','')}${isDev ? ':3000' : ''}`;
+      } else {
+         // Standard user redirect
+         router.push('/user');
+      }
 
     } catch (err) {
       toast.dismiss(loadingToast)
@@ -120,21 +127,30 @@ export default function SignUpPage() {
     }
   }
 
+  // ✅ FIX: Robust Social Sign Up Logic
   const handleSocialSignUp = async (provider) => {
     setSocialLoading(provider)
     const roleToPass = selectedRole || 'user';
     
-    // Set cookie to pass role to the server-side callback
+    // 1. Set the cookie explicitly so the server knows the INTENDED role
     document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
     
-    const roleRoutes = {
-      user: '/user',
-      doctor: '/doctor',
-      hospital_admin: '/hospital',
-    };
+    // 2. Determine Callback URL (Subdomain Aware)
+    const isDev = process.env.NODE_ENV === 'development';
+    const protocol = isDev ? 'http' : 'https';
+    const rootDomain = isDev ? 'localhost:3000' : 'qlinichealth.com';
+    
+    let callbackUrl;
+    
+    if (roleToPass === 'doctor' || roleToPass === 'hospital_admin') {
+         const sub = roleToPass === 'hospital_admin' ? 'hospital' : roleToPass;
+         callbackUrl = `${protocol}://${sub}.${rootDomain.replace(':3000','')}${isDev ? ':3000' : ''}`;
+    } else {
+         callbackUrl = '/user';
+    }
     
     await signIn(provider, { 
-      callbackUrl: roleRoutes[roleToPass] || '/user',
+      callbackUrl: callbackUrl,
       redirect: true,
     });
   }
