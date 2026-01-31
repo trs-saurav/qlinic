@@ -5,6 +5,7 @@ export default async function middleware(req) {
   const { nextUrl } = req
   const hostname = req.headers.get('host') || ''
   
+  // 1. SKIP STATIC FILES & API
   if (
     nextUrl.pathname.startsWith('/_next') ||
     nextUrl.pathname.startsWith('/api') || 
@@ -13,9 +14,11 @@ export default async function middleware(req) {
     return NextResponse.next()
   }
 
+  // 2. CONFIG
   const isDevelopment = process.env.NODE_ENV === 'development'
   const rootDomain = isDevelopment ? 'localhost:3000' : 'qlinichealth.com'
   
+  // Extract subdomain
   let currentSubdomain = null
   if (!isDevelopment && hostname !== rootDomain) {
       currentSubdomain = hostname.replace(`.${rootDomain}`, '')
@@ -23,6 +26,30 @@ export default async function middleware(req) {
       currentSubdomain = hostname.split('.')[0]
   }
 
+  // -------------------------------------------------------------
+  // 3. ✅ ROOT DOMAIN SHORTCUTS (Placed Here)
+  // -------------------------------------------------------------
+  // Allows users to type "qlinichealth.com/doctor" and get sent to "doctor.qlinichealth.com"
+  if (!currentSubdomain || currentSubdomain === 'www') {
+     const pathSegment = nextUrl.pathname.split('/')[1]; // Gets 'doctor' from '/doctor/dashboard'
+     const validSubdomains = ['doctor', 'hospital', 'admin', 'user'];
+
+     if (validSubdomains.includes(pathSegment)) {
+        const protocol = isDevelopment ? 'http' : 'https';
+        const port = isDevelopment ? ':3000' : '';
+        
+        // Remove the segment from the path (e.g., /doctor/dashboard -> /dashboard)
+        const newPath = nextUrl.pathname.replace(`/${pathSegment}`, '') || '/';
+        const domainClean = rootDomain.replace(':3000', '');
+
+        // Construct new URL: https://doctor.qlinichealth.com/dashboard
+        const newUrl = `${protocol}://${pathSegment}.${domainClean}${port}${newPath}${nextUrl.search}`;
+        
+        return NextResponse.redirect(newUrl);
+     }
+  }
+
+  // 4. GET SESSION
   // Check for ANY session token
   let token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: '__Secure-authjs.session-token' })
   if (!token) token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'authjs.session-token' })
@@ -49,12 +76,10 @@ export default async function middleware(req) {
   const roleSubdomainMap = { 'doctor': 'doctor', 'hospital_admin': 'hospital', 'admin': 'admin', 'user': 'user' }
   const correctSubdomain = roleSubdomainMap[role] || 'user'
 
-  // If session doesn't match subdomain, it's effectively "Not Logged In" for this specific app.
-  // Instead of redirecting to the "Correct" subdomain, we just force them to Sign In on the CURRENT one.
+  // If session doesn't match subdomain, allow sign-in page (Escape Hatch) or force login on current domain
   if (currentSubdomain !== correctSubdomain) {
       if (nextUrl.pathname.startsWith('/sign-in')) return NextResponse.next();
       
-      // Force sign-in on the current subdomain to create a new, parallel session
       const url = new URL('/sign-in', req.url)
       url.searchParams.set('role', currentSubdomain)
       url.searchParams.set('redirect', nextUrl.pathname)

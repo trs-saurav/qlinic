@@ -71,9 +71,10 @@ export default function DoctorNavbar() {
     [pathname]
   )
 
-  const handleSignOut = async () => {
-    await signOut({ callbackUrl: '/sign-in' })
-  }
+const handleSignOut = async () => {
+  // Forces redirect to Doctor Sign-In
+  await signOut({ callbackUrl: '/sign-in?role=doctor' })
+}
 
   return (
     <header 

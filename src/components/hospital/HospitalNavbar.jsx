@@ -154,7 +154,7 @@ export default function HospitalNavbar() {
       await signOut({ redirect: false });
       toast.dismiss(loadingToast);
       toast.success("Signed out successfully", { icon: "👋" });
-      router.push("/");
+      router.push("/sign-in?role=hospital_admin");
     } catch (error) {
       toast.dismiss(loadingToast);
       toast.error("Failed to sign out");
