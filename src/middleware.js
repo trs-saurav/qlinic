@@ -27,6 +27,7 @@ export default async function middleware(req) {
   }
 
   // 3. ROOT DOMAIN SHORTCUTS
+  // Redirect qlinichealth.com/doctor -> doctor.qlinichealth.com/doctor
   if (!currentSubdomain || currentSubdomain === 'www') {
      const pathSegment = nextUrl.pathname.split('/')[1]; 
      const validSubdomains = ['doctor', 'hospital', 'admin', 'user'];
@@ -34,11 +35,10 @@ export default async function middleware(req) {
      if (validSubdomains.includes(pathSegment)) {
         const protocol = isDevelopment ? 'http' : 'https';
         const port = isDevelopment ? ':3000' : '';
-        
-        const newPath = nextUrl.pathname.replace(`/${pathSegment}`, '') || '/';
         const domainClean = rootDomain.replace(':3000', '');
-
-        const newUrl = `${protocol}://${pathSegment}.${domainClean}${port}${newPath}${nextUrl.search}`;
+        
+        // Keep the pathSegment in the URL so it lands on /doctor/dashboard correctly
+        const newUrl = `${protocol}://${pathSegment}.${domainClean}${port}${nextUrl.pathname}${nextUrl.search}`;
         
         return NextResponse.redirect(newUrl);
      }
@@ -48,61 +48,84 @@ export default async function middleware(req) {
   let token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: '__Secure-authjs.session-token' })
   if (!token) token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'authjs.session-token' })
 
-  const publicPaths = ['/sign-in', '/sign-up', '/aboutus', '/', '/for-patients', '/for-clinics']
-  const isPublic = publicPaths.some(path => nextUrl.pathname === path || (path !== '/' && nextUrl.pathname.startsWith(path)))
-
-  // -------------------------------------------------------------
-  // ✅ CHANGE 1: Add this Helper Function
-  // -------------------------------------------------------------
+  // Helper: Map 'hospital' subdomain to 'hospital_admin' role
   const getRoleFromSubdomain = (sub) => {
     if (sub === 'hospital') return 'hospital_admin';
     return sub; 
   };
+  
+  const currentRoleScope = getRoleFromSubdomain(currentSubdomain); 
+  const appFolder = currentSubdomain === 'hospital' ? '/hospital' : `/${currentSubdomain}`;
 
-  // A. NO SESSION -> Redirect to Login (Stay on same subdomain)
+  // -------------------------------------------------------------
+  // A. NO SESSION -> Protect ONLY the App Folder
+  // -------------------------------------------------------------
   if (!token) {
     const isSignInPage = nextUrl.pathname.startsWith('/sign-in');
-    
-    // 1. Redirect protected pages to sign-in
-    if (currentSubdomain && currentSubdomain !== 'www' && !isSignInPage) {
+    const isAppPath = nextUrl.pathname.startsWith(appFolder); // e.g., starts with /user
+
+    // Only force login if they are trying to access /user/* on user.com
+    if (currentSubdomain && currentSubdomain !== 'www' && !isSignInPage && isAppPath) {
        const url = new URL('/sign-in', req.url)
-       // ✅ CHANGE 2: Use helper function here
-       url.searchParams.set('role', getRoleFromSubdomain(currentSubdomain)) 
+       url.searchParams.set('role', currentRoleScope)
        url.searchParams.set('redirect', nextUrl.pathname)
        return NextResponse.redirect(url)
     }
 
-    // ✅ CHANGE 3: Add logic to inject role if missing on /sign-in page
+    // Inject role into /sign-in URL if missing
     if (currentSubdomain && currentSubdomain !== 'www' && isSignInPage && !nextUrl.searchParams.has('role')) {
        const url = new URL(req.url)
-       url.searchParams.set('role', getRoleFromSubdomain(currentSubdomain))
+       url.searchParams.set('role', currentRoleScope)
        return NextResponse.redirect(url)
     }
-
-    return NextResponse.next()
+    
+    // If not logged in and not accessing App Folder, we let it fall through to the Rewrite logic below
   }
 
-  // B. LOGGED IN -> Enforce Role
-  if (!currentSubdomain && isPublic) return NextResponse.next()
+  // -------------------------------------------------------------
+  // B. LOGGED IN -> Enforce Role ONLY on App Folder
+  // -------------------------------------------------------------
+  if (token) {
+      const role = token.role || 'user'
+      const roleSubdomainMap = { 'doctor': 'doctor', 'hospital_admin': 'hospital', 'admin': 'admin', 'user': 'user' }
+      const correctSubdomain = roleSubdomainMap[role] || 'user'
 
-  const role = token.role || 'user'
-  const roleSubdomainMap = { 'doctor': 'doctor', 'hospital_admin': 'hospital', 'admin': 'admin', 'user': 'user' }
-  const correctSubdomain = roleSubdomainMap[role] || 'user'
-
-  if (currentSubdomain !== correctSubdomain) {
-      if (nextUrl.pathname.startsWith('/sign-in')) return NextResponse.next();
-      
-      const url = new URL('/sign-in', req.url)
-      // ✅ CHANGE 4: Use helper function here
-      url.searchParams.set('role', getRoleFromSubdomain(currentSubdomain))
-      url.searchParams.set('redirect', nextUrl.pathname)
-      return NextResponse.redirect(url)
+      if (currentSubdomain !== correctSubdomain) {
+          if (nextUrl.pathname.startsWith('/sign-in')) return NextResponse.next();
+          
+          const isAppPath = nextUrl.pathname.startsWith(appFolder);
+          
+          // Only block if trying to access the restricted app folder
+          if (isAppPath) {
+            const url = new URL('/sign-in', req.url)
+            url.searchParams.set('role', currentRoleScope)
+            url.searchParams.set('redirect', nextUrl.pathname)
+            return NextResponse.redirect(url)
+          }
+      }
   }
 
-  // C. Correct Subdomain -> Rewrite
-  if (currentSubdomain === correctSubdomain) {
-    if (nextUrl.pathname.startsWith(`/${correctSubdomain}`)) return NextResponse.next()
-    return NextResponse.rewrite(new URL(`/${correctSubdomain}${nextUrl.pathname}`, req.url))
+  // -------------------------------------------------------------
+  // ✅ FIX: STRICT ISOLATION REWRITE
+  // -------------------------------------------------------------
+  if (currentSubdomain && currentSubdomain !== 'www') {
+    // 1. Allow Sign-In/Sign-Up (Shared Pages available at root)
+    if (nextUrl.pathname.startsWith('/sign-in') || nextUrl.pathname.startsWith('/sign-up')) {
+        return NextResponse.next();
+    }
+
+    // 2. Allow App Folder Paths (e.g. /doctor/dashboard)
+    // Next.js will find these in app/doctor/...
+    if (nextUrl.pathname.startsWith(appFolder)) {
+        return NextResponse.next();
+    }
+    
+    // 3. BLOCK EVERYTHING ELSE
+    // Rewrite path to /subdomain/path.
+    // Example: User visits doctor.com/sustain
+    // We rewrite to: /doctor/sustain
+    // Since app/doctor/sustain does not exist -> 404 Not Found.
+    return NextResponse.rewrite(new URL(`${appFolder}${nextUrl.pathname}`, req.url));
   }
 
   return NextResponse.next()

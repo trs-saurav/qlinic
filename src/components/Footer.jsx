@@ -64,21 +64,16 @@ const Footer = () => {
   };
 
   const socialLinks = [
-    { icon: Twitter, href: '#', label: 'Twitter', gradient: 'from-sky-400 to-blue-500' },
-    { icon: Linkedin, href: '#', label: 'LinkedIn', gradient: 'from-blue-600 to-blue-700' },
-    { icon: Instagram, href: '#', label: 'Instagram', gradient: 'from-purple-500 to-pink-500' },
-    { icon: Facebook, href: '#', label: 'Facebook', gradient: 'from-blue-500 to-blue-600' },
+    { icon: Twitter, href: 'x.qlinichealth.com', label: 'Twitter', gradient: 'from-sky-400 to-blue-500' },
+    { icon: Linkedin, href: 'linkedin.qlinichealth.com', label: 'LinkedIn', gradient: 'from-blue-600 to-blue-700' },
+    { icon: Instagram, href: 'instagram.qlinichealth.com', label: 'Instagram', gradient: 'from-purple-500 to-pink-500' },
+    { icon: Facebook, href: 'facebook.qlinichealth.com', label: 'Facebook', gradient: 'from-blue-500 to-blue-600' },
   ];
 
-  const stats = [
-    { value: '10K+', label: 'Patients' },
-    { value: '250+', label: 'Doctors' },
-    { value: '50+', label: 'Cities' },
-    { value: '99%', label: 'Satisfaction' },
-  ];
+ 
 
   return (
-    <footer className="relative bg-gradient-to-b from-white via-blue-50/30 to-white dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 overflow-hidden">
+    <footer className="relative bg-gradient-to-b border-2 from-white via-blue-50/30 to-white dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 overflow-hidden">
       
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -117,20 +112,20 @@ const Footer = () => {
                 <motion.div 
                   whileHover={{ rotate: 360 }}
                   transition={{ duration: 0.6 }}
-                  className="w-12 h-12 bg-gradient-to-br from-blue-600 to-violet-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/25"
+                 
                 >
                   <Image
                     src="/LOGO.png"
                     alt="QLINIC"
-                    width={28}
-                    height={28}
-                    className="object-contain"
+                    width={40}
+                    height={40}
+                    className="object-contain "
                   />
                 </motion.div>
                 <div>
                   <h3 className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2">
                     QLINIC
-                    <Sparkles className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    
                   </h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Healthcare made simple</p>
                 </div>
@@ -163,7 +158,7 @@ const Footer = () => {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="bg-gradient-to-br from-blue-600 via-blue-700 to-violet-700 rounded-3xl p-8 lg:p-10 shadow-2xl relative overflow-hidden"
+              className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-700 rounded-3xl p-8 lg:p-10 shadow-2xl relative overflow-hidden"
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.1),transparent_50%)]" />
               
@@ -350,14 +345,7 @@ const Footer = () => {
                 <span>© {currentYear} QLINIC</span>
                 <span className="hidden sm:inline">•</span>
                 <span className="flex items-center gap-1">
-                  Made with 
-                  <motion.span
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ duration: 1, repeat: Infinity }}
-                  >
-                    <Heart className="w-4 h-4 text-red-500 fill-red-500" />
-                  </motion.span>
-                  in India
+                  All rights reserved.
                 </span>
               </div>
             </motion.div>
