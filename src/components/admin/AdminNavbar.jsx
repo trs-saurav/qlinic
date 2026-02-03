@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from 'next-auth/react'
+import { ModeToggle } from '../extra/ModeToggle'
 
 export default function AdminNavbar({ theme, setTheme, user }) {
   const [showNotifications, setShowNotifications] = useState(false)
@@ -168,16 +169,7 @@ export default function AdminNavbar({ theme, setTheme, user }) {
           </div>
 
           {/* Theme Toggle */}
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className={cn(
-              'p-2 rounded-lg transition-colors',
-              'hover:bg-gray-100 dark:hover:bg-gray-800',
-              'text-gray-600 dark:text-gray-400'
-            )}
-          >
-            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
+            <ModeToggle/>
 
           {/* Profile Menu */}
           <div className="relative">

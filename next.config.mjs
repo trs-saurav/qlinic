@@ -8,6 +8,7 @@ const __dirname = dirname(__filename);
 
 
 const nextConfig = {
+  serverExternalPackages: ['pdfkit'],
   images: {
     remotePatterns: [
       {
