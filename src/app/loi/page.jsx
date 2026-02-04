@@ -23,7 +23,7 @@ export default function LandingPage() {
             {/* Heading */}
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 font-['Manrope'] tracking-tight mb-6">
               Express Your Interest in
-              <span className="block text-slate-600">Qlinic</span>
+              <span className="block text-BLUE-600 font-bold">Qlinic</span>
             </h1>
 
             {/* Subheading */}

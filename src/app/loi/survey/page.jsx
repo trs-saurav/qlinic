@@ -262,7 +262,7 @@ export default function SurveyPage() {
         return (
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="clinic_name" className="text-slate-700 font-medium">
+              <Label htmlFor="clinic_name" className=" font-medium">
                 Clinic Name
               </Label>
               <Input
@@ -274,7 +274,7 @@ export default function SurveyPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="doctor_name" className="text-slate-700 font-medium">
+              <Label htmlFor="doctor_name" className=" font-medium">
                 Doctor / Owner Name
               </Label>
               <Input
@@ -286,7 +286,7 @@ export default function SurveyPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="specialty" className="text-slate-700 font-medium">
+              <Label htmlFor="specialty" className=" font-medium">
                 Specialty
               </Label>
               <Input
@@ -332,7 +332,7 @@ export default function SurveyPage() {
                       <Check className="w-3 h-3 text-white" />
                     )}
                   </div>
-                  <span className="text-slate-700">{option}</span>
+                  <span className="">{option}</span>
                 </div>
               ))}
             </div>
@@ -360,7 +360,7 @@ export default function SurveyPage() {
                     checked={formData.valuable_features.includes(option)}
                     className="border-slate-300 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
                   />
-                  <span className="text-slate-700">{option}</span>
+                  <span className="">{option}</span>
                 </div>
               ))}
             </div>
@@ -371,7 +371,7 @@ export default function SurveyPage() {
         return (
           <div className="space-y-6">
             <div className="space-y-4">
-              <p className="text-slate-700 font-medium">
+              <p className=" font-medium">
                 How serious are these problems for your clinic?
               </p>
               <div className="space-y-2">
@@ -399,14 +399,14 @@ export default function SurveyPage() {
                         <Check className="w-3 h-3 text-white" />
                       )}
                     </div>
-                    <span className="text-slate-700 text-sm">{option}</span>
+                    <span className=" text-sm">{option}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="space-y-4">
-              <p className="text-slate-700 font-medium">
+              <p className=" font-medium">
                 How is OPD currently managed in your clinic?
               </p>
               <div className="space-y-2">
@@ -434,14 +434,14 @@ export default function SurveyPage() {
                         <Check className="w-3 h-3 text-white" />
                       )}
                     </div>
-                    <span className="text-slate-700 text-sm">{option}</span>
+                    <span className=" text-sm">{option}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="space-y-4">
-              <p className="text-slate-700 font-medium">
+              <p className=" font-medium">
                 Which OPD-related problems do you face most often?
               </p>
               <div className="space-y-2">
@@ -459,7 +459,7 @@ export default function SurveyPage() {
                       checked={formData.frequent_opd_problems.includes(option)}
                       className="border-slate-300 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
                     />
-                    <span className="text-slate-700 text-sm">{option}</span>
+                    <span className=" text-sm">{option}</span>
                   </div>
                 ))}
               </div>
@@ -471,7 +471,7 @@ export default function SurveyPage() {
         return (
           <div className="space-y-6">
             <div className="space-y-4">
-              <p className="text-slate-700 font-medium">
+              <p className=" font-medium">
                 If Qlinic improves OPD efficiency, would you be willing to use it?
               </p>
               <div className="flex gap-3">
@@ -488,14 +488,14 @@ export default function SurveyPage() {
                       formData.willingness_to_use === option ? "border-slate-900 bg-slate-50 ring-2 ring-slate-200/50" : ""
                     }`}
                   >
-                    <span className="text-slate-700 font-medium">{option}</span>
+                    <span className=" font-medium">{option}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="space-y-4">
-              <p className="text-slate-700 font-medium">
+              <p className=" font-medium">
                 What would stop you from using a new clinic software?
               </p>
               <div className="grid grid-cols-2 gap-2">
@@ -513,14 +513,14 @@ export default function SurveyPage() {
                       checked={formData.barriers_to_adoption.includes(option)}
                       className="border-slate-300 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
                     />
-                    <span className="text-slate-700 text-xs">{option}</span>
+                    <span className=" text-xs">{option}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="space-y-4">
-              <p className="text-slate-700 font-medium">
+              <p className=" font-medium">
                 Would you consider paying for Qlinic if it delivers value?
               </p>
               <div className="flex gap-3">
@@ -537,14 +537,14 @@ export default function SurveyPage() {
                       formData.willingness_to_pay === option ? "border-slate-900 bg-slate-50 ring-2 ring-slate-200/50" : ""
                     }`}
                   >
-                    <span className="text-slate-700 font-medium">{option}</span>
+                    <span className=" font-medium">{option}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="space-y-4">
-              <p className="text-slate-700 font-medium">
+              <p className=" font-medium">
                 Comfortable Monthly Fee Range:
               </p>
               <div className="grid grid-cols-2 gap-2">
@@ -556,14 +556,14 @@ export default function SurveyPage() {
                       formData.fee_range === option ? "border-slate-900 bg-slate-50 ring-2 ring-slate-200/50" : ""
                     }`}
                   >
-                    <span className="text-slate-700 font-medium">{option}</span>
+                    <span className=" font-medium">{option}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="space-y-4">
-              <p className="text-slate-700 font-medium">
+              <p className=" font-medium">
                 How likely are you to recommend a useful clinic management system to other doctors?
               </p>
               <div className="flex gap-3">
@@ -580,7 +580,7 @@ export default function SurveyPage() {
                       formData.recommendation_likelihood === option ? "border-slate-900 bg-slate-50 ring-2 ring-slate-200/50" : ""
                     }`}
                   >
-                    <span className="text-slate-700 font-medium">{option}</span>
+                    <span className=" font-medium">{option}</span>
                   </div>
                 ))}
               </div>
@@ -609,7 +609,7 @@ export default function SurveyPage() {
 
             {/* Mobile Number */}
             <div className="space-y-2">
-              <Label htmlFor="mobile" className="text-slate-700 font-medium">
+              <Label htmlFor="mobile" className=" font-medium">
                 Mobile Number
               </Label>
               <Input
@@ -630,13 +630,13 @@ export default function SurveyPage() {
             {/* Signature */}
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <Label className="text-slate-700 font-medium">Signature</Label>
+                <Label className=" font-medium">Signature</Label>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   onClick={clearSignature}
-                  className="text-slate-500 hover:text-slate-700"
+                  className="text-slate-500 hover:"
                 >
                   <X className="w-4 h-4 mr-1" />
                   Clear
@@ -686,7 +686,7 @@ export default function SurveyPage() {
               onClick={() =>
                 currentStep === 0 ? router.push("/loi") : prevStep()
               }
-              className="text-slate-700 hover:text-slate-900 hover:bg-slate-100 font-medium gap-2 px-4 py-2 rounded-lg transition-all duration-200"
+              className=" hover:text-slate-900 hover:bg-slate-100 font-medium gap-2 px-4 py-2 rounded-lg transition-all duration-200"
             >
               <ArrowLeft className="w-4 h-4" />
               Back
