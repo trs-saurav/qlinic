@@ -471,7 +471,7 @@ export default function SurveyPage() {
         return (
           <div className="space-y-6">
             <div className="space-y-4">
-              <p className=" font-medium">
+              <p className="text-slate-700 font-medium">
                 If Qlinic improves OPD efficiency, would you be willing to use it?
               </p>
               <div className="flex gap-3">
@@ -488,14 +488,14 @@ export default function SurveyPage() {
                       formData.willingness_to_use === option ? "border-slate-900 bg-slate-50 ring-2 ring-slate-200/50" : ""
                     }`}
                   >
-                    <span className=" font-medium">{option}</span>
+                    <span className="text-slate-700 font-medium">{option}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="space-y-4">
-              <p className=" font-medium">
+              <p className="text-slate-700 font-medium">
                 What would stop you from using a new clinic software?
               </p>
               <div className="grid grid-cols-2 gap-2">
@@ -513,14 +513,14 @@ export default function SurveyPage() {
                       checked={formData.barriers_to_adoption.includes(option)}
                       className="border-slate-300 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
                     />
-                    <span className=" text-xs">{option}</span>
+                    <span className="text-slate-700 text-xs">{option}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="space-y-4">
-              <p className=" font-medium">
+              <p className="text-slate-700 font-medium">
                 Would you consider paying for Qlinic if it delivers value?
               </p>
               <div className="flex gap-3">
@@ -537,14 +537,14 @@ export default function SurveyPage() {
                       formData.willingness_to_pay === option ? "border-slate-900 bg-slate-50 ring-2 ring-slate-200/50" : ""
                     }`}
                   >
-                    <span className=" font-medium">{option}</span>
+                    <span className="text-slate-700 font-medium">{option}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="space-y-4">
-              <p className=" font-medium">
+              <p className="text-slate-700 font-medium">
                 Comfortable Monthly Fee Range:
               </p>
               <div className="grid grid-cols-2 gap-2">
@@ -556,14 +556,14 @@ export default function SurveyPage() {
                       formData.fee_range === option ? "border-slate-900 bg-slate-50 ring-2 ring-slate-200/50" : ""
                     }`}
                   >
-                    <span className=" font-medium">{option}</span>
+                    <span className="text-slate-700 font-medium">{option}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="space-y-4">
-              <p className=" font-medium">
+              <p className="text-slate-700 font-medium">
                 How likely are you to recommend a useful clinic management system to other doctors?
               </p>
               <div className="flex gap-3">
@@ -630,7 +630,7 @@ export default function SurveyPage() {
             {/* Signature */}
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <Label className=" font-medium">Signature</Label>
+                <Label className="text-slate-700 font-medium">Signature</Label>
                 <Button
                   type="button"
                   variant="ghost"
