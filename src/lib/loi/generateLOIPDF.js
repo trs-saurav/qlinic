@@ -193,13 +193,6 @@ export async function generateLOIPDF(submission) {
   doc.setFont('helvetica', 'bold');
   doc.text('DETAILED SURVEY RESPONSES', 50, y);
   
-  // Corre Sub Text branding
-  y += 20;
-  setTextColor('#a0d8ef');
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Corre Sub Text: Healthcare Innovation Platform', 50, y);
-  y += 15;
 
   const addSurveyRow = (label, value) => {
     if (!value) return 0;

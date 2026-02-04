@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import SignatureCanvas from "react-signature-canvas";
+import dynamic from 'next/dynamic';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, ArrowRight, Check, Loader2, X } from "lucide-react";
 import { Toaster, toast } from "react-hot-toast";
+
+// Dynamically import SignatureCanvas to avoid SSR issues
+const SignatureCanvas = dynamic(() => import('react-signature-canvas'), {
+  ssr: false,
+  loading: () => <div className="border-2 border-dashed border-slate-200 rounded-xl bg-white w-full h-40 flex items-center justify-center text-slate-400">Loading signature pad...</div>
+});
 
 const STEPS = [
   { id: "profile", title: "Clinic Profile" },
