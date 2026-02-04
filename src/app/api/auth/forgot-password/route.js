@@ -44,7 +44,7 @@ export async function POST(req) {
       })
 
       // Send plain token via email (never stored anywhere)
-      const resetUrl = `${process.env.NEXT_PUBLIC_WEB_URL}/reset-password?token=${token}&email=${encodeURIComponent(email)}`
+      const resetUrl = `qlinichealth.com/reset-password?token=${token}&email=${encodeURIComponent(email)}`
 
       await sendMail({
         to: email,

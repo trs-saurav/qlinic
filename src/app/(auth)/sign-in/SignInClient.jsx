@@ -486,7 +486,7 @@ export default function SignInClient() {
                               Password
                             </FormLabel>
                             <Link
-                              href="/forgot-password"
+                              href="qlinichealth.com/forgot-password"
                               className="text-xs md:text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline"
                             >
                               Forgot?
