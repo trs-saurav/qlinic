@@ -262,7 +262,7 @@ export default function SurveyPage() {
         return (
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="clinic_name" className=" font-medium">
+              <Label htmlFor="clinic_name" className="text-slate-700 font-medium">
                 Clinic Name
               </Label>
               <Input
@@ -270,11 +270,11 @@ export default function SurveyPage() {
                 placeholder="Enter your clinic name"
                 value={formData.clinic_profile.clinic_name}
                 onChange={(e) => updateProfile("clinic_name", e.target.value)}
-                className="h-12 border-slate-200 focus:border-slate-900 focus:ring-slate-900"
+                className="h-12 border-slate-200 focus:border-slate-900 focus:ring-slate-900 text-slate-900 placeholder:text-slate-400"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="doctor_name" className=" font-medium">
+              <Label htmlFor="doctor_name" className="text-slate-700 font-medium">
                 Doctor / Owner Name
               </Label>
               <Input
@@ -282,11 +282,11 @@ export default function SurveyPage() {
                 placeholder="Enter your name"
                 value={formData.clinic_profile.doctor_name}
                 onChange={(e) => updateProfile("doctor_name", e.target.value)}
-                className="h-12 border-slate-200 focus:border-slate-900 focus:ring-slate-900"
+                className="h-12 border-slate-200 focus:border-slate-900 focus:ring-slate-900 text-slate-900 placeholder:text-slate-400"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="specialty" className=" font-medium">
+              <Label htmlFor="specialty" className="text-slate-700 font-medium">
                 Specialty
               </Label>
               <Input
@@ -294,7 +294,7 @@ export default function SurveyPage() {
                 placeholder="e.g., General Physician, Pediatrics"
                 value={formData.clinic_profile.specialty}
                 onChange={(e) => updateProfile("specialty", e.target.value)}
-                className="h-12 border-slate-200 focus:border-slate-900 focus:ring-slate-900"
+                className="h-12 border-slate-200 focus:border-slate-900 focus:ring-slate-900 text-slate-900 placeholder:text-slate-400"
               />
             </div>
           </div>
@@ -332,7 +332,7 @@ export default function SurveyPage() {
                       <Check className="w-3 h-3 text-white" />
                     )}
                   </div>
-                  <span className="">{option}</span>
+                  <span className="text-slate-700">{option}</span>
                 </div>
               ))}
             </div>
@@ -360,7 +360,7 @@ export default function SurveyPage() {
                     checked={formData.valuable_features.includes(option)}
                     className="border-slate-300 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
                   />
-                  <span className="">{option}</span>
+                  <span className="text-slate-700">{option}</span>
                 </div>
               ))}
             </div>
@@ -609,7 +609,7 @@ export default function SurveyPage() {
 
             {/* Mobile Number */}
             <div className="space-y-2">
-              <Label htmlFor="mobile" className=" font-medium">
+              <Label htmlFor="mobile" className="text-slate-700 font-medium">
                 Mobile Number
               </Label>
               <Input
@@ -623,7 +623,7 @@ export default function SurveyPage() {
                     mobile_number: e.target.value,
                   }))
                 }
-                className="h-12 border-slate-200 focus:border-slate-900 focus:ring-slate-900"
+                className="h-12 border-slate-200 focus:border-slate-900 focus:ring-slate-900 text-slate-900 placeholder:text-slate-400"
               />
             </div>
 
@@ -686,7 +686,7 @@ export default function SurveyPage() {
               onClick={() =>
                 currentStep === 0 ? router.push("/loi") : prevStep()
               }
-              className=" hover:text-slate-900 hover:bg-slate-100 font-medium gap-2 px-4 py-2 rounded-lg transition-all duration-200"
+              className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium gap-2 px-4 py-2 rounded-lg transition-all duration-200"
             >
               <ArrowLeft className="w-4 h-4" />
               Back
