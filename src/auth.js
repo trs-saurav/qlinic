@@ -74,6 +74,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       try {
         await connectDB();
         let dbUser = await User.findOne({ email: user.email });
+        
+        // ✅ FIX STARTS HERE: Handle Existing Users properly
+        if (dbUser) {
+           // We MUST attach the role from the database to the 'user' object
+           // so it gets passed to the JWT callback.
+           user.role = dbUser.role;
+           user.id = dbUser._id.toString();
+           
+           // Optional: If you want to link this OAuth provider to the existing account
+           // (e.g. if they signed up with email/pass before), you could update the user here.
+           // For now, we just ensure they can log in.
+           return true;
+        }
+        // ✅ FIX ENDS
+
+        // --- Logic for NEW USERS (Cookie detection) ---
         let roleToAssign = 'user'; 
         
         try {
@@ -94,11 +110,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         }
 
-        if (dbUser) return true; 
-
         if (roleToAssign === 'admin' || roleToAssign === 'sub_admin') {
             console.error("Security: Attempted to auto-create Admin account via OAuth. Blocked.");
-            // Returning false redirects them to the error page (AccessDenied)
             return false; 
         }
 
