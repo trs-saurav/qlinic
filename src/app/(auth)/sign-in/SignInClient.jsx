@@ -200,29 +200,49 @@ export default function SignInClient() {
   }
 
   // ✅ FIX: Robust Social Login for Subdomains
+// ✅ FIX: Robust Social Login with Root Domain Cookie
   const handleSocialLogin = async (provider) => {
     setSocialLoading(provider);
     
     const roleToPass = roleFromUrl || 'user';
-    // Set cookie for server-side role detection
-    document.cookie = `oauth_role=${roleToPass}; path=/; max-age=300; SameSite=Lax;`;
+    
+    // 1. DYNAMICALLY GET ROOT DOMAIN
+    // This allows it to work on localhost and production automatically
+    const hostname = window.location.hostname;
+    let cookieDomain;
 
-    // Determine environment to build absolute URL
+    if (hostname.includes('localhost')) {
+        cookieDomain = 'localhost';
+    } else {
+        // Extracts ".qlinichealth.com" from "hospital.qlinichealth.com"
+        const parts = hostname.split('.');
+        if (parts.length >= 2) {
+            cookieDomain = `.${parts.slice(-2).join('.')}`; 
+        } else {
+            cookieDomain = hostname;
+        }
+    }
+
+    // 2. SET COOKIE WITH DOMAIN ATTRIBUTE
+    // The "domain" attribute is critical for sharing data between subdomains
+    document.cookie = `oauth_role=${roleToPass}; path=/; domain=${cookieDomain}; max-age=300; SameSite=Lax;`;
+
+    // 3. DETERMINE CALLBACK URL
     const isDev = process.env.NODE_ENV === 'development';
     const protocol = isDev ? 'http' : 'https';
-    const rootDomain = isDev ? 'localhost:3000' : 'qlinichealth.com'; 
+    // Clean root domain for URL building (remove leading dot if present)
+    const urlRoot = cookieDomain.startsWith('.') ? cookieDomain.substring(1) : cookieDomain;
+    const port = isDev ? ':3000' : '';
 
     let callbackUrl = redirectTo;
 
     if (!callbackUrl) {
-       // Force subdomain redirects for isolated sessions
        if (roleToPass === 'doctor' || roleToPass === 'hospital_admin') {
-          const sub = roleToPass === 'hospital_admin' ? 'hospital' : roleToPass;
-          // Result ex: http://doctor.localhost:3000
-          callbackUrl = `${protocol}://${sub}.${rootDomain.replace(':3000','')}${isDev ? ':3000' : ''}`;
+         const sub = roleToPass === 'hospital_admin' ? 'hospital' : roleToPass;
+         // Ex: https://hospital.qlinichealth.com
+         callbackUrl = `${protocol}://${sub}.${urlRoot}${port}`;
        } else {
-          // Result ex: /user
-          callbackUrl = currentRole.redirectUrl;
+         callbackUrl = currentRole.redirectUrl;
        }
     }
 
