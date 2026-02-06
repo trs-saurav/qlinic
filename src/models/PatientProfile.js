@@ -12,12 +12,12 @@ const patientProfileSchema = new mongoose.Schema(
     },
 
     // ============ UNIQUE IDENTIFIER (across all hospitals) ============
-    qlinicId: {
-      type: String,
-      unique: true,
-      required: false, // ✅ MUST BE FALSE
-      sparse: true, // ✅ ADD THIS
-    },
+    // qlinicId: {
+    //   type: String,
+    //   unique: true,
+    //   required: false, // ✅ MUST BE FALSE
+    //   sparse: true, // ✅ ADD THIS
+    // },
 
     // ============ DEMOGRAPHICS ============
     dateOfBirth: { type: Date },
